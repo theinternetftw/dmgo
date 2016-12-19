@@ -1,0 +1,11 @@
+glide.lock
+vendor
+
+build
+build-dev
+r
+
+*.gb
+testroms
+
+*.exe

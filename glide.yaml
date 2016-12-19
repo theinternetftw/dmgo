@@ -1,0 +1,13 @@
+package: theinternetftw.com/dmgo
+import:
+- package: github.com/pkg/profile
+  version: ^1.2.0
+- package: golang.org/x/exp
+  subpackages:
+  - shiny/driver
+  - shiny/screen
+- package: golang.org/x/mobile
+  subpackages:
+  - event/lifecycle
+  - event/paint
+  - event/size
