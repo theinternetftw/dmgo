@@ -23,7 +23,7 @@ func main() {
 	cartInfo := dmgo.ParseCartInfo(cartBytes)
 	fmt.Printf("%q\n", cartInfo.Title)
 
-	windowing.InitDisplayLoop(640, 576, func(sharedState *windowing.SharedState) {
+	windowing.InitDisplayLoop(160*4, 144*4, func(sharedState *windowing.SharedState) {
 		startEmu(sharedState, cartBytes)
 	})
 }

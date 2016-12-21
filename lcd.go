@@ -3,8 +3,16 @@ package dmgo
 type lcd struct {
 	framebuffer [160 * 144 * 4]byte
 
+	oam [160]byte
+
 	scrollY byte
 	scrollX byte
+	windowY byte
+	windowX byte
+
+	backgroundPaletteReg byte
+	objectPalette0Reg    byte
+	objectPalette1Reg    byte
 
 	hBlankInterrupt      bool
 	vBlankInterrupt      bool
@@ -14,11 +22,12 @@ type lcd struct {
 	lyReg  byte
 	lycReg byte
 
-	inVBlank         bool
-	inHBlank         bool
-	searchingOAM     bool
-	transferringData bool
+	inVBlank     bool
+	inHBlank     bool
+	accessingOAM bool
+	readingData  bool
 
+	// control bits
 	displayOn                   bool
 	useUpperWindowTileMap       bool
 	displayWindow               bool
@@ -27,6 +36,71 @@ type lcd struct {
 	bigSprites                  bool
 	displaySprites              bool
 	displayBG                   bool
+
+	cyclesSinceLYInc       uint
+	cyclesSinceVBlankStart uint
+}
+
+func (lcd *lcd) writeOAM(addr uint16, val byte) {
+	// TODO: display mode checks (most disallow writing)
+	// TODO: OAM
+	lcd.oam[addr] = val
+}
+
+// lcd is on at startup
+func (lcd *lcd) init() {
+	lcd.displayOn = true
+	lcd.accessingOAM = true // at start of line
+}
+
+// FIXME: timings will have to change for double-speed mode
+// FIXME: also need to actually *do* lcd activies here
+// FIXME: will need to pass in mem here once actually drawing
+// (maybe instead of counting cycles I'll count actual instruction time?)
+// (or maybe it'll always be dmg cycles and gbc will run the fn e.g. twice instead of 4 times)
+//
+// FIXME: surely better way instead of having
+// a "run every cycle" function, would be a
+// step function that takes the number of
+// cycles as an arg, does lcd += cycles,
+// then updates flags accordingly? Would
+// cut number of times this fn is run by
+// prolly ~8x.
+func (lcd *lcd) runCycle(cs *cpuState) {
+	if !lcd.displayOn {
+		return
+	}
+
+	lcd.cyclesSinceLYInc++
+	if lcd.cyclesSinceLYInc == 80 {
+		lcd.accessingOAM = false
+		lcd.readingData = true
+	} else if lcd.cyclesSinceLYInc == 252 {
+		lcd.readingData = false
+		lcd.inHBlank = true
+	} else if lcd.cyclesSinceLYInc == 456 {
+		lcd.renderScanline(cs)
+		lcd.cyclesSinceLYInc = 0
+		lcd.accessingOAM = true
+		lcd.inHBlank = false
+		lcd.lyReg++
+	}
+
+	if lcd.lyReg == 144 && !lcd.inVBlank {
+		lcd.inVBlank = true
+		cs.vBlankIRQ = true
+	}
+	if lcd.inVBlank {
+		lcd.cyclesSinceVBlankStart++
+		if lcd.cyclesSinceVBlankStart > 456*10 {
+			lcd.lyReg = 0
+			lcd.inVBlank = false
+			lcd.cyclesSinceVBlankStart = 0
+		}
+	}
+}
+
+func (lcd *lcd) renderScanline(cs *cpuState) {
 }
 
 func (lcd *lcd) writeControlReg(val byte) {
@@ -74,41 +148,7 @@ func (lcd *lcd) readStatusReg() byte {
 		lcd.vBlankInterrupt,
 		lcd.hBlankInterrupt,
 		lcd.lyReg == lcd.lycReg,
-		lcd.inVBlank,
-		lcd.transferringData,
+		lcd.accessingOAM || lcd.readingData,
+		lcd.inVBlank || lcd.readingData,
 	)
-}
-
-func ifBool(b bool, fn func()) {
-	if b {
-		fn()
-	}
-}
-func byteFromBools(b7, b6, b5, b4, b3, b2, b1, b0 bool) byte {
-	var result byte
-	ifBool(b7, func() { result |= 0x80 })
-	ifBool(b6, func() { result |= 0x40 })
-	ifBool(b5, func() { result |= 0x20 })
-	ifBool(b4, func() { result |= 0x10 })
-	ifBool(b3, func() { result |= 0x08 })
-	ifBool(b2, func() { result |= 0x04 })
-	ifBool(b1, func() { result |= 0x02 })
-	ifBool(b0, func() { result |= 0x01 })
-	return result
-}
-
-func ifBoolPtrNotNil(bptr *bool, fn func()) {
-	if bptr != nil {
-		fn()
-	}
-}
-func boolsFromByte(val byte, b7, b6, b5, b4, b3, b2, b1, b0 *bool) {
-	ifBoolPtrNotNil(b7, func() { *b7 = val&0x80 > 0 })
-	ifBoolPtrNotNil(b6, func() { *b6 = val&0x40 > 0 })
-	ifBoolPtrNotNil(b5, func() { *b5 = val&0x20 > 0 })
-	ifBoolPtrNotNil(b4, func() { *b4 = val&0x10 > 0 })
-	ifBoolPtrNotNil(b3, func() { *b3 = val&0x08 > 0 })
-	ifBoolPtrNotNil(b2, func() { *b2 = val&0x04 > 0 })
-	ifBoolPtrNotNil(b1, func() { *b1 = val&0x02 > 0 })
-	ifBoolPtrNotNil(b0, func() { *b0 = val&0x01 > 0 })
 }
