@@ -246,7 +246,7 @@ func (cs *cpuState) daaOp() {
 		cs.f |= 0x20
 	}
 	if cs.a&0xf0 > 0x90 || cs.getCarryFlag() {
-		diff += 0x06
+		diff += 0x60
 		cs.f |= 0x10
 	}
 	if cs.getAddSubFlag() {
@@ -254,6 +254,8 @@ func (cs *cpuState) daaOp() {
 	} else {
 		cs.a += diff
 	}
+	cs.runCycles(4)
+	cs.pc++
 }
 
 func (cs *cpuState) stepOpcode() {
@@ -262,7 +264,7 @@ func (cs *cpuState) stepOpcode() {
 	opcode := cs.read(cs.pc)
 
 	if opcode != 0xcb {
-		//fmt.Printf("steps: %08d, opcode:%02x, pc:%04x, sp:%04x, a:%02x, b:%02x, c:%02x, d:%02x, e:%02x, h:%02x, l:%02x\r\n", cs.steps, opcode, cs.pc, cs.sp, cs.a, cs.b, cs.c, cs.d, cs.e, cs.h, cs.l)
+		// fmt.Printf("steps: %08d, opcode:%02x, pc:%04x, sp:%04x, a:%02x, b:%02x, c:%02x, d:%02x, e:%02x, h:%02x, l:%02x\r\n", cs.steps, opcode, cs.pc, cs.sp, cs.a, cs.b, cs.c, cs.d, cs.e, cs.h, cs.l)
 	}
 
 	switch opcode {
