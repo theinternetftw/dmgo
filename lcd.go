@@ -4,7 +4,10 @@ type lcd struct {
 	framebuffer   []byte
 	flipRequested bool // for whateve really draws the fb
 
-	oam [160]byte
+	videoRAM [0x4000]byte // go ahead and do CGB size
+
+	oam              [160]byte
+	parsedOAMEntries [40]oamEntry
 
 	scrollY byte
 	scrollX byte
@@ -88,7 +91,7 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 
 	if lcd.cyclesSinceLYInc >= 456 {
 
-		lcd.renderScanline(cs)
+		lcd.renderScanline()
 
 		lcd.cyclesSinceLYInc = 0
 		if !lcd.inVBlank {
@@ -145,42 +148,42 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	}
 }
 
-func (cs *cpuState) getTilePixel(tdataAddr uint16, tileNum, x, y byte) byte {
-	if tdataAddr == 0x8800 {
+func (lcd *lcd) getTilePixel(tdataAddr uint16, tileNum, x, y byte) byte {
+	if tdataAddr == 0x0800 { // 0x8000 relative
 		tileNum = byte(int(int8(tileNum)) + 128)
 	}
 	mapBitY, mapBitX := y&0x07, x&0x07
-	dataByteL := cs.read(tdataAddr + uint16(tileNum)*16 + uint16(mapBitY)*2)
-	dataByteH := cs.read(tdataAddr + uint16(tileNum)*16 + uint16(mapBitY)*2 + 1)
+	dataByteL := lcd.videoRAM[tdataAddr+(uint16(tileNum)<<4)+(uint16(mapBitY)<<1)]
+	dataByteH := lcd.videoRAM[tdataAddr+(uint16(tileNum)<<4)+(uint16(mapBitY)<<1)+1]
 	dataBitL := (dataByteL >> (7 - mapBitX)) & 0x1
 	dataBitH := (dataByteH >> (7 - mapBitX)) & 0x1
 	return (dataBitH << 1) | dataBitL
 }
-func (cs *cpuState) getTileNum(tmapAddr uint16, x, y byte) byte {
+func (lcd *lcd) getTileNum(tmapAddr uint16, x, y byte) byte {
 	tileNumY, tileNumX := uint16(y>>3), uint16(x>>3)
-	tileNum := cs.read(tmapAddr + tileNumY*32 + tileNumX)
+	tileNum := lcd.videoRAM[tmapAddr+tileNumY*32+tileNumX]
 	return tileNum
 }
 
-func (cs *cpuState) getBGPixel(x, y byte) (byte, byte, byte) {
-	mapAddr := cs.lcd.getBGTileMapAddr()
-	dataAddr := cs.lcd.getBGAndWindowTileDataAddr()
-	tileNum := cs.getTileNum(mapAddr, x, y)
-	rawPixel := cs.getTilePixel(dataAddr, tileNum, x, y)
-	palettedPixel := (cs.lcd.backgroundPaletteReg >> (rawPixel * 2)) & 0x03
-	return cs.applyCustomPalette(palettedPixel)
+func (lcd *lcd) getBGPixel(x, y byte) (byte, byte, byte) {
+	mapAddr := lcd.getBGTileMapAddr()
+	dataAddr := lcd.getBGAndWindowTileDataAddr()
+	tileNum := lcd.getTileNum(mapAddr, x, y)
+	rawPixel := lcd.getTilePixel(dataAddr, tileNum, x, y)
+	palettedPixel := (lcd.backgroundPaletteReg >> (rawPixel * 2)) & 0x03
+	return lcd.applyCustomPalette(palettedPixel)
 }
 
-func (cs *cpuState) getWindowPixel(x, y byte) (byte, byte, byte) {
-	mapAddr := cs.lcd.getWindowTileMapAddr()
-	dataAddr := cs.lcd.getBGAndWindowTileDataAddr()
-	tileNum := cs.getTileNum(mapAddr, x, y)
-	rawPixel := cs.getTilePixel(dataAddr, tileNum, x, y)
-	palettedPixel := (cs.lcd.backgroundPaletteReg >> (rawPixel * 2)) & 0x03
-	return cs.applyCustomPalette(palettedPixel)
+func (lcd *lcd) getWindowPixel(x, y byte) (byte, byte, byte) {
+	mapAddr := lcd.getWindowTileMapAddr()
+	dataAddr := lcd.getBGAndWindowTileDataAddr()
+	tileNum := lcd.getTileNum(mapAddr, x, y)
+	rawPixel := lcd.getTilePixel(dataAddr, tileNum, x, y)
+	palettedPixel := (lcd.backgroundPaletteReg >> (rawPixel * 2)) & 0x03
+	return lcd.applyCustomPalette(palettedPixel)
 }
 
-func (cs *cpuState) getSpritePixel(e *oamEntry, x, y byte) (byte, byte, byte, bool) {
+func (lcd *lcd) getSpritePixel(e *oamEntry, x, y byte) (byte, byte, byte, bool) {
 	tileX, tileY := byte(int16(x)-e.x), byte(int16(y)-e.y)
 	if e.xFlip() {
 		tileX = 7 - tileX
@@ -196,42 +199,47 @@ func (cs *cpuState) getSpritePixel(e *oamEntry, x, y byte) (byte, byte, byte, bo
 			tileY -= 8
 		}
 	}
-	rawPixel := cs.getTilePixel(0x8000, tileNum, tileX, tileY)
+	rawPixel := lcd.getTilePixel(0x0000, tileNum, tileX, tileY) // addr 8000 relative
 	if rawPixel == 0 {
 		return 0, 0, 0, false // transparent
 	}
-	palReg := cs.lcd.objectPalette0Reg
+	palReg := lcd.objectPalette0Reg
 	if e.palSelector() {
-		palReg = cs.lcd.objectPalette1Reg
+		palReg = lcd.objectPalette1Reg
 	}
 	palettedPixel := (palReg >> (rawPixel * 2)) & 0x03
-	r, g, b := cs.applyCustomPalette(palettedPixel)
+	r, g, b := lcd.applyCustomPalette(palettedPixel)
 	return r, g, b, true
 }
 
-func (cs *cpuState) applyCustomPalette(val byte) (byte, byte, byte) {
-	// TODO: actual palette choices
+func (lcd *lcd) applyCustomPalette(val byte) (byte, byte, byte) {
+	// TODO: actual custom palette choices stored in lcd
 	outVal := (0xff / 3) * (3 - val)
 	return outVal, outVal, outVal
 }
 
+// 0x8000 relative
 func (lcd *lcd) getBGTileMapAddr() uint16 {
 	if lcd.useUpperBGTileMap {
-		return 0x9c00
+		return 0x1c00
 	}
-	return 0x9800
+	return 0x1800
 }
+
+// 0x8000 relative
 func (lcd *lcd) getWindowTileMapAddr() uint16 {
 	if lcd.useUpperWindowTileMap {
-		return 0x9c00
+		return 0x1c00
 	}
-	return 0x9800
+	return 0x1800
 }
+
+// 0x8000 relative
 func (lcd *lcd) getBGAndWindowTileDataAddr() uint16 {
 	if lcd.useLowerBGAndWindowTileData {
-		return 0x8000
+		return 0x0000
 	}
-	return 0x8800
+	return 0x0800
 }
 
 type oamEntry struct {
@@ -255,15 +263,14 @@ func (e *oamEntry) inX(xByte byte) bool {
 	x := int16(xByte)
 	return x >= e.x && x < e.x+8
 }
-func (lcd *lcd) parseOAM() []oamEntry {
+func (lcd *lcd) parseOAM() {
 	height := 8
 	if lcd.bigSprites {
 		height = 16
 	}
-	entries := make([]oamEntry, 40)
 	for i := 0; i < 40; i++ {
 		addr := i * 4
-		entries[i] = oamEntry{
+		lcd.parsedOAMEntries[i] = oamEntry{
 			y:         int16(lcd.oam[addr]) - 16,
 			x:         int16(lcd.oam[addr+1]) - 8,
 			height:    byte(height),
@@ -271,10 +278,9 @@ func (lcd *lcd) parseOAM() []oamEntry {
 			flagsByte: lcd.oam[addr+3],
 		}
 	}
-	return entries
 }
 
-func (lcd *lcd) renderScanline(cs *cpuState) {
+func (lcd *lcd) renderScanline() {
 	if lcd.lyReg >= 144 {
 		return
 	}
@@ -284,13 +290,13 @@ func (lcd *lcd) renderScanline(cs *cpuState) {
 
 	// for sprite priority
 	bgMask := make([]bool, 160)
-	maskR, maskG, maskB := cs.applyCustomPalette(0)
+	maskR, maskG, maskB := lcd.applyCustomPalette(0)
 
 	if lcd.displayBG || true {
 		bgY := y + lcd.scrollY
 		for x := byte(0); x < 160; x++ {
 			bgX := x + lcd.scrollX
-			r, g, b := cs.getBGPixel(bgX, bgY)
+			r, g, b := lcd.getBGPixel(bgX, bgY)
 			lcd.setFramebufferPixel(x, y, r, g, b)
 			if r == maskR && g == maskG && b == maskB {
 				bgMask[x] = true
@@ -304,7 +310,7 @@ func (lcd *lcd) renderScanline(cs *cpuState) {
 			if x < 0 {
 				continue
 			}
-			r, g, b := cs.getWindowPixel(byte(x-winStartX), winY)
+			r, g, b := lcd.getWindowPixel(byte(x-winStartX), winY)
 			lcd.setFramebufferPixel(byte(x), y, r, g, b)
 			if r == maskR && g == maskG && b == maskB {
 				bgMask[x] = true
@@ -314,16 +320,17 @@ func (lcd *lcd) renderScanline(cs *cpuState) {
 
 	if lcd.displaySprites {
 		seen := 0
-		entries := lcd.parseOAM()
+		lcd.parseOAM()
 		for x := byte(0); x < 160 && seen < 11; x++ {
-			for _, e := range entries {
+			for i := range lcd.parsedOAMEntries {
+				e := &lcd.parsedOAMEntries[i]
 				if e.inScanline(y) && e.inX(x) {
 					if e.x == int16(x) || x == 0 {
 						if seen++; seen == 11 {
 							break
 						}
 					}
-					if r, g, b, a := cs.getSpritePixel(&e, x, y); a {
+					if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
 						if !e.behindBG() || bgMask[x] {
 							lcd.setFramebufferPixel(x, y, r, g, b)
 						}

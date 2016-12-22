@@ -6,7 +6,6 @@ type mem struct {
 	cart            []byte
 	internalRAM     [0x8000]byte // go ahead and do CGB size
 	highInternalRAM [0x7f]byte   // go ahead and do CGB size
-	videoRAM        [0x4000]byte // go ahead and do CGB size
 	cartRAM         []byte
 }
 
@@ -30,7 +29,7 @@ func (cs *cpuState) read(addr uint16) byte {
 		// TODO: bank switching
 		val = cs.mem.cart[addr]
 	case addr >= 0x8000 && addr < 0xa000:
-		val = cs.mem.videoRAM[addr-0x8000]
+		val = cs.lcd.videoRAM[addr-0x8000]
 	case addr >= 0xc000 && addr < 0xfe00:
 		ramAddr := (addr - 0xc000) & 0x1fff // 8kb with wraparound
 		val = cs.mem.internalRAM[ramAddr]
@@ -88,7 +87,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr < 0x8000:
 		// cart ROM, looks like writing to read-only is a nop?
 	case addr >= 0x8000 && addr < 0xa000:
-		cs.mem.videoRAM[addr-0x8000] = val
+		cs.lcd.videoRAM[addr-0x8000] = val
 	case addr >= 0xa000 && addr < 0xc000:
 		if len(cs.mem.cartRAM) == 0 {
 			break // nop
