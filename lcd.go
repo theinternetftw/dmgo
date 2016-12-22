@@ -28,6 +28,9 @@ type lcd struct {
 	accessingOAM bool
 	readingData  bool
 
+	// needs to be here for buf, see runCycles
+	pendingDisplayWindow bool
+
 	// control bits
 	displayOn                   bool
 	useUpperWindowTileMap       bool
@@ -40,6 +43,10 @@ type lcd struct {
 
 	cyclesSinceLYInc       uint
 	cyclesSinceVBlankStart uint
+}
+
+func (lcd *lcd) updateBufferedControlBits() {
+	lcd.displayWindow = lcd.pendingDisplayWindow
 }
 
 func (lcd *lcd) writeOAM(addr uint16, val byte) {
@@ -56,18 +63,8 @@ func (lcd *lcd) init() {
 }
 
 // FIXME: timings will have to change for double-speed mode
-// FIXME: also need to actually *do* lcd activies here
-// FIXME: will need to pass in mem here once actually drawing
 // (maybe instead of counting cycles I'll count actual instruction time?)
 // (or maybe it'll always be dmg cycles and gbc will run the fn e.g. twice instead of 4 times)
-//
-// FIXME: surely better way instead of having
-// a "run every cycle" function, would be a
-// step function that takes the number of
-// cycles as an arg, does lcd += cycles,
-// then updates flags accordingly? Would
-// cut number of times this fn is run by
-// prolly ~8x.
 func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	if !lcd.displayOn {
 		return
@@ -90,6 +87,7 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	}
 
 	if lcd.cyclesSinceLYInc >= 456 {
+
 		lcd.renderScanline(cs)
 
 		lcd.cyclesSinceLYInc = 0
@@ -101,6 +99,16 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 		}
 		lcd.inHBlank = false
 		lcd.lyReg++
+
+		// It looks like some internal control bits are only
+		// updated at the beginning of each scanline.
+		// Putting this here because it looks like a game
+		// does something like "ok, ly=lyc for the last
+		// line of my window, so lets turn the window off",
+		// which would fail to draw that last line if you
+		// didn't buffer up those changes until after the
+		// hblank.
+		lcd.updateBufferedControlBits()
 
 		if lcd.lycEqualsLyInterrupt {
 			if lcd.lyReg == lcd.lycReg {
@@ -355,7 +363,7 @@ func (lcd *lcd) writeControlReg(val byte) {
 	boolsFromByte(val,
 		&lcd.displayOn,
 		&lcd.useUpperWindowTileMap,
-		&lcd.displayWindow,
+		&lcd.pendingDisplayWindow,
 		&lcd.useLowerBGAndWindowTileData,
 		&lcd.useUpperBGTileMap,
 		&lcd.bigSprites,
@@ -367,7 +375,7 @@ func (lcd *lcd) readControlReg() byte {
 	return byteFromBools(
 		lcd.displayOn,
 		lcd.useUpperWindowTileMap,
-		lcd.displayWindow,
+		lcd.pendingDisplayWindow,
 		lcd.useLowerBGAndWindowTileData,
 		lcd.useUpperBGTileMap,
 		lcd.bigSprites,
