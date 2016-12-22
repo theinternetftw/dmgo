@@ -9,7 +9,7 @@ import (
 	"golang.org/x/exp/shiny/screen"
 	"golang.org/x/image/math/f64"
 	"golang.org/x/mobile/event/lifecycle"
-//	"golang.org/x/mobile/event/key"
+	"golang.org/x/mobile/event/key"
 	"golang.org/x/mobile/event/paint"
 	"golang.org/x/mobile/event/size"
 )
@@ -27,9 +27,39 @@ type SharedState struct {
 	// Pix is the raw RGBA bytes of the framebuffer
 	Pix []byte
 
+	keycodeMap map[key.Code]bool
+	runeMap map[rune]bool
+
 	eventQueue screen.EventDeque
 	drawRequested bool
 	// e.g. keyboard/mouse goes here
+}
+
+// CharIsDown returns the key state for that char
+func (s *SharedState) CharIsDown(c rune) bool {
+	val, ok := s.runeMap[c]
+	if ok {
+		return val
+	}
+	return false
+}
+// CodeIsDown returns the key state for that keyCode
+func (s *SharedState) CodeIsDown(c key.Code) bool {
+	val, ok := s.keycodeMap[c]
+	if ok {
+		return val
+	}
+	return false
+}
+
+func (s *SharedState) updateKeymap(e key.Event) {
+	if e.Direction == key.DirRelease {
+		s.keycodeMap[e.Code] = false
+		s.runeMap[e.Rune] = false
+	} else if e.Direction == key.DirPress {
+		s.keycodeMap[e.Code] = true
+		s.runeMap[e.Rune] = true
+	}
 }
 
 // RequestDraw puts a draw request on the window loop queue
@@ -67,6 +97,8 @@ func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, upd
 			Height: frameHeight,
 			Pix: make([]byte, 4*frameWidth*frameHeight),
 			eventQueue: w,
+			keycodeMap: map[key.Code]bool{},
+			runeMap: map[rune]bool{},
 		}
 
 		go updateLoop(&sharedState)
@@ -82,6 +114,10 @@ func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, upd
 				if e.To == lifecycle.StageDead {
 					return
 				}
+			case key.Event:
+				sharedState.Mutex.Lock()
+				sharedState.updateKeymap(e)
+				sharedState.Mutex.Unlock()
 			case drawRequest:
 				sharedState.Mutex.Lock()
 				copy(buf.RGBA().Pix, sharedState.Pix)

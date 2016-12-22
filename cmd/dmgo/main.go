@@ -29,6 +29,22 @@ func main() {
 	})
 }
 
+// NOTE: assumes you have the mutex when you call
+func makeInput(window *windowing.SharedState) dmgo.Input {
+	return dmgo.Input {
+		Joypad: dmgo.Joypad {
+			Sel: window.CharIsDown('t'),
+			Start: window.CharIsDown('y'),
+			Up: window.CharIsDown('w'),
+			Down: window.CharIsDown('s'),
+			Left: window.CharIsDown('a'),
+			Right: window.CharIsDown('d'),
+			A: window.CharIsDown('j'),
+			B: window.CharIsDown('k'),
+		},
+	}
+}
+
 func startEmu(window *windowing.SharedState, cartBytes []byte) {
 	emu := dmgo.NewEmulator(cartBytes)
 
@@ -36,15 +52,18 @@ func startEmu(window *windowing.SharedState, cartBytes []byte) {
 	ticker := time.NewTicker(33*time.Millisecond)
 
 	for {
-		emu.Step()
+		window.Mutex.Lock()
+		newInput := makeInput(window)
+		window.Mutex.Unlock()
 
+		emu.UpdateInput(newInput)
+		emu.Step()
 
 		if emu.FlipRequested() {
 			window.Mutex.Lock()
 			copy(window.Pix, emu.Framebuffer())
 			window.RequestDraw()
 			window.Mutex.Unlock()
-
 			<-ticker.C
 		}
 	}

@@ -36,12 +36,49 @@ type cpuState struct {
 	serialTransferStartFlag       bool
 	serialTransferClockIsInternal bool
 
-	timerModuloReg byte
+	timerOn           bool
+	timerModuloReg    byte
+	timerCounterReg   byte
+	timerFreqSelector byte
+	timerDivCycles    uint16 // div reg is top 8 bits of this
 
-	joypad joypad
+	joypad Joypad
 
 	steps  uint
 	cycles uint
+}
+
+// NOTE: timer is more complicated than this.
+// See TCAGBD
+func (cs *cpuState) runTimerCycle() {
+
+	cs.timerDivCycles++
+
+	if !cs.timerOn {
+		return
+	}
+
+	cycleCount := map[byte]uint{
+		0: 1024,
+		1: 16,
+		2: 64,
+		3: 256,
+	}[cs.timerFreqSelector]
+	if cs.cycles&(cycleCount-1) == 0 {
+		cs.timerCounterReg++
+		if cs.timerCounterReg == 0 {
+			cs.timerCounterReg = cs.timerModuloReg
+			cs.timerIRQ = true
+		}
+	}
+}
+
+func (cs *cpuState) readTimerControlReg() byte {
+	return boolBit(cs.timerOn, 2) | cs.timerFreqSelector
+}
+func (cs *cpuState) writeTimerControlReg(val byte) {
+	cs.timerOn = val&0x04 != 0
+	cs.timerFreqSelector = val & 0x03
 }
 
 func (cs *cpuState) readSerialControlReg() byte {
@@ -52,55 +89,56 @@ func (cs *cpuState) writeSerialControlReg(val byte) {
 	cs.serialTransferClockIsInternal = val&0x01 != 0
 }
 
-type joypad struct {
-	sel      bool
-	start    bool
-	up       bool
-	down     bool
-	left     bool
-	right    bool
-	a        bool
-	b        bool
+// Joypad represents the buttons on a gameboy
+type Joypad struct {
+	Sel      bool
+	Start    bool
+	Up       bool
+	Down     bool
+	Left     bool
+	Right    bool
+	A        bool
+	B        bool
 	readMask byte
 }
 
-func (jp *joypad) writeJoypadReg(val byte) {
+func (jp *Joypad) writeJoypadReg(val byte) {
 	jp.readMask = (val >> 4) & 0x03
 }
-func (jp *joypad) readJoypadReg() byte {
-	val := 0xc0 & (jp.readMask << 4) & 0x0f
+func (jp *Joypad) readJoypadReg() byte {
+	val := 0xc0 | (jp.readMask << 4) | 0x0f
 	if jp.readMask&0x01 == 0 {
-		val &^= boolBit(jp.down, 3)
-		val &^= boolBit(jp.up, 2)
-		val &^= boolBit(jp.left, 1)
-		val &^= boolBit(jp.right, 0)
+		val &^= boolBit(jp.Down, 3)
+		val &^= boolBit(jp.Up, 2)
+		val &^= boolBit(jp.Left, 1)
+		val &^= boolBit(jp.Right, 0)
 	}
-	if jp.readMask&0x10 == 0 {
-		val &^= boolBit(jp.start, 3)
-		val &^= boolBit(jp.sel, 2)
-		val &^= boolBit(jp.b, 1)
-		val &^= boolBit(jp.a, 0)
+	if jp.readMask&0x02 == 0 {
+		val &^= boolBit(jp.Start, 3)
+		val &^= boolBit(jp.Sel, 2)
+		val &^= boolBit(jp.B, 1)
+		val &^= boolBit(jp.A, 0)
 	}
 	return val
 }
-func (jp *joypad) updateJoypad(cs *cpuState, newJP joypad) {
-	lastVal := jp.readJoypadReg() & 0x0f
-	if jp.readMask&0x01 == 0 {
-		jp.down = newJP.down
-		jp.up = newJP.up
-		jp.left = newJP.left
-		jp.right = newJP.right
+
+func (cs *cpuState) updateJoypad(newJP Joypad) {
+	lastVal := cs.joypad.readJoypadReg() & 0x0f
+	if cs.joypad.readMask&0x01 == 0 {
+		cs.joypad.Down = newJP.Down
+		cs.joypad.Up = newJP.Up
+		cs.joypad.Left = newJP.Left
+		cs.joypad.Right = newJP.Right
 	}
-	if jp.readMask&0x10 == 0 {
-		jp.start = newJP.start
-		jp.sel = newJP.sel
-		jp.b = newJP.b
-		jp.a = newJP.a
+	if cs.joypad.readMask&0x10 == 0 {
+		cs.joypad.Start = newJP.Start
+		cs.joypad.Sel = newJP.Sel
+		cs.joypad.B = newJP.B
+		cs.joypad.A = newJP.A
 	}
-	newVal := jp.readJoypadReg() & 0x0f
-	// this is correct behavior. it only triggers
-	// irq if it goes from no-buttons-pressed to
-	// any-buttons-pressed.
+	newVal := cs.joypad.readJoypadReg() & 0x0f
+	// this is correct behavior. it only triggers irq
+	// if it goes from no-buttons-pressed to any-pressed.
 	if lastVal == 0x0f && newVal < lastVal {
 		cs.joypadIRQ = true
 	}
@@ -250,6 +288,7 @@ func (cs *cpuState) runCycles(ncycles uint) {
 		cs.cycles++
 		// much TODO
 		cs.lcd.runCycle(cs)
+		cs.runTimerCycle()
 	}
 }
 
@@ -475,12 +514,23 @@ func (cs *cpuState) setOpFn(cycles uint, instLen uint16, fn func(), flags uint16
 type Emulator interface {
 	Framebuffer() []byte
 	FlipRequested() bool
+	UpdateInput(input Input)
 	Step()
 }
 
 // NewEmulator creates an emulation session
 func NewEmulator(cart []byte) Emulator {
 	return newState(cart)
+}
+
+// Input covers all outside info sent to the Emulator
+// TODO: add dt?
+type Input struct {
+	Joypad Joypad
+}
+
+func (cs *cpuState) UpdateInput(input Input) {
+	cs.updateJoypad(input.Joypad)
 }
 
 // Framebuffer returns the current state of the lcd screen
@@ -548,8 +598,7 @@ func (cs *cpuState) Step() {
 	case 0x06: // ld b, n8
 		cs.setOpB(8, 2, cs.read(cs.pc+1), 0x2222)
 	case 0x07: // rlca
-		val := (cs.a << 1) | (cs.a >> 7)
-		cs.setOpA(4, 1, val, uint16(cs.a>>7))
+		cs.rlcaOp()
 
 	case 0x08: // ld (a16), sp
 		cs.setOpMem16(20, 3, cs.read16(cs.pc+1), cs.sp, 0x2222)
@@ -569,8 +618,7 @@ func (cs *cpuState) Step() {
 	case 0x0e: // ld c, n8
 		cs.setOpC(8, 2, cs.read(cs.pc+1), 0x2222)
 	case 0x0f: // rrca
-		val := (cs.a >> 1) | (cs.a << 7)
-		cs.setOpA(4, 1, val, uint16(cs.a&0x01))
+		cs.rrcaOp()
 
 	case 0x10: // stop
 		cs.setOpFn(4, 2, func() { cs.inStopMode = true }, 0x2222)
@@ -589,8 +637,7 @@ func (cs *cpuState) Step() {
 	case 0x16: // ld d, n8
 		cs.setOpD(8, 2, cs.read(cs.pc+1), 0x2222)
 	case 0x17: // rla
-		val := (cs.a << 1) | ((cs.f >> 4) & 0x01)
-		cs.setOpA(4, 1, val, uint16(cs.a>>7))
+		cs.rlaOp()
 
 	case 0x18: // jr r8
 		cs.jmpRel8(12, 12, 2, true, int8(cs.read(cs.pc+1)))
@@ -610,8 +657,7 @@ func (cs *cpuState) Step() {
 	case 0x1e: // ld e, n8
 		cs.setOpE(8, 2, cs.read(cs.pc+1), 0x2222)
 	case 0x1f: // rra
-		val := (cs.a >> 1) | (cs.f << 3)
-		cs.setOpA(4, 1, val, uint16(cs.a&0x01))
+		cs.rraOp()
 
 	case 0x20: // jr nz, r8
 		cs.jmpRel8(12, 8, 2, !cs.getZeroFlag(), int8(cs.read(cs.pc+1)))
@@ -623,7 +669,11 @@ func (cs *cpuState) Step() {
 	case 0x23: // inc hl
 		cs.setOpHL(8, 1, cs.getHL()+1, 0x2222)
 	case 0x24: // inc h
-		cs.setOpH(4, 1, cs.h+1, (zFlag(cs.h+1) | hFlagAdd(cs.h, 1) | 0x0002))
+		val := cs.h
+		cs.setOpH(4, 1, val+1, (zFlag(val+1) | hFlagAdd(val, 1) | 0x0002))
+	case 0x25: // dec h
+		val := cs.h
+		cs.setOpH(4, 1, val-1, (zFlag(val-1) | hFlagSub(val, 1) | 0x0102))
 	case 0x26: // ld h, d8
 		cs.setOpH(8, 2, cs.read(cs.pc+1), 0x2222)
 
@@ -1224,52 +1274,724 @@ func (cs *cpuState) stepExtendedOpcode() {
 	//fmt.Printf("steps: %08d, ext.op:%02x, pc:%04x, sp:%04x, a:%02x, b:%02x, c:%02x, d:%02x, e:%02x, h:%02x, l:%02x\r\n", cs.steps, extOpcode, cs.pc, cs.sp, cs.a, cs.b, cs.c, cs.d, cs.e, cs.h, cs.l)
 
 	switch extOpcode {
+
+	case 0x00: // rlc b
+		cs.rlcOpReg(&cs.b)
+	case 0x01: // rlc c
+		cs.rlcOpReg(&cs.c)
+	case 0x02: // rlc d
+		cs.rlcOpReg(&cs.d)
+	case 0x03: // rlc e
+		cs.rlcOpReg(&cs.e)
+	case 0x04: // rlc h
+		cs.rlcOpReg(&cs.h)
+	case 0x05: // rlc l
+		cs.rlcOpReg(&cs.l)
+	case 0x06: // rlc (hl)
+		cs.rlcOpHL()
+	case 0x07: // rlc a
+		cs.rlcOpReg(&cs.a)
+
+	case 0x08: // rrc b
+		cs.rrcOpReg(&cs.b)
+	case 0x09: // rrc c
+		cs.rrcOpReg(&cs.c)
+	case 0x0a: // rrc d
+		cs.rrcOpReg(&cs.d)
+	case 0x0b: // rrc e
+		cs.rrcOpReg(&cs.e)
+	case 0x0c: // rrc h
+		cs.rrcOpReg(&cs.h)
+	case 0x0d: // rrc l
+		cs.rrcOpReg(&cs.l)
+	case 0x0e: // rrc (hl)
+		cs.rrcOpHL()
+	case 0x0f: // rrc a
+		cs.rrcOpReg(&cs.a)
+
+	case 0x10: // rl b
+		cs.rlOpReg(&cs.b)
+	case 0x11: // rl c
+		cs.rlOpReg(&cs.c)
+	case 0x12: // rl d
+		cs.rlOpReg(&cs.d)
+	case 0x13: // rl e
+		cs.rlOpReg(&cs.e)
+	case 0x14: // rl h
+		cs.rlOpReg(&cs.h)
+	case 0x15: // rl l
+		cs.rlOpReg(&cs.l)
+	case 0x16: // rl (hl)
+		cs.rlOpHL()
+	case 0x17: // rl a
+		cs.rlOpReg(&cs.a)
+
+	case 0x18: // rr b
+		cs.rrOpReg(&cs.b)
+	case 0x19: // rr c
+		cs.rrOpReg(&cs.c)
+	case 0x1a: // rr d
+		cs.rrOpReg(&cs.d)
+	case 0x1b: // rr e
+		cs.rrOpReg(&cs.e)
+	case 0x1c: // rr h
+		cs.rrOpReg(&cs.h)
+	case 0x1d: // rr l
+		cs.rrOpReg(&cs.l)
+	case 0x1e: // rr (hl)
+		cs.rrOpHL()
+	case 0x1f: // rr a
+		cs.rrOpReg(&cs.a)
+
+	case 0x20: // sla b
+		cs.slaOpReg(&cs.b)
+	case 0x21: // sla c
+		cs.slaOpReg(&cs.c)
+	case 0x22: // sla d
+		cs.slaOpReg(&cs.d)
+	case 0x23: // sla e
+		cs.slaOpReg(&cs.e)
+	case 0x24: // sla h
+		cs.slaOpReg(&cs.h)
+	case 0x25: // sla l
+		cs.slaOpReg(&cs.l)
+	case 0x26: // sla (hl)
+		cs.slaOpHL()
+	case 0x27: // sla a
+		cs.slaOpReg(&cs.a)
+
+	case 0x28: // sra b
+		cs.sraOpReg(&cs.b)
+	case 0x29: // sra c
+		cs.sraOpReg(&cs.c)
+	case 0x2a: // sra d
+		cs.sraOpReg(&cs.d)
+	case 0x2b: // sra e
+		cs.sraOpReg(&cs.e)
+	case 0x2c: // sra h
+		cs.sraOpReg(&cs.h)
+	case 0x2d: // sra l
+		cs.sraOpReg(&cs.l)
+	case 0x2e: // sra (hl)
+		cs.sraOpHL()
+	case 0x2f: // sra a
+		cs.sraOpReg(&cs.a)
+
+	case 0x30: // swap b
+		cs.swapOpReg(&cs.b)
+	case 0x31: // swap c
+		cs.swapOpReg(&cs.c)
+	case 0x32: // swap d
+		cs.swapOpReg(&cs.d)
+	case 0x33: // swap e
+		cs.swapOpReg(&cs.e)
+	case 0x34: // swap h
+		cs.swapOpReg(&cs.h)
+	case 0x35: // swap l
+		cs.swapOpReg(&cs.l)
+	case 0x36: // swap (hl)
+		cs.swapOpHL()
 	case 0x37: // swap a
-		result := (cs.a >> 4) | ((cs.a & 0x0f) << 4)
-		cs.setOpA(8, 2, result, zFlag(result))
+		cs.swapOpReg(&cs.a)
+
+	case 0x38: // srl b
+		cs.srlOpReg(&cs.b)
+	case 0x39: // srl c
+		cs.srlOpReg(&cs.c)
+	case 0x3a: // srl d
+		cs.srlOpReg(&cs.d)
+	case 0x3b: // srl e
+		cs.srlOpReg(&cs.e)
+	case 0x3c: // srl h
+		cs.srlOpReg(&cs.h)
+	case 0x3d: // srl l
+		cs.srlOpReg(&cs.l)
+	case 0x3e: // srl (hl)
+		cs.srlOpHL()
 	case 0x3f: // srl a
-		result := cs.a >> 1
-		cs.setOpA(8, 2, result, zFlag(result)|uint16(cs.a&1))
+		cs.srlOpReg(&cs.a)
+
+	case 0x40: // bit 0, b
+		cs.bitOpReg(0, cs.b)
+	case 0x41: // bit 0, c
+		cs.bitOpReg(0, cs.c)
+	case 0x42: // bit 0, d
+		cs.bitOpReg(0, cs.d)
+	case 0x43: // bit 0, e
+		cs.bitOpReg(0, cs.e)
+	case 0x44: // bit 0, h
+		cs.bitOpReg(0, cs.h)
+	case 0x45: // bit 0, l
+		cs.bitOpReg(0, cs.l)
+	case 0x46: // bit 0, (hl)
+		cs.bitOpHL(0)
+	case 0x47: // bit 0, a
+		cs.bitOpReg(0, cs.a)
+
+	case 0x48: // bit 1, b
+		cs.bitOpReg(1, cs.b)
+	case 0x49: // bit 1, c
+		cs.bitOpReg(1, cs.c)
+	case 0x4a: // bit 1, d
+		cs.bitOpReg(1, cs.d)
+	case 0x4b: // bit 1, e
+		cs.bitOpReg(1, cs.e)
+	case 0x4c: // bit 1, h
+		cs.bitOpReg(1, cs.h)
+	case 0x4d: // bit 1, l
+		cs.bitOpReg(1, cs.l)
+	case 0x4e: // bit 1, (hl)
+		cs.bitOpHL(1)
+	case 0x4f: // bit 1, a
+		cs.bitOpReg(1, cs.a)
 
 	case 0x50: // bit 2, b
-		cs.bitOp(8, 2, 2, cs.b)
+		cs.bitOpReg(2, cs.b)
+	case 0x51: // bit 2, c
+		cs.bitOpReg(2, cs.c)
+	case 0x52: // bit 2, d
+		cs.bitOpReg(2, cs.d)
+	case 0x53: // bit 2, e
+		cs.bitOpReg(2, cs.e)
+	case 0x54: // bit 2, h
+		cs.bitOpReg(2, cs.h)
+	case 0x55: // bit 2, l
+		cs.bitOpReg(2, cs.l)
+	case 0x56: // bit 2, (hl)
+		cs.bitOpHL(2)
 	case 0x57: // bit 2, a
-		cs.bitOp(8, 2, 2, cs.a)
+		cs.bitOpReg(2, cs.a)
 
+	case 0x58: // bit 3, b
+		cs.bitOpReg(3, cs.b)
+	case 0x59: // bit 3, c
+		cs.bitOpReg(3, cs.c)
+	case 0x5a: // bit 3, d
+		cs.bitOpReg(3, cs.d)
+	case 0x5b: // bit 3, e
+		cs.bitOpReg(3, cs.e)
+	case 0x5c: // bit 3, h
+		cs.bitOpReg(3, cs.h)
+	case 0x5d: // bit 3, l
+		cs.bitOpReg(3, cs.l)
+	case 0x5e: // bit 3, (hl)
+		cs.bitOpHL(3)
 	case 0x5f: // bit 3, a
-		cs.bitOp(8, 2, 3, cs.a)
+		cs.bitOpReg(3, cs.a)
+
+	case 0x60: // bit 4, b
+		cs.bitOpReg(4, cs.b)
+	case 0x61: // bit 4, c
+		cs.bitOpReg(4, cs.c)
+	case 0x62: // bit 4, d
+		cs.bitOpReg(4, cs.d)
+	case 0x63: // bit 4, e
+		cs.bitOpReg(4, cs.e)
+	case 0x64: // bit 4, h
+		cs.bitOpReg(4, cs.h)
+	case 0x65: // bit 4, l
+		cs.bitOpReg(4, cs.l)
+	case 0x66: // bit 4, (hl)
+		cs.bitOpHL(4)
+	case 0x67: // bit 4, a
+		cs.bitOpReg(4, cs.a)
+
+	case 0x68: // bit 5, b
+		cs.bitOpReg(5, cs.b)
+	case 0x69: // bit 5, c
+		cs.bitOpReg(5, cs.c)
+	case 0x6a: // bit 5, d
+		cs.bitOpReg(5, cs.d)
+	case 0x6b: // bit 5, e
+		cs.bitOpReg(5, cs.e)
+	case 0x6c: // bit 5, h
+		cs.bitOpReg(5, cs.h)
+	case 0x6d: // bit 5, l
+		cs.bitOpReg(5, cs.l)
+	case 0x6e: // bit 5, (hl)
+		cs.bitOpHL(5)
+	case 0x6f: // bit 5, a
+		cs.bitOpReg(5, cs.a)
 
 	case 0x70: // bit 6, b
-		cs.bitOp(8, 2, 6, cs.b)
+		cs.bitOpReg(6, cs.b)
+	case 0x71: // bit 6, c
+		cs.bitOpReg(6, cs.c)
+	case 0x72: // bit 6, d
+		cs.bitOpReg(6, cs.d)
+	case 0x73: // bit 6, e
+		cs.bitOpReg(6, cs.e)
+	case 0x74: // bit 6, h
+		cs.bitOpReg(6, cs.h)
+	case 0x75: // bit 6, l
+		cs.bitOpReg(6, cs.l)
+	case 0x76: // bit 6, (hl)
+		cs.bitOpHL(6)
+	case 0x77: // bit 6, a
+		cs.bitOpReg(6, cs.a)
 
 	case 0x78: // bit 7, b
-		cs.bitOp(8, 2, 7, cs.b)
+		cs.bitOpReg(7, cs.b)
+	case 0x79: // bit 7, c
+		cs.bitOpReg(7, cs.c)
+	case 0x7a: // bit 7, d
+		cs.bitOpReg(7, cs.d)
+	case 0x7b: // bit 7, e
+		cs.bitOpReg(7, cs.e)
+	case 0x7c: // bit 7, h
+		cs.bitOpReg(7, cs.h)
+	case 0x7d: // bit 7, l
+		cs.bitOpReg(7, cs.l)
+	case 0x7e: // bit 7, (hl)
+		cs.bitOpHL(7)
 	case 0x7f: // bit 7, a
-		cs.bitOp(8, 2, 7, cs.a)
+		cs.bitOpReg(7, cs.a)
 
+	case 0x80: // res 0, b
+		cs.resOpReg(0, &cs.b)
+	case 0x81: // res 0, c
+		cs.resOpReg(0, &cs.c)
+	case 0x82: // res 0, d
+		cs.resOpReg(0, &cs.d)
+	case 0x83: // res 0, e
+		cs.resOpReg(0, &cs.e)
+	case 0x84: // res 0, h
+		cs.resOpReg(0, &cs.h)
+	case 0x85: // res 0, l
+		cs.resOpReg(0, &cs.l)
+	case 0x86: // res 0, (hl)
+		cs.resOpHL(0)
 	case 0x87: // res 0, a
-		val := cs.a
-		cs.setOpA(8, 2, val&^0x01, 0x2222)
+		cs.resOpReg(0, &cs.a)
 
+	case 0x88: // res 1, b
+		cs.resOpReg(1, &cs.b)
+	case 0x89: // res 1, c
+		cs.resOpReg(1, &cs.c)
+	case 0x8a: // res 1, d
+		cs.resOpReg(1, &cs.d)
+	case 0x8b: // res 1, e
+		cs.resOpReg(1, &cs.e)
+	case 0x8c: // res 1, h
+		cs.resOpReg(1, &cs.h)
+	case 0x8d: // res 1, l
+		cs.resOpReg(1, &cs.l)
+	case 0x8e: // res 1, (hl)
+		cs.resOpHL(1)
+	case 0x8f: // res 1, a
+		cs.resOpReg(1, &cs.a)
+
+	case 0x90: // res 2, b
+		cs.resOpReg(2, &cs.b)
+	case 0x91: // res 2, c
+		cs.resOpReg(2, &cs.c)
+	case 0x92: // res 2, d
+		cs.resOpReg(2, &cs.d)
+	case 0x93: // res 2, e
+		cs.resOpReg(2, &cs.e)
+	case 0x94: // res 2, h
+		cs.resOpReg(2, &cs.h)
+	case 0x95: // res 2, l
+		cs.resOpReg(2, &cs.l)
+	case 0x96: // res 2, (hl)
+		cs.resOpHL(2)
+	case 0x97: // res 2, a
+		cs.resOpReg(2, &cs.a)
+
+	case 0x98: // res 3, b
+		cs.resOpReg(3, &cs.b)
+	case 0x99: // res 3, c
+		cs.resOpReg(3, &cs.c)
+	case 0x9a: // res 3, d
+		cs.resOpReg(3, &cs.d)
+	case 0x9b: // res 3, e
+		cs.resOpReg(3, &cs.e)
+	case 0x9c: // res 3, h
+		cs.resOpReg(3, &cs.h)
+	case 0x9d: // res 3, l
+		cs.resOpReg(3, &cs.l)
+	case 0x9e: // res 3, (hl)
+		cs.resOpHL(3)
+	case 0x9f: // res 3, a
+		cs.resOpReg(3, &cs.a)
+
+	case 0xa0: // res 4, b
+		cs.resOpReg(4, &cs.b)
+	case 0xa1: // res 4, c
+		cs.resOpReg(4, &cs.c)
+	case 0xa2: // res 4, d
+		cs.resOpReg(4, &cs.d)
+	case 0xa3: // res 4, e
+		cs.resOpReg(4, &cs.e)
+	case 0xa4: // res 4, h
+		cs.resOpReg(4, &cs.h)
+	case 0xa5: // res 4, l
+		cs.resOpReg(4, &cs.l)
+	case 0xa6: // res 4, (hl)
+		cs.resOpHL(4)
+	case 0xa7: // res 4, a
+		cs.resOpReg(4, &cs.a)
+
+	case 0xa8: // res 5, b
+		cs.resOpReg(5, &cs.b)
+	case 0xa9: // res 5, c
+		cs.resOpReg(5, &cs.c)
+	case 0xaa: // res 5, d
+		cs.resOpReg(5, &cs.d)
+	case 0xab: // res 5, e
+		cs.resOpReg(5, &cs.e)
+	case 0xac: // res 5, h
+		cs.resOpReg(5, &cs.h)
+	case 0xad: // res 5, l
+		cs.resOpReg(5, &cs.l)
+	case 0xae: // res 5, (hl)
+		cs.resOpHL(5)
+	case 0xaf: // res 5, a
+		cs.resOpReg(5, &cs.a)
+
+	case 0xb0: // res 6, b
+		cs.resOpReg(6, &cs.b)
+	case 0xb1: // res 6, c
+		cs.resOpReg(6, &cs.c)
+	case 0xb2: // res 6, d
+		cs.resOpReg(6, &cs.d)
+	case 0xb3: // res 6, e
+		cs.resOpReg(6, &cs.e)
+	case 0xb4: // res 6, h
+		cs.resOpReg(6, &cs.h)
+	case 0xb5: // res 6, l
+		cs.resOpReg(6, &cs.l)
+	case 0xb6: // res 6, (hl)
+		cs.resOpHL(6)
+	case 0xb7: // res 6, a
+		cs.resOpReg(6, &cs.a)
+
+	case 0xb8: // res 7, b
+		cs.resOpReg(7, &cs.b)
+	case 0xb9: // res 7, c
+		cs.resOpReg(7, &cs.c)
+	case 0xba: // res 7, d
+		cs.resOpReg(7, &cs.d)
+	case 0xbb: // res 7, e
+		cs.resOpReg(7, &cs.e)
+	case 0xbc: // res 7, h
+		cs.resOpReg(7, &cs.h)
+	case 0xbd: // res 7, l
+		cs.resOpReg(7, &cs.l)
 	case 0xbe: // res 7, (hl)
-		val := cs.followHL()
-		cs.setOpMem8(16, 2, cs.getHL(), val&^0x80, 0x2222)
+		cs.resOpHL(7)
 	case 0xbf: // res 7, a
-		cs.setOpA(8, 2, (cs.a &^ 0x80), 0x2222)
+		cs.resOpReg(7, &cs.a)
 
+	case 0xc0: // set 0, b
+		cs.bSetOpReg(0, &cs.b)
+	case 0xc1: // set 0, c
+		cs.bSetOpReg(0, &cs.c)
+	case 0xc2: // set 0, d
+		cs.bSetOpReg(0, &cs.d)
+	case 0xc3: // set 0, e
+		cs.bSetOpReg(0, &cs.e)
+	case 0xc4: // set 0, h
+		cs.bSetOpReg(0, &cs.h)
+	case 0xc5: // set 0, l
+		cs.bSetOpReg(0, &cs.l)
+	case 0xc6: // set 0, (hl)
+		cs.bSetOpHL(0)
 	case 0xc7: // set 0, a
-		cs.setOpA(8, 2, (cs.a | 0x01), 0x2222)
+		cs.bSetOpReg(0, &cs.a)
 
+	case 0xc8: // set 1, b
+		cs.bSetOpReg(1, &cs.b)
+	case 0xc9: // set 1, c
+		cs.bSetOpReg(1, &cs.c)
+	case 0xca: // set 1, d
+		cs.bSetOpReg(1, &cs.d)
+	case 0xcb: // set 1, e
+		cs.bSetOpReg(1, &cs.e)
+	case 0xcc: // set 1, h
+		cs.bSetOpReg(1, &cs.h)
+	case 0xcd: // set 1, l
+		cs.bSetOpReg(1, &cs.l)
+	case 0xce: // set 1, (hl)
+		cs.bSetOpHL(1)
+	case 0xcf: // set 1, a
+		cs.bSetOpReg(1, &cs.a)
+
+	case 0xd0: // set 2, b
+		cs.bSetOpReg(2, &cs.b)
+	case 0xd1: // set 2, c
+		cs.bSetOpReg(2, &cs.c)
+	case 0xd2: // set 2, d
+		cs.bSetOpReg(2, &cs.d)
+	case 0xd3: // set 2, e
+		cs.bSetOpReg(2, &cs.e)
+	case 0xd4: // set 2, h
+		cs.bSetOpReg(2, &cs.h)
+	case 0xd5: // set 2, l
+		cs.bSetOpReg(2, &cs.l)
+	case 0xd6: // set 2, (hl)
+		cs.bSetOpHL(2)
+	case 0xd7: // set 2, a
+		cs.bSetOpReg(2, &cs.a)
+
+	case 0xd8: // set 3, b
+		cs.bSetOpReg(3, &cs.b)
+	case 0xd9: // set 3, c
+		cs.bSetOpReg(3, &cs.c)
+	case 0xda: // set 3, d
+		cs.bSetOpReg(3, &cs.d)
+	case 0xdb: // set 3, e
+		cs.bSetOpReg(3, &cs.e)
+	case 0xdc: // set 3, h
+		cs.bSetOpReg(3, &cs.h)
+	case 0xdd: // set 3, l
+		cs.bSetOpReg(3, &cs.l)
+	case 0xde: // set 3, (hl)
+		cs.bSetOpHL(3)
+	case 0xdf: // set 3, a
+		cs.bSetOpReg(3, &cs.a)
+
+	case 0xe0: // set 4, b
+		cs.bSetOpReg(4, &cs.b)
+	case 0xe1: // set 4, c
+		cs.bSetOpReg(4, &cs.c)
+	case 0xe2: // set 4, d
+		cs.bSetOpReg(4, &cs.d)
+	case 0xe3: // set 4, e
+		cs.bSetOpReg(4, &cs.e)
+	case 0xe4: // set 4, h
+		cs.bSetOpReg(4, &cs.h)
+	case 0xe5: // set 4, l
+		cs.bSetOpReg(4, &cs.l)
+	case 0xe6: // set 4, (hl)
+		cs.bSetOpHL(4)
+	case 0xe7: // set 4, a
+		cs.bSetOpReg(4, &cs.a)
+
+	case 0xe8: // set 5, b
+		cs.bSetOpReg(5, &cs.b)
+	case 0xe9: // set 5, c
+		cs.bSetOpReg(5, &cs.c)
+	case 0xea: // set 5, d
+		cs.bSetOpReg(5, &cs.d)
+	case 0xeb: // set 5, e
+		cs.bSetOpReg(5, &cs.e)
+	case 0xec: // set 5, h
+		cs.bSetOpReg(5, &cs.h)
+	case 0xed: // set 5, l
+		cs.bSetOpReg(5, &cs.l)
+	case 0xee: // set 5, (hl)
+		cs.bSetOpHL(5)
+	case 0xef: // set 5, a
+		cs.bSetOpReg(5, &cs.a)
+
+	case 0xf0: // set 6, b
+		cs.bSetOpReg(6, &cs.b)
+	case 0xf1: // set 6, c
+		cs.bSetOpReg(6, &cs.c)
+	case 0xf2: // set 6, d
+		cs.bSetOpReg(6, &cs.d)
+	case 0xf3: // set 6, e
+		cs.bSetOpReg(6, &cs.e)
+	case 0xf4: // set 6, h
+		cs.bSetOpReg(6, &cs.h)
+	case 0xf5: // set 6, l
+		cs.bSetOpReg(6, &cs.l)
+	case 0xf6: // set 6, (hl)
+		cs.bSetOpHL(6)
+	case 0xf7: // set 6, a
+		cs.bSetOpReg(6, &cs.a)
+
+	case 0xf8: // set 7, b
+		cs.bSetOpReg(7, &cs.b)
+	case 0xf9: // set 7, c
+		cs.bSetOpReg(7, &cs.c)
+	case 0xfa: // set 7, d
+		cs.bSetOpReg(7, &cs.d)
+	case 0xfb: // set 7, e
+		cs.bSetOpReg(7, &cs.e)
+	case 0xfc: // set 7, h
+		cs.bSetOpReg(7, &cs.h)
+	case 0xfd: // set 7, l
+		cs.bSetOpReg(7, &cs.l)
+	case 0xfe: // set 7, (hl)
+		cs.bSetOpHL(7)
 	case 0xff: // set 7, a
-		cs.setOpA(8, 2, (cs.a | 0x80), 0x2222)
+		cs.bSetOpReg(7, &cs.a)
 
 	default:
 		fatalErr(fmt.Sprintf("Unknown Extended Opcode: 0x%02x\r\n", extOpcode))
 	}
 }
 
+// TODO future? Tried this out, not sure how I like it...
+func (cs *cpuState) stdOpPattern(opcode byte, regFn func(*byte), hlFn func()) {
+	regPtr := cs.getRegPtrByPatternNum(opcode & 0x07)
+	if regPtr != nil {
+		regFn(regPtr)
+	} else {
+		hlFn()
+	}
+}
+func (cs *cpuState) getRegPtrByPatternNum(num byte) *byte {
+	return map[byte]*byte{
+		0: &cs.b, 1: &cs.c, 2: &cs.d,
+		3: &cs.e, 4: &cs.h, 5: &cs.l,
+		6: nil, // (hl)
+		7: &cs.a,
+	}[num]
+}
+
+func (cs *cpuState) swapOpReg(reg *byte) {
+	val := *reg
+	result := val>>4 | (val&0x0f)<<4
+	cs.setOp8(8, 2, reg, result, zFlag(result))
+}
+func (cs *cpuState) swapOpHL() {
+	val := cs.followHL()
+	result := val>>4 | (val&0x0f)<<4
+	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result))
+}
+
+func (cs *cpuState) rlaOp() {
+	val := cs.a
+	result := (val << 1) | ((cs.f >> 4) & 0x01)
+	carry := val >> 7
+	cs.setOpA(4, 1, result, zFlag(result)|uint16(carry))
+}
+func (cs *cpuState) rlOpReg(reg *byte) {
+	val := *reg
+	result := (val << 1) | ((cs.f >> 4) & 0x01)
+	carry := val >> 7
+	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
+}
+func (cs *cpuState) rlOpHL() {
+	val := cs.followHL()
+	result := (val << 1) | ((cs.f >> 4) & 0x01)
+	carry := val >> 7
+	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+}
+
+func (cs *cpuState) rraOp() {
+	val := cs.a
+	result := ((cs.f << 3) & 0x80) | (val >> 1)
+	carry := val & 0x01
+	cs.setOpA(4, 1, result, zFlag(result)|uint16(carry))
+}
+func (cs *cpuState) rrOpReg(reg *byte) {
+	val := *reg
+	result := ((cs.f << 3) & 0x80) | (val >> 1)
+	carry := val & 0x01
+	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
+}
+func (cs *cpuState) rrOpHL() {
+	val := cs.followHL()
+	result := ((cs.f << 3) & 0x80) | (val >> 1)
+	carry := val & 0x01
+	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+}
+
+func (cs *cpuState) rlcaOp() {
+	val := cs.a
+	result := (val << 1) | (val >> 7)
+	carry := val >> 7
+	cs.setOpA(4, 1, result, zFlag(result)|uint16(carry))
+}
+func (cs *cpuState) rlcOpReg(reg *byte) {
+	val := *reg
+	result := (val << 1) | (val >> 7)
+	carry := val >> 7
+	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
+}
+func (cs *cpuState) rlcOpHL() {
+	val := cs.followHL()
+	result := (val << 1) | (val >> 7)
+	carry := val >> 7
+	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+}
+
+func (cs *cpuState) rrcaOp() {
+	val := cs.a
+	result := (val << 7) | (val >> 1)
+	carry := val & 0x01
+	cs.setOpA(4, 1, result, zFlag(result)|uint16(carry))
+}
+func (cs *cpuState) rrcOpReg(reg *byte) {
+	val := *reg
+	result := (val << 7) | (val >> 1)
+	carry := val & 0x01
+	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
+}
+func (cs *cpuState) rrcOpHL() {
+	val := cs.followHL()
+	result := (val << 7) | (val >> 1)
+	carry := val & 0x01
+	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+}
+
+func (cs *cpuState) srlOpReg(reg *byte) {
+	val := *reg
+	result, carry := val>>1, val&0x01
+	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
+}
+func (cs *cpuState) srlOpHL() {
+	val := cs.followHL()
+	result, carry := val>>1, val&0x01
+	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+}
+
+func (cs *cpuState) slaOpReg(reg *byte) {
+	val := *reg
+	result, carry := val<<1, val>>7
+	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
+}
+func (cs *cpuState) slaOpHL() {
+	val := cs.followHL()
+	result, carry := val<<1, val>>7
+	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+}
+
+func (cs *cpuState) sraOpReg(reg *byte) {
+	val := *reg
+	result, carry := (val&0x80)|(val>>1), val&0x01
+	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
+}
+func (cs *cpuState) sraOpHL() {
+	val := cs.followHL()
+	result, carry := (val&0x80)|(val>>1), val&0x01
+	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+}
+
 func (cs *cpuState) bitOp(cycles uint, instLen uint16, bitNum uint8, val uint8) {
 	cs.setOpFn(cycles, instLen, func() {}, zFlag(val&(1<<bitNum))|0x012)
+}
+func (cs *cpuState) bitOpReg(bitNum, val uint8) {
+	cs.bitOp(8, 2, bitNum, val)
+}
+func (cs *cpuState) bitOpHL(bitNum uint8) {
+	cs.bitOp(16, 2, bitNum, cs.followHL())
+}
+
+func (cs *cpuState) resOpReg(bitNum uint8, reg *byte) {
+	val := *reg
+	result := val &^ (1 << bitNum)
+	cs.setOp8(8, 2, reg, result, 0x2222)
+}
+func (cs *cpuState) resOpHL(bitNum uint8) {
+	val := cs.followHL()
+	result := val &^ (1 << bitNum)
+	cs.setOpMem8(16, 2, cs.getHL(), result, 0x2222)
+}
+
+func (cs *cpuState) bSetOpReg(bitNum uint8, reg *byte) {
+	val := *reg
+	result := val | (1 << bitNum)
+	cs.setOp8(8, 2, reg, result, 0x2222)
+}
+func (cs *cpuState) bSetOpHL(bitNum uint8) {
+	val := cs.followHL()
+	result := val | (1 << bitNum)
+	cs.setOpMem8(16, 2, cs.getHL(), result, 0x2222)
 }
 
 func fatalErr(v ...interface{}) {

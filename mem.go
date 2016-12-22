@@ -39,8 +39,16 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = cs.joypad.readJoypadReg()
 	case addr == 0xff02:
 		val = cs.readSerialControlReg()
+
+	case addr == 0xff04:
+		val = byte(cs.timerDivCycles >> 8)
+	case addr == 0xff05:
+		val = cs.timerCounterReg
 	case addr == 0xff06:
 		val = cs.timerModuloReg
+	case addr == 0xff07:
+		val = cs.readTimerControlReg()
+
 	case addr == 0xff0f:
 		val = cs.readInterruptFlagReg()
 
@@ -51,6 +59,8 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = cs.lcd.readControlReg()
 	case addr == 0xff44:
 		val = cs.lcd.lyReg
+	case addr == 0xff45:
+		val = cs.lcd.lycReg
 
 	case addr >= 0xff80 && addr < 0xffff:
 		val = cs.mem.highInternalRAM[addr-0xff80]
@@ -96,8 +106,14 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr == 0xff02:
 		cs.writeSerialControlReg(val)
 
+	case addr == 0xff04:
+		cs.timerDivCycles = 0
+	case addr == 0xff05:
+		cs.timerCounterReg = val
 	case addr == 0xff06:
 		cs.timerModuloReg = val
+	case addr == 0xff07:
+		cs.writeTimerControlReg(val)
 
 	case addr == 0xff10:
 		cs.apu.sounds[0].writeSweepReg(val)
@@ -130,6 +146,8 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr == 0xff1e:
 		cs.apu.sounds[2].writeFreqHighReg(val)
 
+	case addr == 0xff20:
+		cs.apu.sounds[3].lengthData = val & 0x1f
 	case addr == 0xff21:
 		cs.apu.sounds[3].writeSoundEnvReg(val)
 	case addr == 0xff22:
@@ -154,6 +172,8 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.lcd.scrollY = val
 	case addr == 0xff43:
 		cs.lcd.scrollX = val
+	case addr == 0xff45:
+		cs.lcd.lycReg = val
 	case addr == 0xff46:
 		cs.oamDMA(uint16(val) << 8)
 	case addr == 0xff47:
