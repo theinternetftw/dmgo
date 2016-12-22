@@ -110,7 +110,23 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 func (cs *cpuState) getTilePixel(tmapAddr, tdataAddr uint16, x, y byte) byte {
 	mapByteY, mapByteX := uint16(y>>3), uint16(x>>3)
 	mapByte := cs.read(tmapAddr + mapByteY*32 + mapByteX)
-	return mapByte
+	if tdataAddr == 0x8800 {
+		mapByte = byte(int(int8(mapByte)) + 128)
+	}
+	mapBitY, mapBitX := y&0x07, x&0x07
+	dataByteL := cs.read(tdataAddr + uint16(mapByte)*16 + uint16(mapBitY)*2)
+	dataByteH := cs.read(tdataAddr + uint16(mapByte)*16 + uint16(mapBitY)*2 + 1)
+	dataBitL := (dataByteL >> (7 - mapBitX)) & 0x1
+	dataBitH := (dataByteH >> (7 - mapBitX)) & 0x1
+	pixel := (dataBitH << 1) | dataBitL
+	if pixel == 0 {
+		return 0
+	} else if pixel == 1 {
+		return 0x3f
+	} else if pixel == 2 {
+		return 0x7f
+	}
+	return 0xff
 }
 
 func (cs *cpuState) getBGPixel(x, y byte) byte {
