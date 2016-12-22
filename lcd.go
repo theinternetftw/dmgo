@@ -118,26 +118,41 @@ func (cs *cpuState) getTilePixel(tmapAddr, tdataAddr uint16, x, y byte) byte {
 	dataByteH := cs.read(tdataAddr + uint16(mapByte)*16 + uint16(mapBitY)*2 + 1)
 	dataBitL := (dataByteL >> (7 - mapBitX)) & 0x1
 	dataBitH := (dataByteH >> (7 - mapBitX)) & 0x1
-	pixel := (dataBitH << 1) | dataBitL
-	if pixel == 0 {
-		return 0
-	} else if pixel == 1 {
-		return 0x3f
-	} else if pixel == 2 {
-		return 0x7f
-	}
-	return 0xff
+	return (dataBitH << 1) | dataBitL
 }
 
-func (cs *cpuState) getBGPixel(x, y byte) byte {
+func (cs *cpuState) getBGPixel(x, y byte) (byte, byte, byte) {
 	mapAddr := cs.lcd.getBGTileMapAddr()
 	dataAddr := cs.lcd.getBGAndWindowTileDataAddr()
-	return cs.getTilePixel(mapAddr, dataAddr, x, y)
+	rawPixel := cs.getTilePixel(mapAddr, dataAddr, x, y)
+	palettedPixel := map[byte]byte{
+		0: (cs.lcd.backgroundPaletteReg >> 0) & 0x03,
+		1: (cs.lcd.backgroundPaletteReg >> 2) & 0x03,
+		2: (cs.lcd.backgroundPaletteReg >> 4) & 0x03,
+		3: (cs.lcd.backgroundPaletteReg >> 6) & 0x03,
+	}[rawPixel]
+	return cs.applyCustomPalette(palettedPixel)
 }
-func (cs *cpuState) getWindowPixel(x, y byte) byte {
+
+func (cs *cpuState) getWindowPixel(x, y byte) (byte, byte, byte) {
 	mapAddr := cs.lcd.getWindowTileMapAddr()
 	dataAddr := cs.lcd.getBGAndWindowTileDataAddr()
-	return cs.getTilePixel(mapAddr, dataAddr, x, y)
+	rawPixel := cs.getTilePixel(mapAddr, dataAddr, x, y)
+	palettedPixel := map[byte]byte{
+		0: (cs.lcd.backgroundPaletteReg >> 0) & 0x03,
+		1: (cs.lcd.backgroundPaletteReg >> 2) & 0x03,
+		2: (cs.lcd.backgroundPaletteReg >> 4) & 0x03,
+		3: (cs.lcd.backgroundPaletteReg >> 6) & 0x03,
+	}[rawPixel]
+	return cs.applyCustomPalette(palettedPixel)
+}
+
+func (cs *cpuState) applyCustomPalette(val byte) (byte, byte, byte) {
+	// TODO: actual choices
+	outVal := map[byte]byte{
+		0: 0xff, 1: 0x7f, 2: 0x3f, 4: 0x00,
+	}[val]
+	return outVal, outVal, outVal
 }
 
 func (lcd *lcd) getBGTileMapAddr() uint16 {
@@ -171,16 +186,16 @@ func (lcd *lcd) renderScanline(cs *cpuState) {
 		bgY := y - lcd.scrollY
 		for x := byte(0); x < 160; x++ {
 			bgX := x - lcd.scrollX
-			pix := cs.getBGPixel(bgX, bgY)
-			lcd.setFramebufferPixel(x, y, pix, pix, pix)
+			r, g, b := cs.getBGPixel(bgX, bgY)
+			lcd.setFramebufferPixel(x, y, r, g, b)
 		}
 	}
 	if lcd.displayWindow && y >= lcd.windowY {
 		winY := y - lcd.windowY
 		winStartX := lcd.windowX - 7
 		for x := winStartX; x < 160; x++ {
-			pix := cs.getWindowPixel(x-winStartX, winY)
-			lcd.setFramebufferPixel(x, y, pix, pix, pix)
+			r, g, b := cs.getWindowPixel(x-winStartX, winY)
+			lcd.setFramebufferPixel(x, y, r, g, b)
 		}
 	}
 
