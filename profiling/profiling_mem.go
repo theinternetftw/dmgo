@@ -15,8 +15,8 @@ func Start() Stopper {
 	fmt.Println("MEM PROFILING BUILD! MEM PROFILING BUILD! MEM PROFILING BUILD!")
 	fmt.Println()
 
-	return profile.Start(&profile.Config{
-		MemProfile:  true,
-		ProfilePath: ".",
-	})
+	return profile.Start(
+		profile.MemProfile,
+		profile.ProfilePath("."),
+	)
 }

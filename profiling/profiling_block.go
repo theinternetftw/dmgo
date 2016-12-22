@@ -15,8 +15,8 @@ func Start() Stopper {
 	fmt.Println("BLOCK PROFILING BUILD! BLOCK PROFILING BUILD! BLOCK PROFILING BUILD!")
 	fmt.Println()
 
-	return profile.Start(&profile.Config{
-		BlockProfile: true,
-		ProfilePath:  ".",
-	})
+	return profile.Start(
+		profile.BlockProfile,
+		profile.ProfilePath("."),
+	)
 }

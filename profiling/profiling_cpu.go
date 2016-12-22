@@ -15,8 +15,8 @@ func Start() Stopper {
 	fmt.Println("CPU PROFILING BUILD! CPU PROFILING BUILD! CPU PROFILING BUILD!")
 	fmt.Println()
 
-	return profile.Start(&profile.Config{
-		CPUProfile:  true,
-		ProfilePath: ".",
-	})
+	return profile.Start(
+		profile.CPUProfile,
+		profile.ProfilePath("."),
+	)
 }
