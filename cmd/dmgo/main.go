@@ -23,6 +23,9 @@ func main() {
 
 	cartInfo := dmgo.ParseCartInfo(cartBytes)
 	fmt.Printf("%q\n", cartInfo.Title)
+	fmt.Printf("Cart type: %d\n", cartInfo.CartridgeType)
+	fmt.Printf("Cart RAM size: %d\n", cartInfo.GetRAMSize())
+	fmt.Printf("Cart ROM size: %d\n", cartInfo.GetROMSize())
 
 	windowing.InitDisplayLoop(160*4, 144*4, 160, 144, func(sharedState *windowing.SharedState) {
 		startEmu(sharedState, cartBytes)

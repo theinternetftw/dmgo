@@ -46,6 +46,28 @@ func (ci *CartInfo) GetRAMSize() uint {
 	panic(fmt.Sprintf("unknown RAM size code 0x%02x", ci.RAMSizeCode))
 }
 
+// GetROMSize decodes the ROM size code into an actual size
+func (ci *CartInfo) GetROMSize() uint {
+	codeSizeMap := map[byte]uint{
+		0x00: 32 * 1024,   // no banking
+		0x01: 64 * 1024,   // 4 banks
+		0x02: 128 * 1024,  // 8 banks
+		0x03: 256 * 1024,  // 16 banks
+		0x04: 512 * 1024,  // 32 banks
+		0x05: 1024 * 1024, // 64 banks (only 63 used by MBC1)
+		0x06: 2048 * 1024, // 128 banks (only 125 used by MBC1)
+		0x07: 4096 * 1024, // 256 banks
+		0x08: 8192 * 1024, // 512 banks
+		0x52: 1152 * 1024, // 72 banks
+		0x53: 1280 * 1024, // 80 banks
+		0x54: 1536 * 1024, // 96 banks
+	}
+	if size, ok := codeSizeMap[ci.RAMSizeCode]; ok {
+		return size
+	}
+	panic(fmt.Sprintf("unknown RAM size code 0x%02x", ci.RAMSizeCode))
+}
+
 func (ci *CartInfo) cgbOnly() bool { return ci.CGBFlag == 0xc0 }
 
 // ParseCartInfo parses a dmg cart header
