@@ -2,10 +2,12 @@ package windowing
 
 import (
 	"image"
+	"image/color"
 	"sync"
 
 	"golang.org/x/exp/shiny/driver"
 	"golang.org/x/exp/shiny/screen"
+	"golang.org/x/image/math/f64"
 	"golang.org/x/mobile/event/lifecycle"
 //	"golang.org/x/mobile/event/key"
 	"golang.org/x/mobile/event/paint"
@@ -70,6 +72,7 @@ func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, upd
 		go updateLoop(&sharedState)
 
 		szRect := buf.Bounds()
+		justResized := true
 
 		for {
 			publish := false
@@ -89,20 +92,37 @@ func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, upd
 				publish = true
 			case size.Event:
 				szRect = e.Bounds()
+				justResized = true
 			case paint.Event:
 				publish = true
 			}
 
 			if publish {
-				w.Scale(szRect, tex, tex.Bounds(), screen.Src, nil)
-				// NOTE: due to weird opengl problems, can run w.Scale only once, or will get flicker!
-				// So aspect ratio preserving scaling will have to be done like this:
-				// * make a 2nd texture in the beginning, "borderedTexture"
-				// * on size events update that bordered texture to match the aspect ratio of
-				//   the window, but keep the smaller dimension the same size as the framebuffer
-				// * fill the borderedTexture with black upon creation/resize
-				// * upload the framebuffer, centered, into the texture
-				// * then run Scale once, passing in the borderedTexture
+				scaleFactX := float64(szRect.Max.X) / float64(tex.Bounds().Max.X)
+				scaleFactY := float64(szRect.Max.Y) / float64(tex.Bounds().Max.Y)
+				scaleFact := scaleFactX
+				if scaleFactY < scaleFact {
+					scaleFact = scaleFactY
+				}
+				// NOTE: flicker happens when scale is not an integer
+				scaleFact = float64(int(scaleFact))
+				newWidth := int(scaleFact * float64(tex.Bounds().Max.X))
+				centerX := float64(szRect.Max.X/2 - newWidth/2)
+				src2dst := f64.Aff3 {
+					float64(int(scaleFact)), 0, centerX,
+					0, float64(int(scaleFact)), 0,
+				}
+				identTrans := f64.Aff3 {
+					1, 0, 0,
+					0, 1, 0,
+				}
+				// get flicker when we do two draws, so
+				// only do it when we resize
+				if justResized {
+					w.DrawUniform(identTrans, color.Black, szRect, screen.Src, nil)
+					justResized = false
+				}
+				w.Draw(src2dst, tex, tex.Bounds(), screen.Src, nil)
 				w.Publish()
 			}
 		}
