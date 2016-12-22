@@ -57,6 +57,8 @@ func (cs *cpuState) read(addr uint16) byte {
 
 	case addr == 0xff40:
 		val = cs.lcd.readControlReg()
+	case addr == 0xff41:
+		val = cs.lcd.readStatusReg()
 	case addr == 0xff44:
 		val = cs.lcd.lyReg
 	case addr == 0xff45:

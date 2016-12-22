@@ -45,11 +45,24 @@ func makeInput(window *windowing.SharedState) dmgo.Input {
 	}
 }
 
+func headlessEmu(cartBytes []byte) {
+	emu := dmgo.NewEmulator(cartBytes)
+	// FIXME: settings are for debug right now
+	ticker := time.NewTicker(17*time.Millisecond)
+
+	for {
+		emu.Step()
+		if emu.FlipRequested() {
+			<-ticker.C
+		}
+	}
+}
+
 func startEmu(window *windowing.SharedState, cartBytes []byte) {
 	emu := dmgo.NewEmulator(cartBytes)
 
 	// FIXME: settings are for debug right now
-	ticker := time.NewTicker(33*time.Millisecond)
+	ticker := time.NewTicker(17*time.Millisecond)
 
 	for {
 		window.Mutex.Lock()
