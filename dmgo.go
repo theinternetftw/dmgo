@@ -36,6 +36,8 @@ type cpuState struct {
 	serialTransferStartFlag       bool
 	serialTransferClockIsInternal bool
 
+	timerModuloReg byte
+
 	joypad joypad
 
 	steps  uint
@@ -239,6 +241,7 @@ func newState(cart []byte) *cpuState {
 	}
 	state := cpuState{pc: entryPoint, mem: mem}
 	state.lcd.init()
+	state.apu.init()
 	return &state
 }
 
@@ -346,6 +349,23 @@ func (cs *cpuState) jmpAbs16(cyclesTaken uint, cyclesNotTaken uint, instLen uint
 	}
 }
 
+func (cs *cpuState) jmpCall(cyclesTaken uint, cyclesNotTaken uint, instLen uint16, test bool, addr uint16) {
+	if test {
+		cs.pushOp16(cyclesTaken, instLen, cs.pc+instLen)
+		cs.pc = addr
+	} else {
+		cs.setOpFn(cyclesNotTaken, instLen, func() {}, 0x2222)
+	}
+}
+
+func (cs *cpuState) jmpRet(cyclesTaken uint, cyclesNotTaken uint, instLen uint16, test bool) {
+	if test {
+		cs.popOp16(cyclesTaken, instLen, cs.setPC)
+	} else {
+		cs.setOpFn(cyclesNotTaken, instLen, func() {}, 0x2222)
+	}
+}
+
 // reminder: flags == zero, addsub, halfcarry, carry
 // set all: 0x1111
 // clear all: 0x0000
@@ -362,6 +382,16 @@ func zFlag(val uint8) uint16 {
 func hFlagAdd(val, addend uint8) uint16 {
 	// 4th to 5th bit carry
 	if int(val&0x0f)+int(addend&0x0f) >= 0x10 {
+		return 0x10
+	}
+	return 0x00
+}
+
+// half carry
+func hFlagAdc(val, addend, fReg uint8) uint16 {
+	carry := (fReg >> 4) & 0x01
+	// 4th to 5th bit carry
+	if int(carry)+int(val&0x0f)+int(addend&0x0f) >= 0x10 {
 		return 0x10
 	}
 	return 0x00
@@ -384,9 +414,27 @@ func hFlagSub(val, subtrahend uint8) uint16 {
 	return 0x00
 }
 
+// half carry
+func hFlagSbc(val, subtrahend, fReg uint8) uint16 {
+	carry := (fReg >> 4) & 0x01
+	if int(val&0xf)-int(subtrahend&0xf)-int(carry) < 0 {
+		return 0x10
+	}
+	return 0x00
+}
+
 // carry
 func cFlagAdd(val, addend uint8) uint16 {
 	if int(val)+int(addend) > 0xff {
+		return 0x1
+	}
+	return 0x0
+}
+
+// carry
+func cFlagAdc(val, addend, fReg uint8) uint16 {
+	carry := (fReg >> 4) & 0x01
+	if int(carry)+int(val)+int(addend) > 0xff {
 		return 0x1
 	}
 	return 0x0
@@ -408,6 +456,14 @@ func cFlagSub(val, subtrahend uint8) uint16 {
 	return 0x0
 }
 
+func cFlagSbc(val, subtrahend, fReg uint8) uint16 {
+	carry := (fReg >> 4) & 0x01
+	if int(val)-int(subtrahend)-int(carry) < 0 {
+		return 0x1
+	}
+	return 0x0
+}
+
 func (cs *cpuState) setOpFn(cycles uint, instLen uint16, fn func(), flags uint16) {
 	cs.runCycles(cycles)
 	cs.pc += instLen
@@ -415,9 +471,10 @@ func (cs *cpuState) setOpFn(cycles uint, instLen uint16, fn func(), flags uint16
 	cs.setFlags(flags)
 }
 
-// Emulator exposes the public facing fns for an emulation session
+// Emulator exposes the publi1 facing fns for an emulation session
 type Emulator interface {
 	Framebuffer() []byte
+	FlipRequested() bool
 	Step()
 }
 
@@ -428,7 +485,17 @@ func NewEmulator(cart []byte) Emulator {
 
 // Framebuffer returns the current state of the lcd screen
 func (cs *cpuState) Framebuffer() []byte {
-	return cs.lcd.framebuffer[:]
+	return cs.lcd.framebuffer
+}
+
+// FlipRequested indicates if a draw request is pending
+// and clears it before returning
+func (cs *cpuState) FlipRequested() bool {
+	if cs.lcd.flipRequested {
+		cs.lcd.flipRequested = false
+		return true
+	}
+	return false
 }
 
 // Step steps the emulator one instruction
@@ -459,7 +526,7 @@ func (cs *cpuState) Step() {
 	cs.steps++
 
 	if opcode != 0xcb {
-		fmt.Printf("steps: %08d, opcode:%02x, pc:%04x, sp:%04x, a:%02x, b:%02x, c:%02x, d:%02x, e:%02x, h:%02x, l:%02x\r\n", cs.steps, opcode, cs.pc, cs.sp, cs.a, cs.b, cs.c, cs.d, cs.e, cs.h, cs.l)
+		//fmt.Printf("steps: %08d, opcode:%02x, pc:%04x, sp:%04x, a:%02x, b:%02x, c:%02x, d:%02x, e:%02x, h:%02x, l:%02x\r\n", cs.steps, opcode, cs.pc, cs.sp, cs.a, cs.b, cs.c, cs.d, cs.e, cs.h, cs.l)
 	}
 
 	switch opcode {
@@ -522,7 +589,7 @@ func (cs *cpuState) Step() {
 	case 0x16: // ld d, n8
 		cs.setOpD(8, 2, cs.read(cs.pc+1), 0x2222)
 	case 0x17: // rla
-		val := (cs.a << 1) | (cs.f & 0x08)
+		val := (cs.a << 1) | ((cs.f >> 4) & 0x01)
 		cs.setOpA(4, 1, val, uint16(cs.a>>7))
 
 	case 0x18: // jr r8
@@ -620,7 +687,7 @@ func (cs *cpuState) Step() {
 	case 0x3e: // ld a, n8
 		cs.setOpA(8, 2, cs.read(cs.pc+1), 0x2222)
 	case 0x3f: // ccf
-		carry := uint16((c.f >> 4) & 0x01) ^ 0x01
+		carry := uint16((cs.f>>4)&0x01) ^ 0x01
 		cs.setOpFn(4, 1, func() {}, 0x2000|carry)
 
 	case 0x40: // ld b, b
@@ -784,6 +851,39 @@ func (cs *cpuState) Step() {
 		val := cs.a
 		cs.setOpA(4, 1, cs.a+val, (zFlag(cs.a+val) | hFlagAdd(cs.a, val) | cFlagAdd(cs.a, val)))
 
+	case 0x88: // adc a, b
+		val := cs.b
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a+val+carry, (zFlag(cs.a+val+carry) | hFlagAdc(cs.a, val, cs.f) | cFlagAdc(cs.a, val, cs.f)))
+	case 0x89: // adc a, c
+		val := cs.c
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a+val+carry, (zFlag(cs.a+val+carry) | hFlagAdc(cs.a, val, cs.f) | cFlagAdc(cs.a, val, cs.f)))
+	case 0x8a: // adc a, d
+		val := cs.d
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a+val+carry, (zFlag(cs.a+val+carry) | hFlagAdc(cs.a, val, cs.f) | cFlagAdc(cs.a, val, cs.f)))
+	case 0x8b: // adc a, e
+		val := cs.e
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a+val+carry, (zFlag(cs.a+val+carry) | hFlagAdc(cs.a, val, cs.f) | cFlagAdc(cs.a, val, cs.f)))
+	case 0x8c: // adc a, h
+		val := cs.h
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a+val+carry, (zFlag(cs.a+val+carry) | hFlagAdc(cs.a, val, cs.f) | cFlagAdc(cs.a, val, cs.f)))
+	case 0x8d: // adc a, l
+		val := cs.l
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a+val+carry, (zFlag(cs.a+val+carry) | hFlagAdc(cs.a, val, cs.f) | cFlagAdc(cs.a, val, cs.f)))
+	case 0x8e: // adc a, (hl)
+		val := cs.followHL()
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(8, 1, cs.a+val+carry, (zFlag(cs.a+val+carry) | hFlagAdc(cs.a, val, cs.f) | cFlagAdc(cs.a, val, cs.f)))
+	case 0x8f: // adc a, a
+		val := cs.a
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a+val+carry, (zFlag(cs.a+val+carry) | hFlagAdc(cs.a, val, cs.f) | cFlagAdc(cs.a, val, cs.f)))
+
 	case 0x90: // sub b
 		val := cs.b
 		cs.setOpA(4, 1, cs.a-val, (zFlag(cs.a-val) | 0x100 | hFlagSub(cs.a, val) | cFlagSub(cs.a, val)))
@@ -808,6 +908,39 @@ func (cs *cpuState) Step() {
 	case 0x97: // sub a
 		val := cs.a
 		cs.setOpA(4, 1, cs.a-val, (zFlag(cs.a-val) | 0x100 | hFlagSub(cs.a, val) | cFlagSub(cs.a, val)))
+
+	case 0x98: // sbc b
+		val := cs.b
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a-val-carry, (zFlag(cs.a-val-carry) | 0x100 | hFlagSbc(cs.a, val, cs.f) | cFlagSbc(cs.a, val, cs.f)))
+	case 0x99: // sbc c
+		val := cs.c
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a-val-carry, (zFlag(cs.a-val-carry) | 0x100 | hFlagSbc(cs.a, val, cs.f) | cFlagSbc(cs.a, val, cs.f)))
+	case 0x9a: // sbc d
+		val := cs.d
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a-val-carry, (zFlag(cs.a-val-carry) | 0x100 | hFlagSbc(cs.a, val, cs.f) | cFlagSbc(cs.a, val, cs.f)))
+	case 0x9b: // sbc e
+		val := cs.e
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a-val-carry, (zFlag(cs.a-val-carry) | 0x100 | hFlagSbc(cs.a, val, cs.f) | cFlagSbc(cs.a, val, cs.f)))
+	case 0x9c: // sbc h
+		val := cs.h
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a-val-carry, (zFlag(cs.a-val-carry) | 0x100 | hFlagSbc(cs.a, val, cs.f) | cFlagSbc(cs.a, val, cs.f)))
+	case 0x9d: // sbc l
+		val := cs.l
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a-val-carry, (zFlag(cs.a-val-carry) | 0x100 | hFlagSbc(cs.a, val, cs.f) | cFlagSbc(cs.a, val, cs.f)))
+	case 0x9e: // sbc (hl)
+		val := cs.followHL()
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(8, 1, cs.a-val-carry, (zFlag(cs.a-val-carry) | 0x100 | hFlagSbc(cs.a, val, cs.f) | cFlagSbc(cs.a, val, cs.f)))
+	case 0x9f: // sbc a
+		val := cs.a
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(4, 1, cs.a-val-carry, (zFlag(cs.a-val-carry) | 0x100 | hFlagSbc(cs.a, val, cs.f) | cFlagSbc(cs.a, val, cs.f)))
 
 	case 0xa0: // and b
 		val := cs.b
@@ -910,76 +1043,152 @@ func (cs *cpuState) Step() {
 		cs.setOpFn(4, 1, func() {}, (zFlag(cs.a-val) | hFlagSub(cs.a, val) | cFlagSub(cs.a, val) | 0x0100))
 
 	case 0xc0: // ret nz
-		if !cs.getZeroFlag() {
-			cs.popOp16(20, 1, cs.setPC)
-		} else {
-			cs.setOpFn(8, 1, func() {}, 0x2222)
-		}
+		cs.jmpRet(20, 8, 1, !cs.getZeroFlag())
+	case 0xc1: // pop bc
+		cs.popOp16(12, 1, cs.setBC)
 	case 0xc2: // jp nz, a16
 		cs.jmpAbs16(16, 12, 3, !cs.getZeroFlag(), cs.read16(cs.pc+1))
 	case 0xc3: // jp a16
 		cs.setOpPC(16, 3, cs.read16(cs.pc+1), 0x2222)
+	case 0xc4: // call nz, a16
+		cs.jmpCall(24, 12, 3, !cs.getZeroFlag(), cs.read16(cs.pc+1))
 	case 0xc5: // push bc
 		cs.pushOp16(16, 1, cs.getBC())
 	case 0xc6: // add a, n8
 		val := cs.read(cs.pc + 1)
-		cs.setOpA(4, 1, cs.a+val, (zFlag(cs.a+val) | hFlagAdd(cs.a, val) | cFlagAdd(cs.a, val)))
+		cs.setOpA(8, 2, cs.a+val, (zFlag(cs.a+val) | hFlagAdd(cs.a, val) | cFlagAdd(cs.a, val)))
+	case 0xc7: // rst 00h
+		cs.pushOp16(16, 1, cs.pc+1)
+		cs.pc = 0x0000
+
 	case 0xc8: // ret z
-		if cs.getZeroFlag() {
-			cs.popOp16(20, 1, cs.setPC)
-		} else {
-			cs.setOpFn(8, 1, func() {}, 0x2222)
-		}
+		cs.jmpRet(20, 8, 1, cs.getZeroFlag())
 	case 0xc9: // ret
 		cs.popOp16(16, 1, cs.setPC)
+	case 0xca: // jp z, a16
+		cs.jmpAbs16(16, 12, 3, cs.getZeroFlag(), cs.read16(cs.pc+1))
 	case 0xcb: // extended opcode prefix
 		cs.stepExtendedOpcode()
+	case 0xcc: // call z, a16
+		cs.jmpCall(24, 12, 3, cs.getZeroFlag(), cs.read16(cs.pc+1))
 	case 0xcd: // call a16
 		cs.pushOp16(24, 3, cs.pc+3)
 		cs.pc = cs.read16(cs.pc - 2) // pc is sub'd to undo the move past inst
+	case 0xce: // adc a, n8
+		val := cs.read(cs.pc + 1)
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(8, 2, cs.a+val+carry, (zFlag(cs.a+val+carry) | hFlagAdc(cs.a, val, cs.f) | cFlagAdc(cs.a, val, cs.f)))
 	case 0xcf: // rst 08h
 		cs.pushOp16(16, 1, cs.pc+1)
 		cs.pc = 0x0008
 
+	case 0xd0: // ret nc
+		cs.jmpRet(20, 8, 1, !cs.getCarryFlag())
 	case 0xd1: // pop de
 		cs.popOp16(12, 1, cs.setDE)
+	case 0xd2: // jp nc, a16
+		cs.jmpAbs16(16, 12, 3, !cs.getCarryFlag(), cs.read16(cs.pc+1))
+	case 0xd3: // illegal
+		panic("illegal opcode")
+	case 0xd4: // call nc, a16
+		cs.jmpCall(24, 12, 3, !cs.getCarryFlag(), cs.read16(cs.pc+1))
 	case 0xd5: // push de
 		cs.pushOp16(16, 1, cs.getDE())
+	case 0xd6: // sub n8
+		val := cs.read(cs.pc + 1)
+		cs.setOpA(8, 2, cs.a-val, (zFlag(cs.a-val) | 0x100 | hFlagSub(cs.a, val) | cFlagSub(cs.a, val)))
+	case 0xd7: // rst 10h
+		cs.pushOp16(16, 1, cs.pc+1)
+		cs.pc = 0x0010
 
+	case 0xd8: // ret c
+		cs.jmpRet(20, 8, 1, cs.getCarryFlag())
+	case 0xd9: // reti
+		cs.popOp16(16, 1, cs.setPC)
+		cs.interruptMasterEnable = true
 	case 0xda: // jp c, a16
-		cs.jmpAbs16(16, 12, 3, !cs.getCarryFlag(), cs.read16(cs.pc+1))
+		cs.jmpAbs16(16, 12, 3, cs.getCarryFlag(), cs.read16(cs.pc+1))
+	case 0xdb: // illegal
+		panic("illegal opcode")
+	case 0xdc: // call c, a16
+		cs.jmpCall(24, 12, 3, cs.getCarryFlag(), cs.read16(cs.pc+1))
+	case 0xdd: // illegal
+		panic("illegal opcode")
+	case 0xde: // sbc n8
+		val := cs.read(cs.pc + 1)
+		carry := (cs.f >> 4) & 0x01
+		cs.setOpA(8, 2, cs.a-val-carry, (zFlag(cs.a-val-carry) | 0x100 | hFlagSbc(cs.a, val, cs.f) | cFlagSbc(cs.a, val, cs.f)))
+	case 0xdf: // rst 18h
+		cs.pushOp16(16, 1, cs.pc+1)
+		cs.pc = 0x0018
 
 	case 0xe0: // ld (0xFF00 + n8), a
-		cs.setOpMem8(12, 2, 0xff00+uint16(cs.read(cs.pc+1)), cs.a, 0x2222)
+		val := cs.read(cs.pc + 1)
+		cs.setOpMem8(12, 2, 0xff00+uint16(val), cs.a, 0x2222)
 	case 0xe1: // pop hl
 		cs.popOp16(12, 1, cs.setHL)
 	case 0xe2: // ld (0xFF00 + c), a
-		cs.setOpMem8(8, 1, 0xff00+uint16(cs.c), cs.a, 0x2222)
+		val := cs.c
+		cs.setOpMem8(8, 1, 0xff00+uint16(val), cs.a, 0x2222)
+	case 0xe3: // illegal
+		panic("illegal opcode")
+	case 0xe4: // illegal
+		panic("illegal opcode")
 	case 0xe5: // push hl
 		cs.pushOp16(16, 1, cs.getHL())
 	case 0xe6: // and n8
-		result := cs.a & cs.read(cs.pc+1)
-		cs.setOpA(8, 2, result, zFlag(result)|0x010)
+		val := cs.read(cs.pc + 1)
+		cs.setOpA(8, 2, cs.a&val, (zFlag(cs.a&val) | 0x010))
+	case 0xe7: // rst 20h
+		cs.pushOp16(16, 1, cs.pc+1)
+		cs.pc = 0x0020
 
 	case 0xe9: // jp hl (also written jp (hl))
 		cs.setOpPC(4, 1, cs.getHL(), 0x2222)
 	case 0xea: // ld (a16), a
 		cs.setOpMem8(16, 3, cs.read16(cs.pc+1), cs.a, 0x2222)
+	case 0xeb: // illegal
+		panic("illegal opcode")
+	case 0xec: // illegal
+		panic("illegal opcode")
+	case 0xed: // illegal
+		panic("illegal opcode")
+	case 0xee: // xor n8
+		val := cs.read(cs.pc + 1)
+		cs.setOpA(8, 2, cs.a^val, zFlag(cs.a^val))
 	case 0xef: // rst 28h
 		cs.pushOp16(16, 1, cs.pc+1)
 		cs.pc = 0x0028
 
 	case 0xf0: // ld a, (0xFF00 + n8)
 		cs.setOpA(12, 2, cs.read(0xff00+uint16(cs.read(cs.pc+1))), 0x2222)
+	case 0xf1: // pop af
+		cs.popOp16(12, 1, cs.setAF)
+	case 0xf2: // ld a, (0xFF00 + c)
+		cs.setOpA(8, 1, cs.read(0xff00+uint16(cs.c)), 0x2222)
 	case 0xf3: // di
 		cs.setOpFn(4, 1, func() { cs.interruptMasterEnable = false }, 0x2222)
+	case 0xf4: // illegal
+		panic("illegal opcode")
 	case 0xf5: // push af
 		cs.pushOp16(16, 1, cs.getAF())
+	case 0xf6: // or n8
+		val := cs.read(cs.pc + 1)
+		cs.setOpA(8, 2, cs.a|val, zFlag(cs.a|val))
+	case 0xf7: // rst 30h
+		cs.pushOp16(16, 1, cs.pc+1)
+		cs.pc = 0x0030
 
+	case 0xf9: // ld sp, hl
+		cs.setOpSP(8, 1, cs.getHL(), 0x2222)
 	case 0xfa: // ld a, (a16)
 		cs.setOpA(16, 3, cs.read(cs.read16(cs.pc+1)), 0x2222)
 	case 0xfb: // ei
 		cs.setOpFn(4, 1, func() { cs.interruptMasterEnable = true }, 0x2222)
+	case 0xfc: // illegal
+		panic("illegal opcode")
+	case 0xfd: // illegal
+		panic("illegal opcode")
 	case 0xfe: // cp a, n8
 		val := cs.read(cs.pc + 1)
 		cs.setOpFn(8, 2, func() {}, (zFlag(cs.a-val) | hFlagSub(cs.a, val) | cFlagSub(cs.a, val) | 0x0100))
@@ -1012,7 +1221,7 @@ func (cs *cpuState) stepExtendedOpcode() {
 
 	extOpcode := cs.read(cs.pc + 1)
 
-	fmt.Printf("steps: %08d, ext.op:%02x, pc:%04x, sp:%04x, a:%02x, b:%02x, c:%02x, d:%02x, e:%02x, h:%02x, l:%02x\r\n", cs.steps, extOpcode, cs.pc, cs.sp, cs.a, cs.b, cs.c, cs.d, cs.e, cs.h, cs.l)
+	//fmt.Printf("steps: %08d, ext.op:%02x, pc:%04x, sp:%04x, a:%02x, b:%02x, c:%02x, d:%02x, e:%02x, h:%02x, l:%02x\r\n", cs.steps, extOpcode, cs.pc, cs.sp, cs.a, cs.b, cs.c, cs.d, cs.e, cs.h, cs.l)
 
 	switch extOpcode {
 	case 0x37: // swap a
@@ -1021,30 +1230,49 @@ func (cs *cpuState) stepExtendedOpcode() {
 	case 0x3f: // srl a
 		result := cs.a >> 1
 		cs.setOpA(8, 2, result, zFlag(result)|uint16(cs.a&1))
+
 	case 0x50: // bit 2, b
-		cs.setOpFn(8, 2, func() {}, zFlag(cs.b&0x04)|0x012)
+		cs.bitOp(8, 2, 2, cs.b)
 	case 0x57: // bit 2, a
-		cs.setOpFn(8, 2, func() {}, zFlag(cs.a&0x04)|0x012)
+		cs.bitOp(8, 2, 2, cs.a)
+
+	case 0x5f: // bit 3, a
+		cs.bitOp(8, 2, 3, cs.a)
+
 	case 0x70: // bit 6, b
-		cs.setOpFn(8, 2, func() {}, zFlag(cs.b&0x40)|0x012)
+		cs.bitOp(8, 2, 6, cs.b)
+
 	case 0x78: // bit 7, b
-		cs.setOpFn(8, 2, func() {}, zFlag(cs.b&0x80)|0x012)
+		cs.bitOp(8, 2, 7, cs.b)
 	case 0x7f: // bit 7, a
-		cs.setOpFn(8, 2, func() {}, zFlag(cs.a&0x80)|0x012)
+		cs.bitOp(8, 2, 7, cs.a)
+
+	case 0x87: // res 0, a
+		val := cs.a
+		cs.setOpA(8, 2, val&^0x01, 0x2222)
+
 	case 0xbe: // res 7, (hl)
-		cs.setOpA(16, 2, cs.followHL()&^0x80, 0x2222)
+		val := cs.followHL()
+		cs.setOpMem8(16, 2, cs.getHL(), val&^0x80, 0x2222)
 	case 0xbf: // res 7, a
 		cs.setOpA(8, 2, (cs.a &^ 0x80), 0x2222)
+
 	case 0xc7: // set 0, a
 		cs.setOpA(8, 2, (cs.a | 0x01), 0x2222)
+
 	case 0xff: // set 7, a
 		cs.setOpA(8, 2, (cs.a | 0x80), 0x2222)
+
 	default:
 		fatalErr(fmt.Sprintf("Unknown Extended Opcode: 0x%02x\r\n", extOpcode))
 	}
 }
 
-func fatalErr(msg string) {
-	fmt.Println(msg)
+func (cs *cpuState) bitOp(cycles uint, instLen uint16, bitNum uint8, val uint8) {
+	cs.setOpFn(cycles, instLen, func() {}, zFlag(val&(1<<bitNum))|0x012)
+}
+
+func fatalErr(v ...interface{}) {
+	fmt.Println(v...)
 	os.Exit(1)
 }

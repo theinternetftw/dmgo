@@ -5,14 +5,19 @@ type apu struct {
 
 	sounds [4]sound
 
-	wavePatternRAM [16]byte
-
 	// cart chip sounds. never used by any game?
 	vInToLeftSpeaker  bool
 	vInToRightSpeaker bool
 
 	rightSpeakerVolume byte // right=S01 in docs
 	leftSpeakerVolume  byte // left=S02 in docs
+}
+
+func (apu *apu) init() {
+	apu.sounds[0].soundType = squareSoundType
+	apu.sounds[1].soundType = squareSoundType
+	apu.sounds[2].soundType = waveSoundType
+	apu.sounds[3].soundType = noiseSoundType
 }
 
 type envDir bool
@@ -29,7 +34,15 @@ var (
 	sweepDown = sweepDir(true)
 )
 
+const (
+	squareSoundType = 0
+	waveSoundType   = 1
+	noiseSoundType  = 2
+)
+
 type sound struct {
+	soundType uint8
+
 	on             bool
 	rightSpeakerOn bool // S01 in docs
 	leftSpeakerOn  bool // S02 in docs
@@ -42,10 +55,54 @@ type sound struct {
 	sweepTime      byte
 	sweepShift     byte
 
+	lengthData byte
+	waveDuty   byte
+
+	waveOutLvl     byte // sound[2] only
+	wavePatternRAM [16]byte
+
+	polyShiftFreq byte // sound[3] only
+	polyStep      byte
+	polyDivRatio  byte
+
 	playsContinuously bool
 	restartRequested  bool
 
 	freqReg uint16
+}
+
+func (sound *sound) writePolyCounterReg(val byte) {
+	if val&0x08 != 0 {
+		sound.polyStep = 7
+	} else {
+		sound.polyStep = 15
+	}
+	sound.polyShiftFreq = val >> 4
+	sound.polyDivRatio = val & 0x07
+}
+func (sound *sound) readPolyCounterReg() byte {
+	val := byte(0)
+	if sound.polyStep == 7 {
+		val |= 8
+	}
+	val |= sound.polyShiftFreq << 4
+	val |= sound.polyDivRatio
+	return val
+}
+
+func (sound *sound) writeWaveOutLvlReg(val byte) {
+	sound.waveOutLvl = (val >> 5) & 0x03
+}
+func (sound *sound) readWaveOutLvlReg() byte {
+	return (sound.waveOutLvl << 5) | 0x9f
+}
+
+func (sound *sound) writeLenDutyReg(val byte) {
+	sound.lengthData = val & 0x3f
+	sound.waveDuty = val >> 6
+}
+func (sound *sound) readLenDutyReg() byte {
+	return (sound.waveDuty << 6) & 0x3f
 }
 
 func (sound *sound) writeSweepReg(val byte) {

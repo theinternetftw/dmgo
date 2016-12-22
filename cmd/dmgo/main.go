@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"time"
 )
 
 func main() {
@@ -23,15 +24,29 @@ func main() {
 	cartInfo := dmgo.ParseCartInfo(cartBytes)
 	fmt.Printf("%q\n", cartInfo.Title)
 
-	windowing.InitDisplayLoop(160*4, 144*4, func(sharedState *windowing.SharedState) {
+	windowing.InitDisplayLoop(160*4, 144*4, 160, 144, func(sharedState *windowing.SharedState) {
 		startEmu(sharedState, cartBytes)
 	})
 }
 
-func startEmu(sharedState *windowing.SharedState, cartBytes []byte) {
+func startEmu(window *windowing.SharedState, cartBytes []byte) {
 	emu := dmgo.NewEmulator(cartBytes)
+
+	// FIXME: settings are for debug right now
+	ticker := time.NewTicker(33*time.Millisecond)
+
 	for {
 		emu.Step()
+
+
+		if emu.FlipRequested() {
+			window.Mutex.Lock()
+			copy(window.Pix, emu.Framebuffer())
+			window.RequestDraw()
+			window.Mutex.Unlock()
+
+			<-ticker.C
+		}
 	}
 }
 

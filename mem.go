@@ -23,30 +23,40 @@ func (cs *cpuState) oamDMA(addr uint16) {
 func (cs *cpuState) read(addr uint16) byte {
 	var val byte
 	switch {
+
 	case addr < 0x4000:
 		val = cs.mem.cart[addr]
 	case addr >= 0x4000 && addr < 0x8000:
 		// TODO: bank switching
 		val = cs.mem.cart[addr]
+	case addr >= 0x8000 && addr < 0xa000:
+		val = cs.mem.videoRAM[addr-0x8000]
 	case addr >= 0xc000 && addr < 0xfe00:
 		ramAddr := (addr - 0xc000) & 0x1fff // 8kb with wraparound
 		val = cs.mem.internalRAM[ramAddr]
+
 	case addr == 0xff00:
 		val = cs.joypad.readJoypadReg()
 	case addr == 0xff02:
 		val = cs.readSerialControlReg()
+	case addr == 0xff06:
+		val = cs.timerModuloReg
 	case addr == 0xff0f:
 		val = cs.readInterruptFlagReg()
+
+	case addr >= 0xff30 && addr < 0xff40:
+		val = cs.apu.sounds[2].wavePatternRAM[addr-0xff30]
+
 	case addr == 0xff40:
 		val = cs.lcd.readControlReg()
-	case addr >= 0xff30 && addr < 0xff40:
-		val = cs.apu.wavePatternRAM[addr-0xff30]
 	case addr == 0xff44:
 		val = cs.lcd.lyReg
+
 	case addr >= 0xff80 && addr < 0xffff:
 		val = cs.mem.highInternalRAM[addr-0xff80]
 	case addr == 0xffff:
 		val = cs.readInterruptEnableReg()
+
 	default:
 		panic(fmt.Sprintf("not implemented: read at %x\n", addr))
 	}
@@ -62,6 +72,7 @@ func (cs *cpuState) read16(addr uint16) uint16 {
 
 func (cs *cpuState) write(addr uint16, val byte) {
 	switch {
+
 	case addr < 0x8000:
 		// cart ROM, looks like writing to read-only is a nop?
 	case addr >= 0x8000 && addr < 0xa000:
@@ -77,28 +88,55 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.lcd.writeOAM(addr-0xfe00, val)
 	case addr >= 0xfea0 && addr < 0xff00:
 		// empty, nop (can be more complicated, see TCAGBD)
+
 	case addr == 0xff00:
 		cs.joypad.writeJoypadReg(val)
 	case addr == 0xff01:
 		cs.serialTransferData = val
 	case addr == 0xff02:
 		cs.writeSerialControlReg(val)
+
+	case addr == 0xff06:
+		cs.timerModuloReg = val
+
 	case addr == 0xff10:
 		cs.apu.sounds[0].writeSweepReg(val)
+	case addr == 0xff11:
+		cs.apu.sounds[0].writeLenDutyReg(val)
 	case addr == 0xff12:
 		cs.apu.sounds[0].writeSoundEnvReg(val)
+	case addr == 0xff13:
+		cs.apu.sounds[0].writeFreqLowReg(val)
 	case addr == 0xff14:
 		cs.apu.sounds[0].writeFreqHighReg(val)
+
+	case addr == 0xff16:
+		cs.apu.sounds[1].writeLenDutyReg(val)
 	case addr == 0xff17:
 		cs.apu.sounds[1].writeSoundEnvReg(val)
+	case addr == 0xff18:
+		cs.apu.sounds[1].writeFreqLowReg(val)
 	case addr == 0xff19:
 		cs.apu.sounds[1].writeFreqHighReg(val)
+
 	case addr == 0xff1a:
 		cs.apu.sounds[2].on = val&0x80 != 0
+	case addr == 0xff1b:
+		cs.apu.sounds[2].lengthData = val
+	case addr == 0xff1c:
+		cs.apu.sounds[2].writeWaveOutLvlReg(val)
+	case addr == 0xff1d:
+		cs.apu.sounds[2].writeFreqLowReg(val)
+	case addr == 0xff1e:
+		cs.apu.sounds[2].writeFreqHighReg(val)
+
 	case addr == 0xff21:
 		cs.apu.sounds[3].writeSoundEnvReg(val)
+	case addr == 0xff22:
+		cs.apu.sounds[3].writePolyCounterReg(val)
 	case addr == 0xff23:
 		cs.apu.sounds[3].writeFreqHighReg(val) // noise channel uses control bits, freq ignored
+
 	case addr == 0xff24:
 		cs.apu.writeVolumeReg(val)
 	case addr == 0xff25:
@@ -106,7 +144,8 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr == 0xff26:
 		cs.apu.writeSoundOnOffReg(val)
 	case addr >= 0xff30 && addr < 0xff40:
-		cs.apu.wavePatternRAM[addr-0xff30] = val
+		cs.apu.sounds[2].wavePatternRAM[addr-0xff30] = val
+
 	case addr == 0xff40:
 		cs.lcd.writeControlReg(val)
 	case addr == 0xff41:
@@ -127,6 +166,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.lcd.windowY = val
 	case addr == 0xff4b:
 		cs.lcd.windowX = val
+
 	case addr == 0xff0f:
 		cs.writeInterruptFlagReg(val)
 	case addr >= 0xff4c && addr < 0xff80:
@@ -140,6 +180,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	}
 	//	fmt.Printf("\twriting 0x%02x to 0x%04x\n", val, addr)
 }
+
 func (cs *cpuState) write16(addr uint16, val uint16) {
 	cs.write(addr, byte(val))
 	cs.write(addr+1, byte(val>>8))

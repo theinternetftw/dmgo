@@ -1,6 +1,7 @@
 glide.lock
 vendor
 
+tools
 build
 build-dev
 r

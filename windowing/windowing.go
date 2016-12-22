@@ -42,10 +42,10 @@ func (s *SharedState) RequestDraw() {
 type drawRequest struct {}
 
 // InitDisplayLoop creates a window and starts event loop
-func InitDisplayLoop(frameWidth, frameHeight int, updateLoop func(*SharedState)) {
+func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, updateLoop func(*SharedState)) {
 	driver.Main(func (s screen.Screen) {
 
-		w, err := s.NewWindow(&screen.NewWindowOptions{frameWidth, frameHeight})
+		w, err := s.NewWindow(&screen.NewWindowOptions{windowWidth, windowHeight})
 		if err != nil {
 			panic(err)
 		}

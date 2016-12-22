@@ -1,7 +1,8 @@
 package dmgo
 
 type lcd struct {
-	framebuffer [160 * 144 * 4]byte
+	framebuffer   []byte
+	flipRequested bool // for whateve really draws the fb
 
 	oam [160]byte
 
@@ -32,7 +33,7 @@ type lcd struct {
 	useUpperWindowTileMap       bool
 	displayWindow               bool
 	useLowerBGAndWindowTileData bool
-	useUpperBGAndWindowTileMap  bool
+	useUpperBGTileMap           bool
 	bigSprites                  bool
 	displaySprites              bool
 	displayBG                   bool
@@ -51,6 +52,7 @@ func (lcd *lcd) writeOAM(addr uint16, val byte) {
 func (lcd *lcd) init() {
 	lcd.displayOn = true
 	lcd.accessingOAM = true // at start of line
+	lcd.framebuffer = make([]byte, 160*144*4)
 }
 
 // FIXME: timings will have to change for double-speed mode
@@ -80,6 +82,7 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 		lcd.inHBlank = true
 	} else if lcd.cyclesSinceLYInc == 456 {
 		lcd.renderScanline(cs)
+
 		lcd.cyclesSinceLYInc = 0
 		lcd.accessingOAM = true
 		lcd.inHBlank = false
@@ -89,6 +92,10 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 	if lcd.lyReg == 144 && !lcd.inVBlank {
 		lcd.inVBlank = true
 		cs.vBlankIRQ = true
+
+		// FIXME: flip on vBlank instead,
+		// this is just for debug
+		lcd.flipRequested = true
 	}
 	if lcd.inVBlank {
 		lcd.cyclesSinceVBlankStart++
@@ -100,7 +107,84 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 	}
 }
 
+func (cs *cpuState) getTilePixel(tmapAddr, tdataAddr uint16, x, y byte) byte {
+	mapByteY, mapByteX := uint16(y>>3), uint16(x>>3)
+	mapByte := cs.read(tmapAddr + mapByteY*32 + mapByteX)
+	return mapByte
+}
+
+func (cs *cpuState) getBGPixel(x, y byte) byte {
+	mapAddr := cs.lcd.getBGTileMapAddr()
+	dataAddr := cs.lcd.getBGAndWindowTileDataAddr()
+	return cs.getTilePixel(mapAddr, dataAddr, x, y)
+}
+func (cs *cpuState) getWindowPixel(x, y byte) byte {
+	mapAddr := cs.lcd.getWindowTileMapAddr()
+	dataAddr := cs.lcd.getBGAndWindowTileDataAddr()
+	return cs.getTilePixel(mapAddr, dataAddr, x, y)
+}
+
+func (lcd *lcd) getBGTileMapAddr() uint16 {
+	if lcd.useUpperBGTileMap {
+		return 0x9c00
+	}
+	return 0x9800
+}
+func (lcd *lcd) getWindowTileMapAddr() uint16 {
+	if lcd.useUpperWindowTileMap {
+		return 0x9c00
+	}
+	return 0x9800
+}
+func (lcd *lcd) getBGAndWindowTileDataAddr() uint16 {
+	if lcd.useLowerBGAndWindowTileData {
+		return 0x8000
+	}
+	return 0x8800
+}
+
 func (lcd *lcd) renderScanline(cs *cpuState) {
+	if lcd.lyReg >= 144 {
+		return
+	}
+	lcd.fillScanline(0)
+
+	y := lcd.lyReg
+
+	if lcd.displayBG || true {
+		bgY := y - lcd.scrollY
+		for x := byte(0); x < 160; x++ {
+			bgX := x - lcd.scrollX
+			pix := cs.getBGPixel(bgX, bgY)
+			lcd.setFramebufferPixel(x, y, pix, pix, pix)
+		}
+	}
+	if lcd.displayWindow && y >= lcd.windowY {
+		winY := y - lcd.windowY
+		winStartX := lcd.windowX - 7
+		for x := winStartX; x < 160; x++ {
+			pix := cs.getWindowPixel(x-winStartX, winY)
+			lcd.setFramebufferPixel(x, y, pix, pix, pix)
+		}
+	}
+
+	// TODO: OAM work goes here
+}
+func (lcd *lcd) setFramebufferPixel(xByte, yByte, r, g, b byte) {
+	x, y := int(xByte), int(yByte)
+	lcd.framebuffer[y*160*4+x*4+0] = r
+	lcd.framebuffer[y*160*4+x*4+1] = g
+	lcd.framebuffer[y*160*4+x*4+2] = b
+	lcd.framebuffer[y*160*4+x*4+3] = 0xff
+}
+func (lcd *lcd) fillScanline(val byte) {
+	y := int(lcd.lyReg)
+	for x := 0; x < 160; x++ {
+		lcd.framebuffer[y*160*4+x*4+0] = val
+		lcd.framebuffer[y*160*4+x*4+1] = val
+		lcd.framebuffer[y*160*4+x*4+2] = val
+		lcd.framebuffer[y*160*4+x*4+3] = 0xff
+	}
 }
 
 func (lcd *lcd) writeControlReg(val byte) {
@@ -109,7 +193,7 @@ func (lcd *lcd) writeControlReg(val byte) {
 		&lcd.useUpperWindowTileMap,
 		&lcd.displayWindow,
 		&lcd.useLowerBGAndWindowTileData,
-		&lcd.useUpperBGAndWindowTileMap,
+		&lcd.useUpperBGTileMap,
 		&lcd.bigSprites,
 		&lcd.displaySprites,
 		&lcd.displayBG,
@@ -121,7 +205,7 @@ func (lcd *lcd) readControlReg() byte {
 		lcd.useUpperWindowTileMap,
 		lcd.displayWindow,
 		lcd.useLowerBGAndWindowTileData,
-		lcd.useUpperBGAndWindowTileMap,
+		lcd.useUpperBGTileMap,
 		lcd.bigSprites,
 		lcd.displaySprites,
 		lcd.displayBG,
