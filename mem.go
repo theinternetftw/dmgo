@@ -75,10 +75,22 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = cs.lcd.readStatusReg()
 	case addr == 0xff42:
 		val = cs.lcd.scrollY
+	case addr == 0xff43:
+		val = cs.lcd.scrollX
 	case addr == 0xff44:
 		val = cs.lcd.lyReg
 	case addr == 0xff45:
 		val = cs.lcd.lycReg
+	case addr == 0xff47:
+		val = cs.lcd.backgroundPaletteReg
+	case addr == 0xff48:
+		val = cs.lcd.objectPalette0Reg
+	case addr == 0xff49:
+		val = cs.lcd.objectPalette1Reg
+	case addr == 0xff4a:
+		val = cs.lcd.windowY
+	case addr == 0xff4b:
+		val = cs.lcd.windowX
 
 	case addr >= 0xff80 && addr < 0xffff:
 		val = cs.mem.highInternalRAM[addr-0xff80]
