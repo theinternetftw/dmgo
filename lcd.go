@@ -1,5 +1,7 @@
 package dmgo
 
+import "sort"
+
 type lcd struct {
 	framebuffer   []byte
 	flipRequested bool // for whateve really draws the fb
@@ -266,18 +268,20 @@ func (e *oamEntry) inX(xByte byte) bool {
 	x := int16(xByte)
 	return x >= e.x && x < e.x+8
 }
-func (lcd *lcd) parseOAMForScanline(scanlineByte byte) {
-	height := int16(8)
+func yInSprite(y byte, spriteY int16, height int) bool {
+	return int16(y) >= spriteY && int16(y) < spriteY+int16(height)
+}
+func (lcd *lcd) parseOAMForScanline(scanline byte) {
+	height := 8
 	if lcd.bigSprites {
-		height = int16(16)
+		height = 16
 	}
-	scanline := int16(scanlineByte)
 	// use re-slice so we keep backing arry and don't realloc
 	lcd.oamForScanline = lcd.oamForScanline[:0]
 	for i := 0; i < 40; i++ {
 		addr := i * 4
 		spriteY := int16(lcd.oam[addr]) - 16
-		if scanline >= spriteY && scanline < spriteY+height {
+		if yInSprite(scanline, spriteY, height) {
 			lcd.oamForScanline = append(lcd.oamForScanline, oamEntry{
 				y:         spriteY,
 				x:         int16(lcd.oam[addr+1]) - 8,
@@ -287,7 +291,19 @@ func (lcd *lcd) parseOAMForScanline(scanlineByte byte) {
 			})
 		}
 	}
+	// lower xs have higher priority
+	sort.Stable(sortableOAM(lcd.oamForScanline))
+	// limit of 10 sprites per line
+	if len(lcd.oamForScanline) > 10 {
+		lcd.oamForScanline = lcd.oamForScanline[:10]
+	}
 }
+
+type sortableOAM []oamEntry
+
+func (s sortableOAM) Less(i, j int) bool { return s[i].x < s[j].x }
+func (s sortableOAM) Len() int           { return len(s) }
+func (s sortableOAM) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 func (lcd *lcd) renderScanline() {
 	if lcd.lyReg >= 144 {
@@ -328,24 +344,26 @@ func (lcd *lcd) renderScanline() {
 	}
 
 	if lcd.displaySprites {
-		seen := 0
 		lcd.parseOAMForScanline(y)
-		for x := byte(0); x < 160 && seen < 11; x++ {
-			for i := range lcd.oamForScanline {
-				e := &lcd.oamForScanline[i]
-				if e.inX(x) {
-					if e.x == int16(x) || x == 0 {
-						if seen++; seen == 11 {
-							break
-						}
-					}
-					if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
-						if !e.behindBG() || bgMask[x] {
-							lcd.setFramebufferPixel(x, y, r, g, b)
-							break
-						}
-					}
-				}
+		for i := len(lcd.oamForScanline) - 1; i >= 0; i-- {
+			e := &lcd.oamForScanline[i]
+			// NOTE: this can overrender. could make a
+			// spriteMask and render front to back instead
+			lcd.renderSpriteAtScanline(e, y, bgMask)
+		}
+	}
+}
+
+func (lcd *lcd) renderSpriteAtScanline(e *oamEntry, y byte, bgMask []bool) {
+	startX := byte(0)
+	if e.x > 0 {
+		startX = byte(e.x)
+	}
+	for x := startX; x < startX+e.height && x < 160; x++ {
+		if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
+			if !e.behindBG() || bgMask[x] {
+				lcd.setFramebufferPixel(x, y, r, g, b)
+				break
 			}
 		}
 	}
