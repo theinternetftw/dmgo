@@ -3,13 +3,20 @@ package dmgo
 import "sort"
 
 type lcd struct {
-	framebuffer   []byte
-	flipRequested bool // for whateve really draws the fb
+	framebuffer        []byte
+	flipRequested      bool // for whatever really draws the fb
+	frameWaitRequested bool // for timing when we skip redraws
 
 	videoRAM [0x4000]byte // go ahead and do CGB size
 
 	oam            [160]byte
 	oamForScanline []oamEntry
+
+	stateChangeSinceLastVblank bool
+
+	// for oam sprite priority
+	bgMask     [160]bool
+	spriteMask [160]bool
 
 	scrollY byte
 	scrollX byte
@@ -56,8 +63,7 @@ func (lcd *lcd) updateBufferedControlBits() {
 
 func (lcd *lcd) writeOAM(addr uint16, val byte) {
 	// TODO: display mode checks (most disallow writing)
-	// TODO: OAM
-	lcd.oam[addr] = val
+	lcd.checkStateChangeAndAssignByte(&lcd.oam[addr], val)
 }
 
 // lcd is on at startup
@@ -67,9 +73,13 @@ func (lcd *lcd) init() {
 	lcd.framebuffer = make([]byte, 160*144*4)
 }
 
+func (lcd *lcd) writeVideoRAM(addr uint16, val byte) {
+	lcd.checkStateChangeAndAssignByte(&lcd.videoRAM[addr], val)
+}
+
 // FIXME: timings will have to change for double-speed mode
 // (maybe instead of counting cycles I'll count actual instruction time?)
-// (or maybe it'll always be dmg cycles and gbc will run the fn e.g. twice instead of 4 times)
+// (or maybe it'll always be dmg cycles and gbc will just produce half as many of them?
 func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	if !lcd.displayOn {
 		return
@@ -93,7 +103,9 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 
 	if lcd.cyclesSinceLYInc >= 456 {
 
-		lcd.renderScanline()
+		if lcd.stateChangeSinceLastVblank {
+			lcd.renderScanline()
+		}
 
 		lcd.cyclesSinceLYInc = 0
 		if !lcd.inVBlank {
@@ -125,12 +137,17 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	if lcd.lyReg >= 144 && !lcd.inVBlank {
 		lcd.inVBlank = true
 
+		if lcd.stateChangeSinceLastVblank {
+			lcd.flipRequested = true
+		}
+		lcd.frameWaitRequested = true
+
+		lcd.stateChangeSinceLastVblank = false
+
 		cs.vBlankIRQ = true
 		if lcd.vBlankInterrupt {
 			cs.lcdStatIRQ = true
 		}
-
-		lcd.flipRequested = true
 	}
 
 	if lcd.inVBlank {
@@ -313,8 +330,10 @@ func (lcd *lcd) renderScanline() {
 
 	y := lcd.lyReg
 
-	// for sprite priority
-	bgMask := make([]bool, 160)
+	for i := 0; i < 160; i++ {
+		lcd.bgMask[i] = false
+		lcd.spriteMask[i] = false
+	}
 	maskR, maskG, maskB := lcd.applyCustomPalette(0)
 
 	if lcd.displayBG || true {
@@ -324,7 +343,7 @@ func (lcd *lcd) renderScanline() {
 			r, g, b := lcd.getBGPixel(bgX, bgY)
 			lcd.setFramebufferPixel(x, y, r, g, b)
 			if r == maskR && g == maskG && b == maskB {
-				bgMask[x] = true
+				lcd.bgMask[x] = true
 			}
 		}
 	}
@@ -338,31 +357,30 @@ func (lcd *lcd) renderScanline() {
 			r, g, b := lcd.getWindowPixel(byte(x-winStartX), winY)
 			lcd.setFramebufferPixel(byte(x), y, r, g, b)
 			if r == maskR && g == maskG && b == maskB {
-				bgMask[x] = true
+				lcd.bgMask[x] = true
 			}
 		}
 	}
 
 	if lcd.displaySprites {
 		lcd.parseOAMForScanline(y)
-		for i := len(lcd.oamForScanline) - 1; i >= 0; i-- {
+		for i := range lcd.oamForScanline {
 			e := &lcd.oamForScanline[i]
-			// NOTE: this can overrender. could make a
-			// spriteMask and render front to back instead
-			lcd.renderSpriteAtScanline(e, y, bgMask)
+			lcd.renderSpriteAtScanline(e, y)
 		}
 	}
 }
 
-func (lcd *lcd) renderSpriteAtScanline(e *oamEntry, y byte, bgMask []bool) {
+func (lcd *lcd) renderSpriteAtScanline(e *oamEntry, y byte) {
 	startX := byte(0)
 	if e.x > 0 {
 		startX = byte(e.x)
 	}
 	for x := startX; x < startX+e.height && x < 160; x++ {
-		if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
-			if !e.behindBG() || bgMask[x] {
+		if (!e.behindBG() || lcd.bgMask[x]) && !lcd.spriteMask[x] {
+			if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
 				lcd.setFramebufferPixel(x, y, r, g, b)
+				lcd.spriteMask[x] = true
 			}
 		}
 	}
@@ -394,17 +412,53 @@ func (lcd *lcd) fillScanline(val byte) {
 	}
 }
 
+func (lcd *lcd) checkStateChangeAndAssignByte(dest *byte, val byte) {
+	if *dest != val {
+		lcd.stateChangeSinceLastVblank = true
+		*dest = val
+	}
+}
+
+func (lcd *lcd) writeScrollY(val byte) {
+	lcd.checkStateChangeAndAssignByte(&lcd.scrollY, val)
+}
+func (lcd *lcd) writeScrollX(val byte) {
+	lcd.checkStateChangeAndAssignByte(&lcd.scrollX, val)
+}
+func (lcd *lcd) writeLycReg(val byte) {
+	lcd.lycReg = val
+}
+func (lcd *lcd) writeBackgroundPaletteReg(val byte) {
+	lcd.checkStateChangeAndAssignByte(&lcd.backgroundPaletteReg, val)
+}
+func (lcd *lcd) writeObjectPalette0Reg(val byte) {
+	lcd.checkStateChangeAndAssignByte(&lcd.objectPalette0Reg, val)
+}
+func (lcd *lcd) writeObjectPalette1Reg(val byte) {
+	lcd.checkStateChangeAndAssignByte(&lcd.objectPalette1Reg, val)
+}
+func (lcd *lcd) writeWindowY(val byte) {
+	lcd.checkStateChangeAndAssignByte(&lcd.windowY, val)
+}
+func (lcd *lcd) writeWindowX(val byte) {
+	lcd.checkStateChangeAndAssignByte(&lcd.windowX, val)
+}
+
 func (lcd *lcd) writeControlReg(val byte) {
-	boolsFromByte(val,
-		&lcd.displayOn,
-		&lcd.useUpperWindowTileMap,
-		&lcd.pendingDisplayWindow,
-		&lcd.useLowerBGAndWindowTileData,
-		&lcd.useUpperBGTileMap,
-		&lcd.bigSprites,
-		&lcd.displaySprites,
-		&lcd.displayBG,
-	)
+	if lcd.readControlReg() != val {
+		lcd.stateChangeSinceLastVblank = true
+
+		boolsFromByte(val,
+			&lcd.displayOn,
+			&lcd.useUpperWindowTileMap,
+			&lcd.pendingDisplayWindow,
+			&lcd.useLowerBGAndWindowTileData,
+			&lcd.useUpperBGTileMap,
+			&lcd.bigSprites,
+			&lcd.displaySprites,
+			&lcd.displayBG,
+		)
+	}
 }
 func (lcd *lcd) readControlReg() byte {
 	return byteFromBools(

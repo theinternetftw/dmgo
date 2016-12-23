@@ -296,6 +296,7 @@ func (cs *cpuState) runCycles(ncycles uint) {
 type Emulator interface {
 	Framebuffer() []byte
 	FlipRequested() bool
+	FrameWaitRequested() bool
 	UpdateInput(input Input)
 	Step()
 }
@@ -323,11 +324,18 @@ func (cs *cpuState) Framebuffer() []byte {
 // FlipRequested indicates if a draw request is pending
 // and clears it before returning
 func (cs *cpuState) FlipRequested() bool {
-	if cs.lcd.flipRequested {
-		cs.lcd.flipRequested = false
-		return true
-	}
-	return false
+	val := cs.lcd.flipRequested
+	cs.lcd.flipRequested = false
+	return val
+}
+
+// FrameWaitRequested indicates, separatate from an actual
+// draw event, whether or not there should be a wait until
+// when the frame would have been drawn
+func (cs *cpuState) FrameWaitRequested() bool {
+	val := cs.lcd.frameWaitRequested
+	cs.lcd.frameWaitRequested = false
+	return val
 }
 
 // Step steps the emulator one instruction

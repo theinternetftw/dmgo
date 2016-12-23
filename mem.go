@@ -87,7 +87,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr < 0x8000:
 		// cart ROM, looks like writing to read-only is a nop?
 	case addr >= 0x8000 && addr < 0xa000:
-		cs.lcd.videoRAM[addr-0x8000] = val
+		cs.lcd.writeVideoRAM(addr-0x8000, val)
 	case addr >= 0xa000 && addr < 0xc000:
 		if len(cs.mem.cartRAM) == 0 {
 			break // nop
@@ -170,23 +170,23 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr == 0xff41:
 		cs.lcd.writeStatusReg(val)
 	case addr == 0xff42:
-		cs.lcd.scrollY = val
+		cs.lcd.writeScrollY(val)
 	case addr == 0xff43:
-		cs.lcd.scrollX = val
+		cs.lcd.writeScrollX(val)
 	case addr == 0xff45:
-		cs.lcd.lycReg = val
+		cs.lcd.writeLycReg(val)
 	case addr == 0xff46:
 		cs.oamDMA(uint16(val) << 8)
 	case addr == 0xff47:
-		cs.lcd.backgroundPaletteReg = val
+		cs.lcd.writeBackgroundPaletteReg(val)
 	case addr == 0xff48:
-		cs.lcd.objectPalette0Reg = val
+		cs.lcd.writeObjectPalette0Reg(val)
 	case addr == 0xff49:
-		cs.lcd.objectPalette1Reg = val
+		cs.lcd.writeObjectPalette1Reg(val)
 	case addr == 0xff4a:
-		cs.lcd.windowY = val
+		cs.lcd.writeWindowY(val)
 	case addr == 0xff4b:
-		cs.lcd.windowX = val
+		cs.lcd.writeWindowX(val)
 
 	case addr == 0xff0f:
 		cs.writeInterruptFlagReg(val)
