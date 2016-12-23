@@ -1,6 +1,8 @@
 package dmgo
 
-import "sort"
+import (
+	"sort"
+)
 
 type lcd struct {
 	framebuffer        []byte
@@ -203,7 +205,8 @@ func (lcd *lcd) getWindowPixel(x, y byte) (byte, byte, byte) {
 }
 
 func (lcd *lcd) getSpritePixel(e *oamEntry, x, y byte) (byte, byte, byte, bool) {
-	tileX, tileY := byte(int16(x)-e.x), byte(int16(y)-e.y)
+	tileX := byte(int16(x) - e.x)
+	tileY := byte(int16(y) - e.y)
 	if e.xFlip() {
 		tileX = 7 - tileX
 	}
@@ -215,7 +218,6 @@ func (lcd *lcd) getSpritePixel(e *oamEntry, x, y byte) (byte, byte, byte, bool) 
 		tileNum &^= 0x01
 		if tileY >= 8 {
 			tileNum++
-			tileY -= 8
 		}
 	}
 	rawPixel := lcd.getTilePixel(0x0000, tileNum, tileX, tileY) // addr 8000 relative
@@ -376,7 +378,8 @@ func (lcd *lcd) renderSpriteAtScanline(e *oamEntry, y byte) {
 	if e.x > 0 {
 		startX = byte(e.x)
 	}
-	for x := startX; x < startX+e.height && x < 160; x++ {
+	endX := byte(e.x + 8)
+	for x := startX; x < endX && x < 160; x++ {
 		if (!e.behindBG() || lcd.bgMask[x]) && !lcd.spriteMask[x] {
 			if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
 				lcd.setFramebufferPixel(x, y, r, g, b)
