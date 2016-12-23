@@ -363,7 +363,6 @@ func (lcd *lcd) renderSpriteAtScanline(e *oamEntry, y byte, bgMask []bool) {
 		if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
 			if !e.behindBG() || bgMask[x] {
 				lcd.setFramebufferPixel(x, y, r, g, b)
-				break
 			}
 		}
 	}
