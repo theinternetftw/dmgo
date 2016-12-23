@@ -62,10 +62,10 @@ func (ci *CartInfo) GetROMSize() uint {
 		0x53: 1280 * 1024, // 80 banks
 		0x54: 1536 * 1024, // 96 banks
 	}
-	if size, ok := codeSizeMap[ci.RAMSizeCode]; ok {
+	if size, ok := codeSizeMap[ci.ROMSizeCode]; ok {
 		return size
 	}
-	panic(fmt.Sprintf("unknown RAM size code 0x%02x", ci.RAMSizeCode))
+	panic(fmt.Sprintf("unknown ROM size code 0x%02x", ci.RAMSizeCode))
 }
 
 func (ci *CartInfo) cgbOnly() bool { return ci.CGBFlag == 0xc0 }
