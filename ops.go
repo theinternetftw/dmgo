@@ -263,6 +263,10 @@ func (cs *cpuState) stepOpcode() {
 	cs.steps++
 	opcode := cs.read(cs.pc)
 
+	if cs.steps&0x7fff == 0 {
+		// fmt.Printf("steps: %08d\n", cs.steps)
+	}
+
 	if opcode != 0xcb {
 		// fmt.Printf("steps: %08d, opcode:%02x, pc:%04x, sp:%04x, a:%02x, b:%02x, c:%02x, d:%02x, e:%02x, h:%02x, l:%02x\r\n", cs.steps, opcode, cs.pc, cs.sp, cs.a, cs.b, cs.c, cs.d, cs.e, cs.h, cs.l)
 	}
@@ -813,7 +817,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xd2: // jp nc, a16
 		cs.jmpAbs16(16, 12, 3, !cs.getCarryFlag(), cs.read16(cs.pc+1))
 	case 0xd3: // illegal
-		panic("illegal opcode")
+		panic(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xd4: // call nc, a16
 		cs.jmpCall(24, 12, 3, !cs.getCarryFlag(), cs.read16(cs.pc+1))
 	case 0xd5: // push de
@@ -833,11 +837,11 @@ func (cs *cpuState) stepOpcode() {
 	case 0xda: // jp c, a16
 		cs.jmpAbs16(16, 12, 3, cs.getCarryFlag(), cs.read16(cs.pc+1))
 	case 0xdb: // illegal
-		panic("illegal opcode")
+		panic(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xdc: // call c, a16
 		cs.jmpCall(24, 12, 3, cs.getCarryFlag(), cs.read16(cs.pc+1))
 	case 0xdd: // illegal
-		panic("illegal opcode")
+		panic(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xde: // sbc n8
 		val := cs.read(cs.pc + 1)
 		carry := (cs.f >> 4) & 0x01
@@ -855,9 +859,9 @@ func (cs *cpuState) stepOpcode() {
 		val := cs.c
 		cs.setOpMem8(8, 1, 0xff00+uint16(val), cs.a, 0x2222)
 	case 0xe3: // illegal
-		panic("illegal opcode")
+		panic(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xe4: // illegal
-		panic("illegal opcode")
+		panic(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xe5: // push hl
 		cs.pushOp16(16, 1, cs.getHL())
 	case 0xe6: // and n8
@@ -872,11 +876,11 @@ func (cs *cpuState) stepOpcode() {
 	case 0xea: // ld (a16), a
 		cs.setOpMem8(16, 3, cs.read16(cs.pc+1), cs.a, 0x2222)
 	case 0xeb: // illegal
-		panic("illegal opcode")
+		panic(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xec: // illegal
-		panic("illegal opcode")
+		panic(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xed: // illegal
-		panic("illegal opcode")
+		panic(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xee: // xor n8
 		val := cs.read(cs.pc + 1)
 		cs.setOpA(8, 2, cs.a^val, zFlag(cs.a^val))
@@ -893,7 +897,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xf3: // di
 		cs.setOpFn(4, 1, func() { cs.interruptMasterEnable = false }, 0x2222)
 	case 0xf4: // illegal
-		panic("illegal opcode")
+		panic(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xf5: // push af
 		cs.pushOp16(16, 1, cs.getAF())
 	case 0xf6: // or n8
@@ -910,9 +914,9 @@ func (cs *cpuState) stepOpcode() {
 	case 0xfb: // ei
 		cs.setOpFn(4, 1, func() { cs.interruptMasterEnable = true }, 0x2222)
 	case 0xfc: // illegal
-		panic("illegal opcode")
+		panic(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xfd: // illegal
-		panic("illegal opcode")
+		panic(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xfe: // cp a, n8
 		val := cs.read(cs.pc + 1)
 		cs.setOpFn(8, 2, func() {}, (zFlag(cs.a-val) | hFlagSub(cs.a, val) | cFlagSub(cs.a, val) | 0x0100))
