@@ -276,8 +276,10 @@ func newState(cart []byte) *cpuState {
 	mem := mem{
 		cart:    cart,
 		cartRAM: make([]byte, cartInfo.GetRAMSize()),
+		mbc:     makeMBC(cartInfo),
 	}
 	state := cpuState{pc: entryPoint, mem: mem}
+	state.mem.mbc.Init(&state.mem)
 	state.lcd.init()
 	state.apu.init()
 	return &state

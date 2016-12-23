@@ -3,10 +3,19 @@ package dmgo
 import "fmt"
 
 type mem struct {
-	cart            []byte
+	cart    []byte
+	cartRAM []byte
+
 	internalRAM     [0x8000]byte // go ahead and do CGB size
 	highInternalRAM [0x7f]byte   // go ahead and do CGB size
-	cartRAM         []byte
+	mbc             mbc
+}
+
+func (mem *mem) mbcRead(addr uint16) byte {
+	return mem.mbc.Read(mem, addr)
+}
+func (mem *mem) mbcWrite(addr uint16, val byte) {
+	mem.mbc.Write(mem, addr, val)
 }
 
 // TODO / FIXME: DMA timing enforcement!
@@ -23,13 +32,15 @@ func (cs *cpuState) read(addr uint16) byte {
 	var val byte
 	switch {
 
-	case addr < 0x4000:
-		val = cs.mem.cart[addr]
-	case addr >= 0x4000 && addr < 0x8000:
-		// TODO: bank switching
-		val = cs.mem.cart[addr]
+	case addr < 0x8000:
+		val = cs.mem.mbcRead(addr)
+
 	case addr >= 0x8000 && addr < 0xa000:
 		val = cs.lcd.videoRAM[addr-0x8000]
+
+	case addr >= 0xa000 && addr < 0xc000:
+		val = cs.mem.mbcRead(addr)
+
 	case addr >= 0xc000 && addr < 0xfe00:
 		ramAddr := (addr - 0xc000) & 0x1fff // 8kb with wraparound
 		val = cs.mem.internalRAM[ramAddr]
@@ -50,6 +61,10 @@ func (cs *cpuState) read(addr uint16) byte {
 
 	case addr == 0xff0f:
 		val = cs.readInterruptFlagReg()
+	case addr == 0xff24:
+		val = cs.apu.readVolumeReg()
+	case addr == 0xff25:
+		val = cs.apu.readSpeakerSelectReg()
 
 	case addr >= 0xff30 && addr < 0xff40:
 		val = cs.apu.sounds[2].wavePatternRAM[addr-0xff30]
@@ -58,6 +73,8 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = cs.lcd.readControlReg()
 	case addr == 0xff41:
 		val = cs.lcd.readStatusReg()
+	case addr == 0xff42:
+		val = cs.lcd.scrollY
 	case addr == 0xff44:
 		val = cs.lcd.lyReg
 	case addr == 0xff45:
@@ -85,14 +102,14 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	switch {
 
 	case addr < 0x8000:
-		// cart ROM, looks like writing to read-only is a nop?
+		cs.mem.mbcWrite(addr, val)
+
 	case addr >= 0x8000 && addr < 0xa000:
 		cs.lcd.writeVideoRAM(addr-0x8000, val)
+
 	case addr >= 0xa000 && addr < 0xc000:
-		if len(cs.mem.cartRAM) == 0 {
-			break // nop
-		}
-		fatalErr(fmt.Sprintf("real cartRAM not yet implemented: write(0x%04x, %v)\n", addr, val))
+		cs.mem.mbcWrite(addr, val)
+
 	case addr >= 0xc000 && addr < 0xfe00:
 		cs.mem.internalRAM[((addr - 0xc000) & 0x1fff)] = val // 8kb with wraparound
 	case addr >= 0xfe00 && addr < 0xfea0:
