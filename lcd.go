@@ -186,22 +186,18 @@ func (lcd *lcd) getTileNum(tmapAddr uint16, x, y byte) byte {
 	return tileNum
 }
 
-func (lcd *lcd) getBGPixel(x, y byte) (byte, byte, byte) {
+func (lcd *lcd) getBGPixel(x, y byte) byte {
 	mapAddr := lcd.getBGTileMapAddr()
 	dataAddr := lcd.getBGAndWindowTileDataAddr()
 	tileNum := lcd.getTileNum(mapAddr, x, y)
-	rawPixel := lcd.getTilePixel(dataAddr, tileNum, x, y)
-	palettedPixel := (lcd.backgroundPaletteReg >> (rawPixel * 2)) & 0x03
-	return lcd.applyCustomPalette(palettedPixel)
+	return lcd.getTilePixel(dataAddr, tileNum, x, y)
 }
 
-func (lcd *lcd) getWindowPixel(x, y byte) (byte, byte, byte) {
+func (lcd *lcd) getWindowPixel(x, y byte) byte {
 	mapAddr := lcd.getWindowTileMapAddr()
 	dataAddr := lcd.getBGAndWindowTileDataAddr()
 	tileNum := lcd.getTileNum(mapAddr, x, y)
-	rawPixel := lcd.getTilePixel(dataAddr, tileNum, x, y)
-	palettedPixel := (lcd.backgroundPaletteReg >> (rawPixel * 2)) & 0x03
-	return lcd.applyCustomPalette(palettedPixel)
+	return lcd.getTilePixel(dataAddr, tileNum, x, y)
 }
 
 func (lcd *lcd) getSpritePixel(e *oamEntry, x, y byte) (byte, byte, byte, bool) {
@@ -336,17 +332,17 @@ func (lcd *lcd) renderScanline() {
 		lcd.bgMask[i] = false
 		lcd.spriteMask[i] = false
 	}
-	maskR, maskG, maskB := lcd.applyCustomPalette(0)
 
 	if lcd.displayBG || true {
 		bgY := y + lcd.scrollY
 		for x := byte(0); x < 160; x++ {
 			bgX := x + lcd.scrollX
-			r, g, b := lcd.getBGPixel(bgX, bgY)
-			lcd.setFramebufferPixel(x, y, r, g, b)
-			if r == maskR && g == maskG && b == maskB {
+			pixel := lcd.getBGPixel(bgX, bgY)
+			if pixel == 0 {
 				lcd.bgMask[x] = true
 			}
+			r, g, b := lcd.applyPalettes(pixel)
+			lcd.setFramebufferPixel(x, y, r, g, b)
 		}
 	}
 	if lcd.displayWindow && y >= lcd.windowY {
@@ -356,11 +352,12 @@ func (lcd *lcd) renderScanline() {
 			if x < 0 {
 				continue
 			}
-			r, g, b := lcd.getWindowPixel(byte(x-winStartX), winY)
-			lcd.setFramebufferPixel(byte(x), y, r, g, b)
-			if r == maskR && g == maskG && b == maskB {
+			pixel := lcd.getWindowPixel(byte(x-winStartX), winY)
+			if pixel == 0 {
 				lcd.bgMask[x] = true
 			}
+			r, g, b := lcd.applyPalettes(pixel)
+			lcd.setFramebufferPixel(byte(x), y, r, g, b)
 		}
 	}
 
@@ -371,6 +368,11 @@ func (lcd *lcd) renderScanline() {
 			lcd.renderSpriteAtScanline(e, y)
 		}
 	}
+}
+
+func (lcd *lcd) applyPalettes(rawPixel byte) (byte, byte, byte) {
+	palettedPixel := (lcd.backgroundPaletteReg >> (rawPixel * 2)) & 0x03
+	return lcd.applyCustomPalette(palettedPixel)
 }
 
 func (lcd *lcd) renderSpriteAtScanline(e *oamEntry, y byte) {
