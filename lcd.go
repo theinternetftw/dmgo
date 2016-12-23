@@ -6,8 +6,8 @@ type lcd struct {
 
 	videoRAM [0x4000]byte // go ahead and do CGB size
 
-	oam              [160]byte
-	parsedOAMEntries [40]oamEntry
+	oam            [160]byte
+	oamForScanline []oamEntry
 
 	scrollY byte
 	scrollX byte
@@ -212,10 +212,17 @@ func (lcd *lcd) getSpritePixel(e *oamEntry, x, y byte) (byte, byte, byte, bool) 
 	return r, g, b, true
 }
 
+var standardPalette = [][]byte{
+	{0x00, 0x00, 0x00},
+	{0x55, 0x55, 0x55},
+	{0xaa, 0xaa, 0xaa},
+	{0xff, 0xff, 0xff},
+}
+
 func (lcd *lcd) applyCustomPalette(val byte) (byte, byte, byte) {
 	// TODO: actual custom palette choices stored in lcd
-	outVal := (0xff / 3) * (3 - val)
-	return outVal, outVal, outVal
+	outVal := standardPalette[3-val]
+	return outVal[0], outVal[1], outVal[2]
 }
 
 // 0x8000 relative
@@ -255,27 +262,29 @@ func (e *oamEntry) yFlip() bool       { return e.flagsByte&0x40 != 0 }
 func (e *oamEntry) xFlip() bool       { return e.flagsByte&0x20 != 0 }
 func (e *oamEntry) palSelector() bool { return e.flagsByte&0x10 != 0 }
 
-func (e *oamEntry) inScanline(yByte byte) bool {
-	y := int16(yByte)
-	return y >= e.y && y < e.y+int16(e.height)
-}
 func (e *oamEntry) inX(xByte byte) bool {
 	x := int16(xByte)
 	return x >= e.x && x < e.x+8
 }
-func (lcd *lcd) parseOAM() {
-	height := 8
+func (lcd *lcd) parseOAMForScanline(scanlineByte byte) {
+	height := int16(8)
 	if lcd.bigSprites {
-		height = 16
+		height = int16(16)
 	}
+	scanline := int16(scanlineByte)
+	// use re-slice so we keep backing arry and don't realloc
+	lcd.oamForScanline = lcd.oamForScanline[:0]
 	for i := 0; i < 40; i++ {
 		addr := i * 4
-		lcd.parsedOAMEntries[i] = oamEntry{
-			y:         int16(lcd.oam[addr]) - 16,
-			x:         int16(lcd.oam[addr+1]) - 8,
-			height:    byte(height),
-			tileNum:   lcd.oam[addr+2],
-			flagsByte: lcd.oam[addr+3],
+		spriteY := int16(lcd.oam[addr]) - 16
+		if scanline >= spriteY && scanline < spriteY+height {
+			lcd.oamForScanline = append(lcd.oamForScanline, oamEntry{
+				y:         spriteY,
+				x:         int16(lcd.oam[addr+1]) - 8,
+				height:    byte(height),
+				tileNum:   lcd.oam[addr+2],
+				flagsByte: lcd.oam[addr+3],
+			})
 		}
 	}
 }
@@ -320,11 +329,11 @@ func (lcd *lcd) renderScanline() {
 
 	if lcd.displaySprites {
 		seen := 0
-		lcd.parseOAM()
+		lcd.parseOAMForScanline(y)
 		for x := byte(0); x < 160 && seen < 11; x++ {
-			for i := range lcd.parsedOAMEntries {
-				e := &lcd.parsedOAMEntries[i]
-				if e.inScanline(y) && e.inX(x) {
+			for i := range lcd.oamForScanline {
+				e := &lcd.oamForScanline[i]
+				if e.inX(x) {
 					if e.x == int16(x) || x == 0 {
 						if seen++; seen == 11 {
 							break
@@ -333,8 +342,8 @@ func (lcd *lcd) renderScanline() {
 					if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
 						if !e.behindBG() || bgMask[x] {
 							lcd.setFramebufferPixel(x, y, r, g, b)
+							break
 						}
-						break
 					}
 				}
 			}
@@ -344,25 +353,27 @@ func (lcd *lcd) renderScanline() {
 
 func (lcd *lcd) getFramebufferPixel(xByte, yByte byte) (byte, byte, byte) {
 	x, y := int(xByte), int(yByte)
-	r := lcd.framebuffer[y*160*4+x*4+0]
-	g := lcd.framebuffer[y*160*4+x*4+1]
-	b := lcd.framebuffer[y*160*4+x*4+2]
+	yIdx := y * 160 * 4
+	r := lcd.framebuffer[yIdx+x*4+0]
+	g := lcd.framebuffer[yIdx+x*4+1]
+	b := lcd.framebuffer[yIdx+x*4+2]
 	return r, g, b
 }
 func (lcd *lcd) setFramebufferPixel(xByte, yByte, r, g, b byte) {
 	x, y := int(xByte), int(yByte)
-	lcd.framebuffer[y*160*4+x*4+0] = r
-	lcd.framebuffer[y*160*4+x*4+1] = g
-	lcd.framebuffer[y*160*4+x*4+2] = b
-	lcd.framebuffer[y*160*4+x*4+3] = 0xff
+	yIdx := y * 160 * 4
+	lcd.framebuffer[yIdx+x*4+0] = r
+	lcd.framebuffer[yIdx+x*4+1] = g
+	lcd.framebuffer[yIdx+x*4+2] = b
+	lcd.framebuffer[yIdx+x*4+3] = 0xff
 }
 func (lcd *lcd) fillScanline(val byte) {
-	y := int(lcd.lyReg)
+	yIdx := int(lcd.lyReg) * 160 * 4
 	for x := 0; x < 160; x++ {
-		lcd.framebuffer[y*160*4+x*4+0] = val
-		lcd.framebuffer[y*160*4+x*4+1] = val
-		lcd.framebuffer[y*160*4+x*4+2] = val
-		lcd.framebuffer[y*160*4+x*4+3] = 0xff
+		lcd.framebuffer[yIdx+x*4+0] = val
+		lcd.framebuffer[yIdx+x*4+1] = val
+		lcd.framebuffer[yIdx+x*4+2] = val
+		lcd.framebuffer[yIdx+x*4+3] = 0xff
 	}
 }
 

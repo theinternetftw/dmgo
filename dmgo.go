@@ -334,13 +334,14 @@ func (cs *cpuState) FlipRequested() bool {
 func (cs *cpuState) Step() {
 
 	ieAndIfFlagMatch := cs.handleInterrupts()
-	if ieAndIfFlagMatch && cs.inHaltMode {
-		cs.runCycles(4)
-		cs.inHaltMode = false
-	}
 	if cs.inHaltMode {
-		cs.runCycles(4)
-		return
+		if ieAndIfFlagMatch {
+			cs.runCycles(4)
+			cs.inHaltMode = false
+		} else {
+			cs.runCycles(4)
+			return
+		}
 	}
 
 	// TODO: correct behavior, e.g. check for
