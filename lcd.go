@@ -29,10 +29,10 @@ type lcd struct {
 	objectPalette0Reg    byte
 	objectPalette1Reg    byte
 
-	hBlankInterrupt      bool
-	vBlankInterrupt      bool
-	oamInterrupt         bool
-	lycEqualsLyInterrupt bool
+	hBlankInterrupt bool
+	vBlankInterrupt bool
+	oamInterrupt    bool
+	lycInterrupt    bool
 
 	lyReg  byte
 	lycReg byte
@@ -57,6 +57,8 @@ type lcd struct {
 
 	cyclesSinceLYInc       uint
 	cyclesSinceVBlankStart uint
+
+	statIRQSignal bool
 }
 
 func (lcd *lcd) updateBufferedControlBits() {
@@ -79,6 +81,16 @@ func (lcd *lcd) writeVideoRAM(addr uint16, val byte) {
 	lcd.checkStateChangeAndAssignByte(&lcd.videoRAM[addr], val)
 }
 
+func (lcd *lcd) shouldStatIRQ() bool {
+	lastSignal := lcd.statIRQSignal
+	// NOTE: TCAGBD claims an oam check is or'd with the vblank check
+	lcd.statIRQSignal = ((lcd.lycReg == lcd.lyReg && lcd.lycInterrupt) ||
+		(lcd.inHBlank && lcd.hBlankInterrupt) ||
+		(lcd.accessingOAM && lcd.oamInterrupt) ||
+		(lcd.inVBlank && (lcd.vBlankInterrupt || lcd.oamInterrupt)))
+	return !lastSignal && lcd.statIRQSignal // rising edge only
+}
+
 // FIXME: timings will have to change for double-speed mode
 // (maybe instead of counting cycles I'll count actual instruction time?)
 // (or maybe it'll always be dmg cycles and gbc will just produce half as many of them?
@@ -97,10 +109,6 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	if lcd.readingData && lcd.cyclesSinceLYInc >= 252 {
 		lcd.readingData = false
 		lcd.inHBlank = true
-
-		if lcd.hBlankInterrupt {
-			cs.lcdStatIRQ = true
-		}
 	}
 
 	if lcd.cyclesSinceLYInc >= 456 {
@@ -112,9 +120,6 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 		lcd.cyclesSinceLYInc = 0
 		if !lcd.inVBlank {
 			lcd.accessingOAM = true
-			if lcd.oamInterrupt {
-				cs.lcdStatIRQ = true
-			}
 		}
 		lcd.inHBlank = false
 		lcd.lyReg++
@@ -128,28 +133,19 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 		// didn't buffer up those changes until after the
 		// hblank.
 		lcd.updateBufferedControlBits()
-
-		if lcd.lycEqualsLyInterrupt {
-			if lcd.lyReg == lcd.lycReg {
-				cs.lcdStatIRQ = true
-			}
-		}
 	}
 
 	if lcd.lyReg >= 144 && !lcd.inVBlank {
 		lcd.inVBlank = true
 
+		lcd.frameWaitRequested = true
 		if lcd.stateChangeSinceLastVblank {
 			lcd.flipRequested = true
 		}
-		lcd.frameWaitRequested = true
 
 		lcd.stateChangeSinceLastVblank = false
 
 		cs.vBlankIRQ = true
-		if lcd.vBlankInterrupt {
-			cs.lcdStatIRQ = true
-		}
 	}
 
 	if lcd.inVBlank {
@@ -159,13 +155,11 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 			lcd.inVBlank = false
 			lcd.accessingOAM = true
 			lcd.cyclesSinceVBlankStart = 0
-
-			if lcd.lycEqualsLyInterrupt {
-				if lcd.lyReg == lcd.lycReg {
-					cs.lcdStatIRQ = true
-				}
-			}
 		}
+	}
+
+	if lcd.shouldStatIRQ() {
+		cs.lcdStatIRQ = true
 	}
 }
 
@@ -433,6 +427,9 @@ func (lcd *lcd) writeScrollX(val byte) {
 func (lcd *lcd) writeLycReg(val byte) {
 	lcd.lycReg = val
 }
+func (lcd *lcd) writeLyReg(val byte) {
+	lcd.checkStateChangeAndAssignByte(&lcd.lyReg, val)
+}
 func (lcd *lcd) writeBackgroundPaletteReg(val byte) {
 	lcd.checkStateChangeAndAssignByte(&lcd.backgroundPaletteReg, val)
 }
@@ -481,7 +478,7 @@ func (lcd *lcd) readControlReg() byte {
 func (lcd *lcd) writeStatusReg(val byte) {
 	boolsFromByte(val,
 		nil,
-		&lcd.lycEqualsLyInterrupt,
+		&lcd.lycInterrupt,
 		&lcd.oamInterrupt,
 		&lcd.vBlankInterrupt,
 		&lcd.hBlankInterrupt,
@@ -493,12 +490,12 @@ func (lcd *lcd) writeStatusReg(val byte) {
 func (lcd *lcd) readStatusReg() byte {
 	return byteFromBools(
 		true, // bit 7 always set
-		lcd.lycEqualsLyInterrupt,
+		lcd.lycInterrupt,
 		lcd.oamInterrupt,
 		lcd.vBlankInterrupt,
 		lcd.hBlankInterrupt,
-		lcd.lyReg == lcd.lycReg,
-		lcd.accessingOAM || lcd.readingData,
-		lcd.inVBlank || lcd.readingData,
+		lcd.displayOn && (lcd.lyReg == lcd.lycReg),
+		lcd.displayOn && (lcd.accessingOAM || lcd.readingData),
+		lcd.displayOn && (lcd.inVBlank || lcd.readingData),
 	)
 }
