@@ -354,6 +354,11 @@ func (cs *cpuState) FrameWaitRequested() bool {
 // Step steps the emulator one instruction
 func (cs *cpuState) Step() {
 
+	// if cs.steps&0x2ffff == 0 {
+	if true {
+		//fmt.Println(cs.debugStatusLine())
+	}
+
 	ieAndIfFlagMatch := cs.handleInterrupts()
 	if cs.inHaltMode {
 		if ieAndIfFlagMatch {
