@@ -266,8 +266,6 @@ func (cs *cpuState) setHL(val uint16) { cs.h, cs.l = byte(val>>8), byte(val) }
 func (cs *cpuState) setSP(val uint16) { cs.sp = val }
 func (cs *cpuState) setPC(val uint16) { cs.pc = val }
 
-const entryPoint = 0x100
-
 func newState(cart []byte) *cpuState {
 	cartInfo := ParseCartInfo(cart)
 	if cartInfo.cgbOnly() {
@@ -278,11 +276,24 @@ func newState(cart []byte) *cpuState {
 		cartRAM: make([]byte, cartInfo.GetRAMSize()),
 		mbc:     makeMBC(cartInfo),
 	}
-	state := cpuState{pc: entryPoint, mem: mem}
+	state := cpuState{mem: mem}
 	state.mem.mbc.Init(&state.mem)
+	state.initRegisters()
 	state.lcd.init()
 	state.apu.init()
 	return &state
+}
+
+func (cs *cpuState) initRegisters() {
+	// NOTE: these are DMG values,
+	// others are different, see
+	// TCAGBD
+	cs.setAF(0x01b0)
+	cs.setBC(0x0013)
+	cs.setDE(0x00d8)
+	cs.setHL(0x014d)
+	cs.setSP(0xfffe)
+	cs.setPC(0x0100)
 }
 
 // much TODO
