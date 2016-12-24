@@ -1,9 +1,6 @@
 package dmgo
 
-import (
-	"fmt"
-	"os"
-)
+import "fmt"
 
 type cpuState struct {
 	pc                     uint16
@@ -386,5 +383,5 @@ func (cs *cpuState) Step() {
 
 func fatalErr(v ...interface{}) {
 	fmt.Println(v...)
-	os.Exit(1)
+	panic("fatalErr()")
 }

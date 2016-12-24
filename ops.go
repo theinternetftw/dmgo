@@ -1506,5 +1506,6 @@ func (cs *cpuState) bSetOpHL(bitNum uint8) {
 
 func (cs *cpuState) stepErr(msg string) {
 	fmt.Println(msg)
-	fatalErr(cs.debugStatusLine())
+	fmt.Println(cs.debugStatusLine())
+	panic("stepErr()")
 }
