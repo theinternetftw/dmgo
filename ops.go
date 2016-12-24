@@ -642,7 +642,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0x75: // ld (hl), l
 		cs.setOpMem8(8, 1, cs.getHL(), cs.l, 0x2222)
 	case 0x76: // halt
-		cs.inHaltMode = true
+		cs.setOpFn(4, 1, func() { cs.inHaltMode = true }, 0x2222)
 	case 0x77: // ld (hl), a
 		cs.setOpMem8(8, 1, cs.getHL(), cs.a, 0x2222)
 
