@@ -354,11 +354,6 @@ func (cs *cpuState) FrameWaitRequested() bool {
 // Step steps the emulator one instruction
 func (cs *cpuState) Step() {
 
-	// if cs.steps&0x2ffff == 0 {
-	if true {
-		//fmt.Println(cs.debugStatusLine())
-	}
-
 	ieAndIfFlagMatch := cs.handleInterrupts()
 	if cs.inHaltMode {
 		if ieAndIfFlagMatch {
@@ -369,6 +364,11 @@ func (cs *cpuState) Step() {
 			return
 		}
 	}
+
+	// if !cs.inHaltMode && cs.steps&0x2ffff == 0 {
+	// if true {
+	// 	fmt.Println(cs.debugStatusLine())
+	// }
 
 	// TODO: correct behavior, e.g. check for
 	// button press only. but for now lets
