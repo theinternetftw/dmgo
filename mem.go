@@ -61,10 +61,29 @@ func (cs *cpuState) read(addr uint16) byte {
 
 	case addr == 0xff0f:
 		val = cs.readInterruptFlagReg()
+
+	case addr == 0xff12:
+		val = cs.apu.sounds[0].readSoundEnvReg()
+	case addr == 0xff14:
+		val = cs.apu.sounds[0].readFreqHighReg()
+	case addr == 0xff17:
+		val = cs.apu.sounds[1].readSoundEnvReg()
+	case addr == 0xff19:
+		val = cs.apu.sounds[1].readFreqHighReg()
+	case addr == 0xff1c:
+		val = cs.apu.sounds[2].readWaveOutLvlReg()
+	case addr == 0xff1e:
+		val = cs.apu.sounds[2].readFreqHighReg()
+	case addr == 0xff21:
+		val = cs.apu.sounds[3].readSoundEnvReg()
+	case addr == 0xff23:
+		val = cs.apu.sounds[3].readFreqHighReg()
 	case addr == 0xff24:
 		val = cs.apu.readVolumeReg()
 	case addr == 0xff25:
 		val = cs.apu.readSpeakerSelectReg()
+	case addr == 0xff26:
+		val = cs.apu.readSoundOnOffReg()
 
 	case addr >= 0xff30 && addr < 0xff40:
 		val = cs.apu.sounds[2].wavePatternRAM[addr-0xff30]
@@ -202,6 +221,12 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.lcd.writeScrollY(val)
 	case addr == 0xff43:
 		cs.lcd.writeScrollX(val)
+	case addr == 0xff44:
+		// nop? pandocs says something
+		// about "resetting the counter",
+		// bgb seems to do nothing. doesn't
+		// reset lyReg, doesn't change any
+		// counter I see...
 	case addr == 0xff45:
 		cs.lcd.writeLycReg(val)
 	case addr == 0xff46:
