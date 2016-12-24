@@ -344,7 +344,7 @@ func (cs *cpuState) debugStatusLine() string {
 
 	return fmt.Sprintf("step:%08d, ", cs.steps) +
 		fmt.Sprintf("(*pc)[0:2]:%02x%02x%02x, ", cs.read(cs.pc), cs.read(cs.pc+1), cs.read(cs.pc+2)) +
-		fmt.Sprintf("(*sp):%02x%02x, ", cs.read(cs.sp), cs.read(cs.sp+1)) +
+		fmt.Sprintf("(*sp):%04x, ", cs.read16(cs.sp)) +
 		fmt.Sprintf("[pc:%04x ", cs.pc) +
 		fmt.Sprintf("sp:%04x ", cs.sp) +
 		fmt.Sprintf("af:%04x ", cs.getAF()) +
@@ -354,8 +354,11 @@ func (cs *cpuState) debugStatusLine() string {
 		fmt.Sprintf("ime:%v ", cs.imeToString()) +
 		fmt.Sprintf("ie:%v ", cs.ieToString()) +
 		fmt.Sprintf("if:%v ", cs.ifToString()) +
+		fmt.Sprintf("Ly:%02x ", cs.lcd.lyReg) +
+		fmt.Sprintf("Lyc:%02x ", cs.lcd.lycReg) +
 		fmt.Sprintf("Lc:%02x ", cs.lcd.readControlReg()) +
-		fmt.Sprintf("Ls:%02x]", cs.lcd.readStatusReg())
+		fmt.Sprintf("Ls:%02x ", cs.lcd.readStatusReg()) +
+		fmt.Sprintf("ROM:%d]", cs.mem.mbc.GetROMBankNumber())
 }
 
 func (cs *cpuState) addOpA(cycles uint, instLen uint16, val byte) {

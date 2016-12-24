@@ -29,6 +29,8 @@ func makeMBC(cartInfo *CartInfo) mbc {
 		panic("MMM01 mapper requested. Not implemented!")
 	case 15, 16, 17, 18, 19:
 		return &mbc3{}
+	case 25, 26, 27, 28, 29, 30:
+		return &mbc5{}
 	default:
 		panic(fmt.Sprintf("makeMBC: unknown cart type %v", cartInfo.CartridgeType))
 	}
@@ -40,10 +42,16 @@ type mbc interface {
 	Read(mem *mem, addr uint16) byte
 	// Write writes via the MBC
 	Write(mem *mem, addr uint16, val byte)
+
+	// Gets the ROM map number (for debug)
+	GetROMBankNumber() int
 }
 
 type nullMBC struct{}
 
+func (mbc *nullMBC) GetROMBankNumber() int {
+	return 1
+}
 func (mbc *nullMBC) Init(mem *mem) {}
 func (mbc *nullMBC) Read(mem *mem, addr uint16) byte {
 	switch {
@@ -82,6 +90,9 @@ func (mbc *mbc1) Init(mem *mem) {
 	mbc.romBankNumber = 1 // can't go lower
 }
 
+func (mbc *mbc1) GetROMBankNumber() int {
+	return int(mbc.romBankNumber)
+}
 func (mbc *mbc1) Read(mem *mem, addr uint16) byte {
 	switch {
 	case addr < 0x4000:
@@ -162,6 +173,9 @@ func (mbc *mbc2) Init(mem *mem) {
 	mbc.romBankNumber = 1 // can't go lower
 }
 
+func (mbc *mbc2) GetROMBankNumber() int {
+	return int(mbc.romBankNumber)
+}
 func (mbc *mbc2) Read(mem *mem, addr uint16) byte {
 	switch {
 	case addr < 0x4000:
@@ -285,6 +299,9 @@ func (mbc *mbc3) updateLatch() {
 	mbc.latchedDays = mbc.days
 }
 
+func (mbc *mbc3) GetROMBankNumber() int {
+	return int(mbc.romBankNumber)
+}
 func (mbc *mbc3) Read(mem *mem, addr uint16) byte {
 	switch {
 	case addr < 0x4000:
@@ -380,4 +397,68 @@ func (mbc *mbc3) romBankOffset() uint {
 }
 func (mbc *mbc3) ramBankOffset() uint {
 	return uint(mbc.ramBankNumber) * 0x2000
+}
+
+type mbc5 struct {
+	romBankNumber uint
+	ramBankNumber uint
+	ramEnabled    bool
+}
+
+func (mbc *mbc5) Init(mem *mem) {
+	// NOTE: can do bank 0 now, do we still start with 1?
+	mbc.romBankNumber = 1
+}
+
+func (mbc *mbc5) GetROMBankNumber() int {
+	return int(mbc.romBankNumber)
+}
+func (mbc *mbc5) Read(mem *mem, addr uint16) byte {
+	switch {
+	case addr < 0x4000:
+		return mem.cart[addr]
+	case addr >= 0x4000 && addr < 0x8000:
+		localAddr := uint(addr-0x4000) + mbc.romBankOffset()
+		return mem.cart[localAddr]
+	case addr >= 0xa000 && addr < 0xc000:
+		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
+		if mbc.ramEnabled && int(localAddr) < len(mem.cartRAM) {
+			return mem.cartRAM[localAddr]
+		}
+		return 0xff
+	default:
+		panic(fmt.Sprintf("mbc5: not implemented: read at %x\n", addr))
+	}
+}
+
+func (mbc *mbc5) Write(mem *mem, addr uint16, val byte) {
+	switch {
+	case addr < 0x2000:
+		mbc.ramEnabled = val&0x0f == 0x0a
+	case addr >= 0x2000 && addr < 0x3000:
+		mbc.romBankNumber = (mbc.romBankNumber &^ 0xff) | uint(val)
+	case addr >= 0x3000 && addr < 0x4000:
+		// NOTE: TCAGBD says that games that don't use the 9th bit
+		// can use this to set the lower eight! I'll wait until I
+		// see a game try to do that before impl'ing
+		mbc.romBankNumber = (mbc.romBankNumber &^ 0x100) | (uint(val&0x01) << 8)
+	case addr >= 0x4000 && addr < 0x6000:
+		mbc.ramBankNumber = uint(val & 0x0f)
+	case addr >= 0x6000 && addr < 0x8000:
+		// nop?
+	case addr >= 0xa000 && addr < 0xc000:
+		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
+		if mbc.ramEnabled && int(localAddr) < len(mem.cartRAM) {
+			mem.cartRAM[localAddr] = val
+		}
+	default:
+		panic(fmt.Sprintf("mbc5: not implemented: write at %x\n", addr))
+	}
+}
+
+func (mbc *mbc5) romBankOffset() uint {
+	return mbc.romBankNumber * 0x4000
+}
+func (mbc *mbc5) ramBankOffset() uint {
+	return mbc.ramBankNumber * 0x2000
 }
