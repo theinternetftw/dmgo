@@ -307,6 +307,8 @@ type Emulator interface {
 	Framebuffer() []byte
 	FlipRequested() bool
 	FrameWaitRequested() bool
+	GetCartRAM() []byte
+	SetCartRAM([]byte) error
 	UpdateInput(input Input)
 	Step()
 }
@@ -320,6 +322,21 @@ func NewEmulator(cart []byte) Emulator {
 // TODO: add dt?
 type Input struct {
 	Joypad Joypad
+}
+
+// GetCartRAM returns the current state of external RAM
+func (cs *cpuState) GetCartRAM() []byte {
+	return cs.mem.cartRAM
+}
+
+// SetCartRAM attempts to set the RAM, returning error if size not correct
+func (cs *cpuState) SetCartRAM(ram []byte) error {
+	if len(cs.mem.cartRAM) == len(ram) {
+		copy(cs.mem.cartRAM, ram)
+		return nil
+	}
+	// TODO: better checks (e.g. real format, cart title/checksum, etc.)
+	return fmt.Errorf("ram size mismatch")
 }
 
 func (cs *cpuState) UpdateInput(input Input) {

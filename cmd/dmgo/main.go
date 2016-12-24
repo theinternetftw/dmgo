@@ -28,7 +28,7 @@ func main() {
 	fmt.Printf("Cart ROM size: %d\n", cartInfo.GetROMSize())
 
 	windowing.InitDisplayLoop(160*4, 144*4, 160, 144, func(sharedState *windowing.SharedState) {
-		startEmu(sharedState, cartBytes)
+		startEmu(cartFilename, sharedState, cartBytes)
 	})
 }
 
@@ -61,11 +61,20 @@ func startHeadlessEmu(cartBytes []byte) {
 	}
 }
 
-func startEmu(window *windowing.SharedState, cartBytes []byte) {
+func startEmu(filename string, window *windowing.SharedState, cartBytes []byte) {
 	emu := dmgo.NewEmulator(cartBytes)
 
 	// FIXME: settings are for debug right now
-	ticker := time.NewTicker(17*time.Millisecond)
+	lastVBlankTime := time.Now()
+	lastSaveTime := time.Now()
+
+	saveFilename := filename + ".sav"
+	if saveFile, err := ioutil.ReadFile(saveFilename); err == nil {
+		err = emu.SetCartRAM(saveFile)
+		if err != nil {
+			fmt.Println("error loading savefile,", err)
+		}
+	}
 
 	for {
 		window.Mutex.Lock()
@@ -82,7 +91,17 @@ func startEmu(window *windowing.SharedState, cartBytes []byte) {
 			window.Mutex.Unlock()
 		}
 		if emu.FrameWaitRequested() {
-			<-ticker.C
+			spent := time.Now().Sub(lastVBlankTime)
+			toWait := 17*time.Millisecond - spent
+			if toWait > time.Duration(0) {
+				<-time.NewTimer(toWait).C
+			}
+			lastVBlankTime = time.Now()
+		}
+		if time.Now().Sub(lastSaveTime) > 5*time.Second {
+			ram := emu.GetCartRAM()
+			ioutil.WriteFile(saveFilename, ram, os.FileMode(0644))
+			lastSaveTime = time.Now()
 		}
 	}
 }
