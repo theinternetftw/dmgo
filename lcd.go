@@ -70,11 +70,18 @@ func (lcd *lcd) writeOAM(addr uint16, val byte) {
 	lcd.checkStateChangeAndAssignByte(&lcd.oam[addr], val)
 }
 
-// lcd is on at startup
 func (lcd *lcd) init() {
-	lcd.displayOn = true
-	lcd.accessingOAM = true // at start of line
+
 	lcd.framebuffer = make([]byte, 160*144*4)
+
+	// registers at powerup (DMG only?)
+	lcd.displayOn = true
+	lcd.displayBG = true
+	lcd.backgroundPaletteReg = 0xfc
+	lcd.objectPalette0Reg = 0xff
+	lcd.objectPalette1Reg = 0xff
+
+	lcd.accessingOAM = true // at start of line
 }
 
 func (lcd *lcd) writeVideoRAM(addr uint16, val byte) {
