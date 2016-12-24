@@ -98,7 +98,7 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = cs.readInterruptEnableReg()
 
 	default:
-		panic(fmt.Sprintf("not implemented: read at %x\n", addr))
+		cs.stepErr(fmt.Sprintf("not implemented: read at %x\n", addr))
 	}
 	//	fmt.Printf("\treading 0x%02x from 0x%04x\n", val, addr)
 	return val
@@ -226,7 +226,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr == 0xffff:
 		cs.writeInterruptEnableReg(val)
 	default:
-		fatalErr(fmt.Sprintf("not implemented: write(0x%04x, %v)\n", addr, val))
+		cs.stepErr(fmt.Sprintf("not implemented: write(0x%04x, %v)\n", addr, val))
 	}
 	//	fmt.Printf("\twriting 0x%02x to 0x%04x\n", val, addr)
 }

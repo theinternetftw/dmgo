@@ -258,17 +258,114 @@ func (cs *cpuState) daaOp() {
 	cs.pc++
 }
 
+func (cs *cpuState) ifToString() string {
+	out := []byte("    ")
+	if cs.vBlankIRQ {
+		out[0] = 'V'
+	}
+	if cs.lcdStatIRQ {
+		out[1] = 'L'
+	}
+	if cs.serialIRQ {
+		out[2] = 'S'
+	}
+	if cs.joypadIRQ {
+		out[3] = 'J'
+	}
+	return string(out)
+}
+func (cs *cpuState) ieToString() string {
+	out := []byte("    ")
+	if cs.vBlankInterruptEnabled {
+		out[0] = 'V'
+	}
+	if cs.lcdStatInterruptEnabled {
+		out[1] = 'L'
+	}
+	if cs.serialInterruptEnabled {
+		out[2] = 'S'
+	}
+	if cs.joypadInterruptEnabled {
+		out[3] = 'J'
+	}
+	return string(out)
+}
+func (cs *cpuState) imeToString() string {
+	if cs.interruptMasterEnable {
+		return "1"
+	}
+	return "0"
+}
+func (cs *cpuState) lcdStatInterruptsToString() string {
+	out := []byte("    ")
+	if cs.vBlankInterruptEnabled {
+		out[0] = 'Y'
+	}
+	if cs.lcdStatInterruptEnabled {
+		out[1] = 'O'
+	}
+	if cs.serialInterruptEnabled {
+		out[2] = 'V'
+	}
+	if cs.joypadInterruptEnabled {
+		out[3] = 'H'
+	}
+	return string(out)
+}
+func (cs *cpuState) lcdCtrlToString() string {
+	out := []byte("dp0|wm0|dw0|td0|bm0|bs0|ds0|db0")
+	if cs.lcd.displayOn {
+		out[2] = '1'
+	}
+	if cs.lcd.useUpperWindowTileMap {
+		out[6] = '1'
+	}
+	if cs.lcd.pendingDisplayWindow {
+		out[10] = '1'
+	}
+	if cs.lcd.useLowerBGAndWindowTileData {
+		out[14] = '1'
+	}
+	if cs.lcd.useUpperBGTileMap {
+		out[18] = '1'
+	}
+	if cs.lcd.bigSprites {
+		out[22] = '1'
+	}
+	if cs.lcd.displaySprites {
+		out[26] = '1'
+	}
+	if cs.lcd.displayBG {
+		out[30] = '1'
+	}
+	return string(out)
+}
+func (cs *cpuState) debugStatusLine() string {
+
+	return fmt.Sprintf("step:%08d, ", cs.steps) +
+		fmt.Sprintf("(*pc)[0:2]:%02x%02x%02x, ", cs.read(cs.pc), cs.read(cs.pc+1), cs.read(cs.pc+2)) +
+		fmt.Sprintf("(*sp):%02x%02x, ", cs.read(cs.sp), cs.read(cs.sp+1)) +
+		fmt.Sprintf("[pc:%04x ", cs.pc) +
+		fmt.Sprintf("sp:%04x ", cs.sp) +
+		fmt.Sprintf("af:%04x ", cs.getAF()) +
+		fmt.Sprintf("bc:%04x ", cs.getBC()) +
+		fmt.Sprintf("de:%04x ", cs.getDE()) +
+		fmt.Sprintf("hl:%04x ", cs.getHL()) +
+		fmt.Sprintf("ime:%v ", cs.imeToString()) +
+		fmt.Sprintf("ie:%v ", cs.ieToString()) +
+		fmt.Sprintf("if:%v ", cs.ifToString()) +
+		fmt.Sprintf("Lc:%02x ", cs.lcd.readControlReg()) +
+		fmt.Sprintf("Ls:%02x]", cs.lcd.readStatusReg())
+}
+
 func (cs *cpuState) stepOpcode() {
 
 	cs.steps++
 	opcode := cs.read(cs.pc)
 
-	if cs.steps&0x7fff == 0 {
-		// fmt.Printf("steps: %08d\n", cs.steps)
-	}
-
-	if opcode != 0xcb {
-		// fmt.Printf("steps: %08d, opcode:%02x, pc:%04x, sp:%04x, a:%02x, b:%02x, c:%02x, d:%02x, e:%02x, h:%02x, l:%02x\r\n", cs.steps, opcode, cs.pc, cs.sp, cs.a, cs.b, cs.c, cs.d, cs.e, cs.h, cs.l)
+	// if cs.steps&0x2ffff == 0 {
+	if true {
+		//fmt.Println(cs.debugStatusLine())
 	}
 
 	switch opcode {
@@ -817,7 +914,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xd2: // jp nc, a16
 		cs.jmpAbs16(16, 12, 3, !cs.getCarryFlag(), cs.read16(cs.pc+1))
 	case 0xd3: // illegal
-		panic(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xd4: // call nc, a16
 		cs.jmpCall(24, 12, 3, !cs.getCarryFlag(), cs.read16(cs.pc+1))
 	case 0xd5: // push de
@@ -837,11 +934,11 @@ func (cs *cpuState) stepOpcode() {
 	case 0xda: // jp c, a16
 		cs.jmpAbs16(16, 12, 3, cs.getCarryFlag(), cs.read16(cs.pc+1))
 	case 0xdb: // illegal
-		panic(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xdc: // call c, a16
 		cs.jmpCall(24, 12, 3, cs.getCarryFlag(), cs.read16(cs.pc+1))
 	case 0xdd: // illegal
-		panic(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xde: // sbc n8
 		val := cs.read(cs.pc + 1)
 		carry := (cs.f >> 4) & 0x01
@@ -859,9 +956,9 @@ func (cs *cpuState) stepOpcode() {
 		val := cs.c
 		cs.setOpMem8(8, 1, 0xff00+uint16(val), cs.a, 0x2222)
 	case 0xe3: // illegal
-		panic(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xe4: // illegal
-		panic(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xe5: // push hl
 		cs.pushOp16(16, 1, cs.getHL())
 	case 0xe6: // and n8
@@ -871,16 +968,19 @@ func (cs *cpuState) stepOpcode() {
 		cs.pushOp16(16, 1, cs.pc+1)
 		cs.pc = 0x0020
 
+	case 0xe8: // add sp, r8
+		v1, v2 := cs.sp, uint16(int(cs.read(cs.pc+1)))
+		cs.setOpSP(16, 2, v1+v2, (hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
 	case 0xe9: // jp hl (also written jp (hl))
 		cs.setOpPC(4, 1, cs.getHL(), 0x2222)
 	case 0xea: // ld (a16), a
 		cs.setOpMem8(16, 3, cs.read16(cs.pc+1), cs.a, 0x2222)
 	case 0xeb: // illegal
-		panic(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xec: // illegal
-		panic(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xed: // illegal
-		panic(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xee: // xor n8
 		val := cs.read(cs.pc + 1)
 		cs.setOpA(8, 2, cs.a^val, zFlag(cs.a^val))
@@ -897,7 +997,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xf3: // di
 		cs.setOpFn(4, 1, func() { cs.interruptMasterEnable = false }, 0x2222)
 	case 0xf4: // illegal
-		panic(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xf5: // push af
 		cs.pushOp16(16, 1, cs.getAF())
 	case 0xf6: // or n8
@@ -907,6 +1007,9 @@ func (cs *cpuState) stepOpcode() {
 		cs.pushOp16(16, 1, cs.pc+1)
 		cs.pc = 0x0030
 
+	case 0xf8: // ld hl, sp+r8
+		v1, v2 := cs.sp, uint16(int(cs.read(cs.pc+1)))
+		cs.setOpHL(12, 2, v1+v2, (hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
 	case 0xf9: // ld sp, hl
 		cs.setOpSP(8, 1, cs.getHL(), 0x2222)
 	case 0xfa: // ld a, (a16)
@@ -914,9 +1017,9 @@ func (cs *cpuState) stepOpcode() {
 	case 0xfb: // ei
 		cs.setOpFn(4, 1, func() { cs.interruptMasterEnable = true }, 0x2222)
 	case 0xfc: // illegal
-		panic(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xfd: // illegal
-		panic(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xfe: // cp a, n8
 		val := cs.read(cs.pc + 1)
 		cs.setOpFn(8, 2, func() {}, (zFlag(cs.a-val) | hFlagSub(cs.a, val) | cFlagSub(cs.a, val) | 0x0100))
@@ -925,7 +1028,7 @@ func (cs *cpuState) stepOpcode() {
 		cs.pc = 0x0038
 
 	default:
-		fatalErr(fmt.Sprintf("Unknown Opcode: 0x%02x\r\n", opcode))
+		cs.stepErr(fmt.Sprintf("Unknown Opcode: 0x%02x\r\n", opcode))
 	}
 }
 
@@ -1482,7 +1585,7 @@ func (cs *cpuState) stepExtendedOpcode() {
 		cs.bSetOpReg(7, &cs.a)
 
 	default:
-		fatalErr(fmt.Sprintf("Unknown Extended Opcode: 0x%02x\r\n", extOpcode))
+		cs.stepErr(fmt.Sprintf("Unknown Extended Opcode: 0x%02x\r\n", extOpcode))
 	}
 }
 
@@ -1636,4 +1739,9 @@ func (cs *cpuState) bSetOpHL(bitNum uint8) {
 	val := cs.followHL()
 	result := val | (1 << bitNum)
 	cs.setOpMem8(16, 2, cs.getHL(), result, 0x2222)
+}
+
+func (cs *cpuState) stepErr(msg string) {
+	fmt.Println(msg)
+	fatalErr(cs.debugStatusLine())
 }
