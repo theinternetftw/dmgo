@@ -62,14 +62,20 @@ func (cs *cpuState) read(addr uint16) byte {
 	case addr == 0xff0f:
 		val = cs.readInterruptFlagReg()
 
+	case addr == 0xff11:
+		val = cs.apu.sounds[0].readLenDutyReg()
 	case addr == 0xff12:
 		val = cs.apu.sounds[0].readSoundEnvReg()
 	case addr == 0xff14:
 		val = cs.apu.sounds[0].readFreqHighReg()
+	case addr == 0xff16:
+		val = cs.apu.sounds[1].readLenDutyReg()
 	case addr == 0xff17:
 		val = cs.apu.sounds[1].readSoundEnvReg()
 	case addr == 0xff19:
 		val = cs.apu.sounds[1].readFreqHighReg()
+	case addr == 0xff1b:
+		val = cs.apu.sounds[2].lengthData
 	case addr == 0xff1c:
 		val = cs.apu.sounds[2].readWaveOutLvlReg()
 	case addr == 0xff1e:
@@ -110,6 +116,9 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = cs.lcd.windowY
 	case addr == 0xff4b:
 		val = cs.lcd.windowX
+
+	case addr >= 0xff4c && addr < 0xff80:
+		val = 0xff // unmapped io bytes
 
 	case addr >= 0xff80 && addr < 0xffff:
 		val = cs.mem.highInternalRAM[addr-0xff80]
@@ -163,6 +172,8 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.timerModuloReg = val
 	case addr == 0xff07:
 		cs.writeTimerControlReg(val)
+	case addr == 0xff0f:
+		cs.writeInterruptFlagReg(val)
 
 	case addr == 0xff10:
 		cs.apu.sounds[0].writeSweepReg(val)
@@ -242,8 +253,6 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr == 0xff4b:
 		cs.lcd.writeWindowX(val)
 
-	case addr == 0xff0f:
-		cs.writeInterruptFlagReg(val)
 	case addr >= 0xff4c && addr < 0xff80:
 		// empty, nop (can be more complicated, see TCAGBD)
 	case addr >= 0xff80 && addr < 0xffff:
@@ -253,7 +262,6 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	default:
 		cs.stepErr(fmt.Sprintf("not implemented: write(0x%04x, %v)\n", addr, val))
 	}
-	//	fmt.Printf("\twriting 0x%02x to 0x%04x\n", val, addr)
 }
 
 func (cs *cpuState) write16(addr uint16, val uint16) {
