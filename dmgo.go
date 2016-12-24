@@ -55,11 +55,8 @@ func (cs *cpuState) runTimerCycle() {
 		return
 	}
 
-	cycleCount := map[byte]uint{
-		0: 1024,
-		1: 16,
-		2: 64,
-		3: 256,
+	cycleCount := [...]uint{
+		1024, 16, 64, 256,
 	}[cs.timerFreqSelector]
 	if cs.cycles&(cycleCount-1) == 0 {
 		cs.timerCounterReg++
