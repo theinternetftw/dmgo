@@ -390,11 +390,98 @@ func (cs *cpuState) callOp(cycles uint, instLen, callAddr uint16) {
 	cs.pc = callAddr
 }
 
+// NOTE: should be the relevant bits only
+func (cs *cpuState) getSrcFromOpBits(opBits byte) *byte {
+	switch opBits {
+	case 0:
+		return &cs.b
+	case 1:
+		return &cs.c
+	case 2:
+		return &cs.d
+	case 3:
+		return &cs.e
+	case 4:
+		return &cs.h
+	case 5:
+		return &cs.l
+	case 6:
+		return nil // (hl)
+	case 7:
+		return &cs.a
+	}
+	panic("getSrcFromOpBits: unknown bits passed")
+}
+
+func (cs *cpuState) loadOp(cyclesReg uint, cyclesHL uint, instLen uint16,
+	opcode byte, fnPtr func(uint, uint16, byte, uint16)) {
+	if reg := cs.getSrcFromOpBits(opcode & 0x07); reg != nil {
+		fnPtr(cyclesReg, instLen, *reg, 0x2222)
+	} else {
+		fnPtr(cyclesHL, instLen, cs.followHL(), 0x2222)
+	}
+}
+
+func (cs *cpuState) aluOp(cyclesReg uint, cyclesHL uint, instLen uint16,
+	opcode byte, fnPtr func(uint, uint16, byte)) {
+	if reg := cs.getSrcFromOpBits(opcode & 0x07); reg != nil {
+		fnPtr(cyclesReg, instLen, *reg)
+	} else {
+		fnPtr(cyclesHL, instLen, cs.followHL())
+	}
+}
+
+func (cs *cpuState) stepSimpleOp(opcode byte) bool {
+	switch opcode & 0xf8 {
+	case 0x40: // ld b, R_OR_(HL)
+		cs.loadOp(4, 8, 1, opcode, cs.setOpB)
+	case 0x48: // ld c, R_OR_(HL)
+		cs.loadOp(4, 8, 1, opcode, cs.setOpC)
+	case 0x50: // ld d, R_OR_(HL)
+		cs.loadOp(4, 8, 1, opcode, cs.setOpD)
+	case 0x58: // ld e, R_OR_(HL)
+		cs.loadOp(4, 8, 1, opcode, cs.setOpE)
+	case 0x60: // ld h, R_OR_(HL)
+		cs.loadOp(4, 8, 1, opcode, cs.setOpH)
+	case 0x68: // ld l, R_OR_(HL)
+		cs.loadOp(4, 8, 1, opcode, cs.setOpL)
+
+	case 0x78: // ld a, R_OR_(HL)
+		cs.loadOp(4, 8, 1, opcode, cs.setOpA)
+
+	case 0x80: // add R_OR_(HL)
+		cs.aluOp(4, 8, 1, opcode, cs.addOpA)
+	case 0x88: // adc R_OR_(HL)
+		cs.aluOp(4, 8, 1, opcode, cs.adcOpA)
+	case 0x90: // sub R_OR_(HL)
+		cs.aluOp(4, 8, 1, opcode, cs.subOpA)
+	case 0x98: // sbc R_OR_(HL)
+		cs.aluOp(4, 8, 1, opcode, cs.sbcOpA)
+	case 0xa0: // and R_OR_(HL)
+		cs.aluOp(4, 8, 1, opcode, cs.andOpA)
+	case 0xa8: // and R_OR_(HL)
+		cs.aluOp(4, 8, 1, opcode, cs.xorOpA)
+	case 0xb0: // or R_OR_(HL)
+		cs.aluOp(4, 8, 1, opcode, cs.orOpA)
+	case 0xb8: // cp R_OR_(HL)
+		cs.aluOp(4, 8, 1, opcode, cs.cpOp)
+	default:
+		return false
+	}
+	return true
+}
+
 func (cs *cpuState) stepOpcode() {
 
 	cs.steps++
 	opcode := cs.read(cs.pc)
 
+	// simple cases
+	if cs.stepSimpleOp(opcode) {
+		return
+	}
+
+	// complex cases
 	switch opcode {
 
 	case 0x00: // nop
@@ -542,108 +629,6 @@ func (cs *cpuState) stepOpcode() {
 		carry := uint16((cs.f>>4)&0x01) ^ 0x01
 		cs.setOpFn(4, 1, func() {}, 0x2000|carry)
 
-	case 0x40: // ld b, b
-		cs.setOpB(4, 1, cs.b, 0x2222)
-	case 0x41: // ld b, c
-		cs.setOpB(4, 1, cs.c, 0x2222)
-	case 0x42: // ld b, d
-		cs.setOpB(4, 1, cs.d, 0x2222)
-	case 0x43: // ld b, e
-		cs.setOpB(4, 1, cs.e, 0x2222)
-	case 0x44: // ld b, h
-		cs.setOpB(4, 1, cs.h, 0x2222)
-	case 0x45: // ld b, l
-		cs.setOpB(4, 1, cs.l, 0x2222)
-	case 0x46: // ld b, (hl)
-		cs.setOpB(8, 1, cs.followHL(), 0x2222)
-	case 0x47: // ld b, a
-		cs.setOpB(4, 1, cs.a, 0x2222)
-
-	case 0x48: // ld c, b
-		cs.setOpC(4, 1, cs.b, 0x2222)
-	case 0x49: // ld c, c
-		cs.setOpC(4, 1, cs.c, 0x2222)
-	case 0x4a: // ld c, d
-		cs.setOpC(4, 1, cs.d, 0x2222)
-	case 0x4b: // ld c, e
-		cs.setOpC(4, 1, cs.e, 0x2222)
-	case 0x4c: // ld c, h
-		cs.setOpC(4, 1, cs.h, 0x2222)
-	case 0x4d: // ld c, l
-		cs.setOpC(4, 1, cs.l, 0x2222)
-	case 0x4e: // ld c, (hl)
-		cs.setOpC(8, 1, cs.followHL(), 0x2222)
-	case 0x4f: // ld c, a
-		cs.setOpC(4, 1, cs.a, 0x2222)
-
-	case 0x50: // ld d, b
-		cs.setOpD(4, 1, cs.b, 0x2222)
-	case 0x51: // ld d, c
-		cs.setOpD(4, 1, cs.c, 0x2222)
-	case 0x52: // ld d, d
-		cs.setOpD(4, 1, cs.d, 0x2222)
-	case 0x53: // ld d, e
-		cs.setOpD(4, 1, cs.e, 0x2222)
-	case 0x54: // ld d, h
-		cs.setOpD(4, 1, cs.h, 0x2222)
-	case 0x55: // ld d, l
-		cs.setOpD(4, 1, cs.l, 0x2222)
-	case 0x56: // ld d, (hl)
-		cs.setOpD(8, 1, cs.followHL(), 0x2222)
-	case 0x57: // ld d, a
-		cs.setOpD(4, 1, cs.a, 0x2222)
-
-	case 0x58: // ld e, b
-		cs.setOpE(4, 1, cs.b, 0x2222)
-	case 0x59: // ld e, c
-		cs.setOpE(4, 1, cs.c, 0x2222)
-	case 0x5a: // ld e, d
-		cs.setOpE(4, 1, cs.d, 0x2222)
-	case 0x5b: // ld e, e
-		cs.setOpE(4, 1, cs.e, 0x2222)
-	case 0x5c: // ld e, h
-		cs.setOpE(4, 1, cs.h, 0x2222)
-	case 0x5d: // ld e, l
-		cs.setOpE(4, 1, cs.l, 0x2222)
-	case 0x5e: // ld e, (hl)
-		cs.setOpE(8, 1, cs.followHL(), 0x2222)
-	case 0x5f: // ld e, a
-		cs.setOpE(4, 1, cs.a, 0x2222)
-
-	case 0x60: // ld h, b
-		cs.setOpH(4, 1, cs.b, 0x2222)
-	case 0x61: // ld h, c
-		cs.setOpH(4, 1, cs.c, 0x2222)
-	case 0x62: // ld h, d
-		cs.setOpH(4, 1, cs.d, 0x2222)
-	case 0x63: // ld h, e
-		cs.setOpH(4, 1, cs.e, 0x2222)
-	case 0x64: // ld h, h
-		cs.setOpH(4, 1, cs.h, 0x2222)
-	case 0x65: // ld h, l
-		cs.setOpH(4, 1, cs.l, 0x2222)
-	case 0x66: // ld h, (hl)
-		cs.setOpH(8, 1, cs.followHL(), 0x2222)
-	case 0x67: // ld h, a
-		cs.setOpH(4, 1, cs.a, 0x2222)
-
-	case 0x68: // ld l, b
-		cs.setOpL(4, 1, cs.b, 0x2222)
-	case 0x69: // ld l, c
-		cs.setOpL(4, 1, cs.c, 0x2222)
-	case 0x6a: // ld l, d
-		cs.setOpL(4, 1, cs.d, 0x2222)
-	case 0x6b: // ld l, e
-		cs.setOpL(4, 1, cs.e, 0x2222)
-	case 0x6c: // ld l, h
-		cs.setOpL(4, 1, cs.h, 0x2222)
-	case 0x6d: // ld l, l
-		cs.setOpL(4, 1, cs.l, 0x2222)
-	case 0x6e: // ld l, (hl)
-		cs.setOpL(8, 1, cs.followHL(), 0x2222)
-	case 0x6f: // ld l, a
-		cs.setOpL(4, 1, cs.a, 0x2222)
-
 	case 0x70: // ld (hl), b
 		cs.setOpMem8(8, 1, cs.getHL(), cs.b, 0x2222)
 	case 0x71: // ld (hl), c
@@ -660,159 +645,6 @@ func (cs *cpuState) stepOpcode() {
 		cs.inHaltMode = true
 	case 0x77: // ld (hl), a
 		cs.setOpMem8(8, 1, cs.getHL(), cs.a, 0x2222)
-
-	case 0x78: // ld a, b
-		cs.setOpA(4, 1, cs.b, 0x2222)
-	case 0x79: // ld a, c
-		cs.setOpA(4, 1, cs.c, 0x2222)
-	case 0x7a: // ld a, d
-		cs.setOpA(4, 1, cs.d, 0x2222)
-	case 0x7b: // ld a, e
-		cs.setOpA(4, 1, cs.e, 0x2222)
-	case 0x7c: // ld a, h
-		cs.setOpA(4, 1, cs.h, 0x2222)
-	case 0x7d: // ld a, l
-		cs.setOpA(4, 1, cs.l, 0x2222)
-	case 0x7e: // ld a, (hl)
-		cs.setOpA(8, 1, cs.followHL(), 0x2222)
-	case 0x7f: // ld a, a
-		cs.setOpA(4, 1, cs.a, 0x2222)
-
-	case 0x80: // add a, b
-		cs.addOpA(4, 1, cs.b)
-	case 0x81: // add a, c
-		cs.addOpA(4, 1, cs.c)
-	case 0x82: // add a, d
-		cs.addOpA(4, 1, cs.d)
-	case 0x83: // add a, e
-		cs.addOpA(4, 1, cs.e)
-	case 0x84: // add a, h
-		cs.addOpA(4, 1, cs.h)
-	case 0x85: // add a, l
-		cs.addOpA(4, 1, cs.l)
-	case 0x86: // add a, (hl)
-		cs.addOpA(8, 1, cs.followHL())
-	case 0x87: // add a, a
-		cs.addOpA(4, 1, cs.a)
-
-	case 0x88: // adc a, b
-		cs.adcOpA(4, 1, cs.b)
-	case 0x89: // adc a, c
-		cs.adcOpA(4, 1, cs.c)
-	case 0x8a: // adc a, d
-		cs.adcOpA(4, 1, cs.d)
-	case 0x8b: // adc a, e
-		cs.adcOpA(4, 1, cs.e)
-	case 0x8c: // adc a, h
-		cs.adcOpA(4, 1, cs.h)
-	case 0x8d: // adc a, l
-		cs.adcOpA(4, 1, cs.l)
-	case 0x8e: // adc a, (hl)
-		cs.adcOpA(8, 1, cs.followHL())
-	case 0x8f: // adc a, a
-		cs.adcOpA(4, 1, cs.a)
-
-	case 0x90: // sub b
-		cs.subOpA(4, 1, cs.b)
-	case 0x91: // sub c
-		cs.subOpA(4, 1, cs.c)
-	case 0x92: // sub d
-		cs.subOpA(4, 1, cs.d)
-	case 0x93: // sub e
-		cs.subOpA(4, 1, cs.e)
-	case 0x94: // sub h
-		cs.subOpA(4, 1, cs.h)
-	case 0x95: // sub l
-		cs.subOpA(4, 1, cs.l)
-	case 0x96: // sub (hl)
-		cs.subOpA(8, 1, cs.followHL())
-	case 0x97: // sub a
-		cs.subOpA(4, 1, cs.a)
-
-	case 0x98: // sbc b
-		cs.sbcOpA(4, 1, cs.b)
-	case 0x99: // sbc c
-		cs.sbcOpA(4, 1, cs.c)
-	case 0x9a: // sbc d
-		cs.sbcOpA(4, 1, cs.d)
-	case 0x9b: // sbc e
-		cs.sbcOpA(4, 1, cs.e)
-	case 0x9c: // sbc h
-		cs.sbcOpA(4, 1, cs.h)
-	case 0x9d: // sbc l
-		cs.sbcOpA(4, 1, cs.l)
-	case 0x9e: // sbc (hl)
-		cs.sbcOpA(8, 1, cs.followHL())
-	case 0x9f: // sbc a
-		cs.sbcOpA(4, 1, cs.a)
-
-	case 0xa0: // and b
-		cs.andOpA(4, 1, cs.b)
-	case 0xa1: // and c
-		cs.andOpA(4, 1, cs.c)
-	case 0xa2: // and d
-		cs.andOpA(4, 1, cs.d)
-	case 0xa3: // and e
-		cs.andOpA(4, 1, cs.e)
-	case 0xa4: // and h
-		cs.andOpA(4, 1, cs.h)
-	case 0xa5: // and l
-		cs.andOpA(4, 1, cs.l)
-	case 0xa6: // and (hl)
-		cs.andOpA(8, 1, cs.followHL())
-	case 0xa7: // and a
-		cs.andOpA(4, 1, cs.a)
-
-	case 0xa8: // xor b
-		cs.xorOpA(4, 1, cs.b)
-	case 0xa9: // xor c
-		cs.xorOpA(4, 1, cs.c)
-	case 0xaa: // xor d
-		cs.xorOpA(4, 1, cs.d)
-	case 0xab: // xor e
-		cs.xorOpA(4, 1, cs.e)
-	case 0xac: // xor h
-		cs.xorOpA(4, 1, cs.h)
-	case 0xad: // xor l
-		cs.xorOpA(4, 1, cs.l)
-	case 0xae: // xor (hl)
-		cs.xorOpA(8, 1, cs.followHL())
-	case 0xaf: // xor a
-		cs.xorOpA(4, 1, cs.a)
-
-	case 0xb0: // or b
-		cs.orOpA(4, 1, cs.b)
-	case 0xb1: // or c
-		cs.orOpA(4, 1, cs.c)
-	case 0xb2: // or d
-		cs.orOpA(4, 1, cs.d)
-	case 0xb3: // or e
-		cs.orOpA(4, 1, cs.e)
-	case 0xb4: // or h
-		cs.orOpA(4, 1, cs.h)
-	case 0xb5: // or l
-		cs.orOpA(4, 1, cs.l)
-	case 0xb6: // or (hl)
-		cs.orOpA(8, 1, cs.followHL())
-	case 0xb7: // or a
-		cs.orOpA(4, 1, cs.a)
-
-	case 0xb8: // cp b
-		cs.cpOp(4, 1, cs.b)
-	case 0xb9: // cp c
-		cs.cpOp(4, 1, cs.c)
-	case 0xba: // cp d
-		cs.cpOp(4, 1, cs.d)
-	case 0xbb: // cp e
-		cs.cpOp(4, 1, cs.e)
-	case 0xbc: // cp h
-		cs.cpOp(4, 1, cs.h)
-	case 0xbd: // cp l
-		cs.cpOp(4, 1, cs.l)
-	case 0xbe: // cp (hl)
-		cs.cpOp(8, 1, cs.followHL())
-	case 0xbf: // cp a
-		cs.cpOp(4, 1, cs.a)
 
 	case 0xc0: // ret nz
 		cs.jmpRet(20, 8, 1, !cs.getZeroFlag())
