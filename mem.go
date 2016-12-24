@@ -47,8 +47,13 @@ func (cs *cpuState) read(addr uint16) byte {
 
 	case addr == 0xff00:
 		val = cs.joypad.readJoypadReg()
+	case addr == 0xff01:
+		val = cs.serialTransferData
 	case addr == 0xff02:
 		val = cs.readSerialControlReg()
+
+	case addr == 0xff03:
+		val = 0xff // unmapped bytes
 
 	case addr == 0xff04:
 		val = byte(cs.timerDivCycles >> 8)
@@ -59,37 +64,65 @@ func (cs *cpuState) read(addr uint16) byte {
 	case addr == 0xff07:
 		val = cs.readTimerControlReg()
 
+	case addr >= 0xff08 && addr < 0xff0f:
+		val = 0xff // unmapped bytes
+
 	case addr == 0xff0f:
 		val = cs.readInterruptFlagReg()
 
+	case addr == 0xff10:
+		val = cs.apu.sounds[0].readSweepReg()
 	case addr == 0xff11:
 		val = cs.apu.sounds[0].readLenDutyReg()
 	case addr == 0xff12:
 		val = cs.apu.sounds[0].readSoundEnvReg()
+	case addr == 0xff13:
+		val = cs.apu.sounds[0].readFreqLowReg()
 	case addr == 0xff14:
 		val = cs.apu.sounds[0].readFreqHighReg()
+
+	case addr == 0xff15:
+		val = 0xff // unmapped bytes
 	case addr == 0xff16:
 		val = cs.apu.sounds[1].readLenDutyReg()
 	case addr == 0xff17:
 		val = cs.apu.sounds[1].readSoundEnvReg()
+	case addr == 0xff18:
+		val = cs.apu.sounds[1].readFreqLowReg()
 	case addr == 0xff19:
 		val = cs.apu.sounds[1].readFreqHighReg()
+
+	case addr == 0xff1a:
+		val = boolBit(cs.apu.sounds[2].on, 7) | 0x7f
 	case addr == 0xff1b:
 		val = cs.apu.sounds[2].lengthData
 	case addr == 0xff1c:
 		val = cs.apu.sounds[2].readWaveOutLvlReg()
+	case addr == 0xff1d:
+		val = cs.apu.sounds[2].readFreqLowReg()
 	case addr == 0xff1e:
 		val = cs.apu.sounds[2].readFreqHighReg()
+
+	case addr == 0xff1f:
+		val = 0xff // unmapped bytes
+	case addr == 0xff20:
+		val = cs.apu.sounds[3].lengthData
 	case addr == 0xff21:
 		val = cs.apu.sounds[3].readSoundEnvReg()
+	case addr == 0xff22:
+		val = cs.apu.sounds[3].readPolyCounterReg()
 	case addr == 0xff23:
 		val = cs.apu.sounds[3].readFreqHighReg()
+
 	case addr == 0xff24:
 		val = cs.apu.readVolumeReg()
 	case addr == 0xff25:
 		val = cs.apu.readSpeakerSelectReg()
 	case addr == 0xff26:
 		val = cs.apu.readSoundOnOffReg()
+
+	case addr >= 0xff27 && addr < 0xff30:
+		val = 0xff // unmapped bytes
 
 	case addr >= 0xff30 && addr < 0xff40:
 		val = cs.apu.sounds[2].wavePatternRAM[addr-0xff30]
@@ -106,6 +139,10 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = cs.lcd.lyReg
 	case addr == 0xff45:
 		val = cs.lcd.lycReg
+
+	case addr == 0xff46:
+		val = 0xff // oam DMA reg, write-only
+
 	case addr == 0xff47:
 		val = cs.lcd.backgroundPaletteReg
 	case addr == 0xff48:
@@ -118,7 +155,7 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = cs.lcd.windowX
 
 	case addr >= 0xff4c && addr < 0xff80:
-		val = 0xff // unmapped io bytes
+		val = 0xff // unmapped bytes
 
 	case addr >= 0xff80 && addr < 0xffff:
 		val = cs.mem.highInternalRAM[addr-0xff80]
@@ -128,7 +165,6 @@ func (cs *cpuState) read(addr uint16) byte {
 	default:
 		cs.stepErr(fmt.Sprintf("not implemented: read at %x\n", addr))
 	}
-	//	fmt.Printf("\treading 0x%02x from 0x%04x\n", val, addr)
 	return val
 }
 
@@ -164,6 +200,9 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr == 0xff02:
 		cs.writeSerialControlReg(val)
 
+	case addr == 0xff03:
+		// nop (unmapped bytes)
+
 	case addr == 0xff04:
 		cs.timerDivCycles = 0
 	case addr == 0xff05:
@@ -172,6 +211,10 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.timerModuloReg = val
 	case addr == 0xff07:
 		cs.writeTimerControlReg(val)
+
+	case addr >= 0xff08 && addr < 0xff0f:
+		// nop (unmapped bytes)
+
 	case addr == 0xff0f:
 		cs.writeInterruptFlagReg(val)
 
@@ -185,6 +228,9 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.apu.sounds[0].writeFreqLowReg(val)
 	case addr == 0xff14:
 		cs.apu.sounds[0].writeFreqHighReg(val)
+
+	case addr == 0xff15:
+		// nop (unmapped bytes)
 
 	case addr == 0xff16:
 		cs.apu.sounds[1].writeLenDutyReg(val)
@@ -206,6 +252,9 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr == 0xff1e:
 		cs.apu.sounds[2].writeFreqHighReg(val)
 
+	case addr == 0xff1f:
+		// nop (unmapped bytes)
+
 	case addr == 0xff20:
 		cs.apu.sounds[3].lengthData = val & 0x1f
 	case addr == 0xff21:
@@ -221,6 +270,10 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.apu.writeSpeakerSelectReg(val)
 	case addr == 0xff26:
 		cs.apu.writeSoundOnOffReg(val)
+
+	case addr >= 0xff27 && addr < 0xff30:
+		// nop (unmapped bytes)
+
 	case addr >= 0xff30 && addr < 0xff40:
 		cs.apu.sounds[2].wavePatternRAM[addr-0xff30] = val
 
