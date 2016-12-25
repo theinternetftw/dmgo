@@ -74,6 +74,7 @@ func startEmu(filename string, window *windowing.SharedState, cartBytes []byte) 
 		if err != nil {
 			fmt.Println("error loading savefile,", err)
 		}
+		fmt.Println("loaded save!")
 	}
 
 	for {
@@ -100,8 +101,10 @@ func startEmu(filename string, window *windowing.SharedState, cartBytes []byte) 
 		}
 		if time.Now().Sub(lastSaveTime) > 5*time.Second {
 			ram := emu.GetCartRAM()
-			ioutil.WriteFile(saveFilename, ram, os.FileMode(0644))
-			lastSaveTime = time.Now()
+			if len(ram) > 0 {
+				ioutil.WriteFile(saveFilename, ram, os.FileMode(0644))
+				lastSaveTime = time.Now()
+			}
 		}
 	}
 }
