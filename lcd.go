@@ -71,13 +71,6 @@ func (lcd *lcd) init() {
 
 	lcd.framebuffer = make([]byte, 160*144*4)
 
-	// registers at powerup (DMG only?)
-	lcd.displayOn = true
-	lcd.displayBG = true
-	lcd.backgroundPaletteReg = 0xfc
-	lcd.objectPalette0Reg = 0xff
-	lcd.objectPalette1Reg = 0xff
-
 	lcd.accessingOAM = true // at start of line
 }
 
