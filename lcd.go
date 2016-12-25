@@ -43,7 +43,8 @@ type lcd struct {
 	readingData  bool
 
 	// needs to be here for buf, see runCycles
-	pendingDisplayWindow bool
+	// (everything except displayOn)
+	pendingControlBits byte
 
 	// control bits
 	displayOn                   bool
@@ -59,10 +60,6 @@ type lcd struct {
 	cyclesSinceVBlankStart uint
 
 	statIRQSignal bool
-}
-
-func (lcd *lcd) updateBufferedControlBits() {
-	lcd.displayWindow = lcd.pendingDisplayWindow
 }
 
 func (lcd *lcd) writeOAM(addr uint16, val byte) {
@@ -131,7 +128,7 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 		lcd.inHBlank = false
 		lcd.lyReg++
 
-		// It looks like some internal control bits are only
+		// It looks like most internal control bits are only
 		// updated at the beginning of each scanline.
 		// Putting this here because it looks like a game
 		// does something like "ok, ly=lyc for the last
@@ -453,33 +450,33 @@ func (lcd *lcd) writeWindowX(val byte) {
 	lcd.checkStateChangeAndAssignByte(&lcd.windowX, val)
 }
 
+func (lcd *lcd) updateBufferedControlBits() {
+	// everything except displayOn is buffered
+	boolsFromByte(lcd.pendingControlBits,
+		nil,
+		&lcd.useUpperWindowTileMap,
+		&lcd.displayWindow,
+		&lcd.useLowerBGAndWindowTileData,
+		&lcd.useUpperBGTileMap,
+		&lcd.bigSprites,
+		&lcd.displaySprites,
+		&lcd.displayBG,
+	)
+}
 func (lcd *lcd) writeControlReg(val byte) {
 	if lcd.readControlReg() != val {
 		lcd.stateChangeSinceLastVblank = true
 
-		boolsFromByte(val,
-			&lcd.displayOn,
-			&lcd.useUpperWindowTileMap,
-			&lcd.pendingDisplayWindow,
-			&lcd.useLowerBGAndWindowTileData,
-			&lcd.useUpperBGTileMap,
-			&lcd.bigSprites,
-			&lcd.displaySprites,
-			&lcd.displayBG,
-		)
+		lcd.pendingControlBits = val
+
+		lcd.displayOn = val&0x80 != 0
+		if !lcd.displayOn {
+			lcd.lyReg = 0
+		}
 	}
 }
 func (lcd *lcd) readControlReg() byte {
-	return byteFromBools(
-		lcd.displayOn,
-		lcd.useUpperWindowTileMap,
-		lcd.pendingDisplayWindow,
-		lcd.useLowerBGAndWindowTileData,
-		lcd.useUpperBGTileMap,
-		lcd.bigSprites,
-		lcd.displaySprites,
-		lcd.displayBG,
-	)
+	return lcd.pendingControlBits
 }
 
 func (lcd *lcd) writeStatusReg(val byte) {
