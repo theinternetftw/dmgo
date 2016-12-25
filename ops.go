@@ -312,34 +312,6 @@ func (cs *cpuState) lcdStatInterruptsToString() string {
 	}
 	return string(out)
 }
-func (cs *cpuState) lcdCtrlToString() string {
-	out := []byte("dp0|wm0|dw0|td0|bm0|bs0|ds0|db0")
-	if cs.lcd.displayOn {
-		out[2] = '1'
-	}
-	if cs.lcd.useUpperWindowTileMap {
-		out[6] = '1'
-	}
-	if cs.lcd.pendingDisplayWindow {
-		out[10] = '1'
-	}
-	if cs.lcd.useLowerBGAndWindowTileData {
-		out[14] = '1'
-	}
-	if cs.lcd.useUpperBGTileMap {
-		out[18] = '1'
-	}
-	if cs.lcd.bigSprites {
-		out[22] = '1'
-	}
-	if cs.lcd.displaySprites {
-		out[26] = '1'
-	}
-	if cs.lcd.displayBG {
-		out[30] = '1'
-	}
-	return string(out)
-}
 func (cs *cpuState) debugStatusLine() string {
 
 	return fmt.Sprintf("step:%08d, ", cs.steps) +
@@ -462,7 +434,7 @@ func (cs *cpuState) stepSimpleOp(opcode byte) bool {
 		cs.aluOp(4, 8, 1, opcode, cs.sbcOpA)
 	case 0xa0: // and R_OR_(HL)
 		cs.aluOp(4, 8, 1, opcode, cs.andOpA)
-	case 0xa8: // and R_OR_(HL)
+	case 0xa8: // xor R_OR_(HL)
 		cs.aluOp(4, 8, 1, opcode, cs.xorOpA)
 	case 0xb0: // or R_OR_(HL)
 		cs.aluOp(4, 8, 1, opcode, cs.orOpA)
