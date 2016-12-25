@@ -322,7 +322,7 @@ func (lcd *lcd) renderScanline() {
 		lcd.spriteMask[i] = false
 	}
 
-	if lcd.displayBG || true {
+	if lcd.displayBG {
 		bgY := y + lcd.scrollY
 		for x := byte(0); x < 160; x++ {
 			bgX := x + lcd.scrollX
