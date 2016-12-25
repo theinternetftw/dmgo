@@ -1339,7 +1339,7 @@ func (cs *cpuState) rlaOp() {
 	val := cs.a
 	result := (val << 1) | ((cs.f >> 4) & 0x01)
 	carry := val >> 7
-	cs.setOpA(4, 1, result, zFlag(result)|uint16(carry))
+	cs.setOpA(4, 1, result, uint16(carry)) // rla is 000c, unlike other rl's
 }
 func (cs *cpuState) rlOpReg(reg *byte) {
 	val := *reg
@@ -1358,7 +1358,7 @@ func (cs *cpuState) rraOp() {
 	val := cs.a
 	result := ((cs.f << 3) & 0x80) | (val >> 1)
 	carry := val & 0x01
-	cs.setOpA(4, 1, result, zFlag(result)|uint16(carry))
+	cs.setOpA(4, 1, result, uint16(carry)) // rra is 000c, unlike other rr's
 }
 func (cs *cpuState) rrOpReg(reg *byte) {
 	val := *reg
@@ -1377,7 +1377,7 @@ func (cs *cpuState) rlcaOp() {
 	val := cs.a
 	result := (val << 1) | (val >> 7)
 	carry := val >> 7
-	cs.setOpA(4, 1, result, zFlag(result)|uint16(carry))
+	cs.setOpA(4, 1, result, uint16(carry)) // rlca is 000c, unlike other rlc's
 }
 func (cs *cpuState) rlcOpReg(reg *byte) {
 	val := *reg
@@ -1396,7 +1396,7 @@ func (cs *cpuState) rrcaOp() {
 	val := cs.a
 	result := (val << 7) | (val >> 1)
 	carry := val & 0x01
-	cs.setOpA(4, 1, result, zFlag(result)|uint16(carry))
+	cs.setOpA(4, 1, result, uint16(carry)) // rrca is 000c, unlike other rrc's
 }
 func (cs *cpuState) rrcOpReg(reg *byte) {
 	val := *reg
