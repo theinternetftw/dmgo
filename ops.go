@@ -710,7 +710,7 @@ func (cs *cpuState) stepOpcode() {
 		cs.callOp(16, 1, 0x0020)
 
 	case 0xe8: // add sp, r8
-		v1, v2 := cs.sp, uint16(int(cs.read(cs.pc+1)))
+		v1, v2 := cs.sp, uint16(int8(cs.read(cs.pc+1)))
 		cs.setOpSP(16, 2, v1+v2, (hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
 	case 0xe9: // jp hl (also written jp (hl))
 		cs.setOpPC(4, 1, cs.getHL(), 0x2222)
