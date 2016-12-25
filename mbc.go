@@ -47,12 +47,55 @@ type mbc interface {
 	GetROMBankNumber() int
 }
 
-type nullMBC struct{}
-
-func (mbc *nullMBC) GetROMBankNumber() int {
-	return 1
+type bankNumbers struct {
+	romBankNumber uint16
+	ramBankNumber uint16
+	maxRAMBank    uint16
+	maxROMBank    uint16
 }
-func (mbc *nullMBC) Init(mem *mem) {}
+
+func (bn *bankNumbers) GetROMBankNumber() int {
+	return int(bn.romBankNumber)
+}
+func (bn *bankNumbers) setROMBankNumber(bankNum uint16) {
+	// ran into this in dkland2, which will write trash
+	// past the amount of rom they have. I figure they
+	// don't have the lines hooked up, so let's only
+	// "hook up" lines that are actually addressable
+	topBit := uint16(0x8000)
+	for bn.maxROMBank < topBit {
+		bankNum &^= topBit
+		topBit >>= 1
+	}
+	bn.romBankNumber = bankNum
+}
+func (bn *bankNumbers) setRAMBankNumber(bankNum uint16) {
+	topBit := uint16(0x8000)
+	for bn.maxRAMBank < topBit {
+		bankNum &^= topBit
+		topBit >>= 1
+	}
+	bn.ramBankNumber = bankNum
+}
+func (bn *bankNumbers) init(mem *mem) {
+	bn.maxROMBank = uint16(len(mem.cart)/0x4000 - 1)
+	bn.maxRAMBank = uint16(len(mem.cartRAM)/0x2000 - 1)
+}
+func (bn *bankNumbers) romBankOffset() uint {
+	return uint(bn.romBankNumber) * 0x4000
+}
+func (bn *bankNumbers) ramBankOffset() uint {
+	return uint(bn.ramBankNumber) * 0x2000
+}
+
+type nullMBC struct {
+	bankNumbers
+}
+
+func (mbc *nullMBC) Init(mem *mem) {
+	mbc.bankNumbers.init(mem)
+	mbc.romBankNumber = 1 // set up a flat map
+}
 func (mbc *nullMBC) Read(mem *mem, addr uint16) byte {
 	switch {
 	case addr < 0x8000:
@@ -80,19 +123,17 @@ const (
 )
 
 type mbc1 struct {
-	romBankNumber byte
-	ramBankNumber byte
-	ramEnabled    bool
-	bankingMode   int
+	bankNumbers
+
+	ramEnabled  bool
+	bankingMode int
 }
 
 func (mbc *mbc1) Init(mem *mem) {
+	mbc.bankNumbers.init(mem)
 	mbc.romBankNumber = 1 // can't go lower
 }
 
-func (mbc *mbc1) GetROMBankNumber() int {
-	return int(mbc.romBankNumber)
-}
 func (mbc *mbc1) Read(mem *mem, addr uint16) byte {
 	switch {
 	case addr < 0x4000:
@@ -119,36 +160,35 @@ func (mbc *mbc1) Write(mem *mem, addr uint16, val byte) {
 	case addr < 0x2000:
 		mbc.ramEnabled = val&0x0f == 0x0a
 	case addr >= 0x2000 && addr < 0x4000:
-		bankNum := val & 0x1f
+		bankNum := uint16(val & 0x1f)
 		if bankNum == 0 {
-			// no bank 0 selection. note that this also (when
-			// using many banks and the 2nd reg) disallows any
-			// bank with 0 for the bottom 5 bits, i.e. no 0x20,
-			// 0x40, or 0x60 banks, trying to do so will select
-			// 0x21, 0x41, or 0x61. Thus a max of 125 banks (128-3),
-			// for MBC1
+			// No bank 0 selection. This also disallows any bank
+			// with 0 for the bottom 5 bits, i.e. no 0x20, 0x40,
+			// or 0x60 banks. Trying to select them will select
+			// 0x21, 0x41, or 0x61. Thus a max of 125 banks,
+			// 128-3, for MBC1
 			bankNum = 1
 		}
-		mbc.romBankNumber = (mbc.romBankNumber &^ 0x1f) | bankNum
+		bankNum = (mbc.romBankNumber &^ 0x1f) | bankNum
+		mbc.setROMBankNumber(bankNum)
 	case addr >= 0x4000 && addr < 0x6000:
-		valBits := val & 0x03
+		valBits := uint16(val & 0x03)
 		if mbc.bankingMode == bankingModeRAM {
-			mbc.ramBankNumber = valBits
+			mbc.setRAMBankNumber(valBits)
 		} else { // ROM mode
-			mbc.romBankNumber = (mbc.romBankNumber & 0x1f) | (valBits << 5)
+			bankNum := (valBits << 5) | (mbc.romBankNumber & 0x1f)
+			mbc.setROMBankNumber(bankNum)
 		}
 	case addr >= 0x6000 && addr < 0x8000:
 		// NOTE: do those two bits from the RAM number need to
-		// be passed over to ROM after banking mode changes?
-		// (and vice versa?)
+		// be passed over to the ROM number after the banking
+		// mode changes? (and vice versa?)
 		if (val&0x01) > 0 && mbc.bankingMode != bankingModeRAM {
 			mbc.bankingMode = bankingModeRAM
-			//mbc.ramBankNumber = (mbc.romBankNumber >> 5) & 0x03
-			mbc.romBankNumber = mbc.romBankNumber & 0x1f
+			mbc.setROMBankNumber(mbc.romBankNumber & 0x1f)
 		} else {
 			mbc.bankingMode = bankingModeROM
-			//mbc.romBankNumber = (mbc.romBankNumber & 0x1f) | (mbc.ramBankNumber << 5)
-			mbc.ramBankNumber = 0
+			mbc.setRAMBankNumber(0)
 		}
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
@@ -160,25 +200,17 @@ func (mbc *mbc1) Write(mem *mem, addr uint16, val byte) {
 	}
 }
 
-func (mbc *mbc1) romBankOffset() uint {
-	return uint(mbc.romBankNumber) * 0x4000
-}
-func (mbc *mbc1) ramBankOffset() uint {
-	return uint(mbc.ramBankNumber) * 0x2000
-}
-
 type mbc2 struct {
-	romBankNumber byte
-	ramEnabled    bool
+	bankNumbers
+
+	ramEnabled bool
 }
 
 func (mbc *mbc2) Init(mem *mem) {
+	mbc.bankNumbers.init(mem)
 	mbc.romBankNumber = 1 // can't go lower
 }
 
-func (mbc *mbc2) GetROMBankNumber() int {
-	return int(mbc.romBankNumber)
-}
 func (mbc *mbc2) Read(mem *mem, addr uint16) byte {
 	switch {
 	case addr < 0x4000:
@@ -192,7 +224,7 @@ func (mbc *mbc2) Read(mem *mem, addr uint16) byte {
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr - 0xa000)
 		if mbc.ramEnabled && int(localAddr) < len(mem.cartRAM) {
-			// 4-bit ram (NOTE: pull high nibble down or up?)
+			// 4-bit ram (FIXME: pull high nibble down or up?)
 			return mem.cartRAM[localAddr] & 0x0f
 		}
 		return 0xff
@@ -214,12 +246,12 @@ func (mbc *mbc2) Write(mem *mem, addr uint16, val byte) {
 			// nop, this bit must be one
 		} else {
 			// 16 rom banks
-			bankNum := val & 0x0f
+			bankNum := uint16(val & 0x0f)
 			if bankNum == 0 {
 				// no bank 0 selection.
 				bankNum = 1
 			}
-			mbc.romBankNumber = bankNum
+			mbc.setROMBankNumber(bankNum)
 		}
 	case addr >= 0x4000 && addr < 0x8000:
 		// nop
@@ -234,14 +266,10 @@ func (mbc *mbc2) Write(mem *mem, addr uint16, val byte) {
 	}
 }
 
-func (mbc *mbc2) romBankOffset() uint {
-	return uint(mbc.romBankNumber) * 0x4000
-}
-
 type mbc3 struct {
-	romBankNumber byte
-	ramBankNumber byte
-	ramEnabled    bool
+	bankNumbers
+
+	ramEnabled bool
 
 	seconds byte
 	minutes byte
@@ -261,9 +289,12 @@ type mbc3 struct {
 }
 
 func (mbc *mbc3) Init(mem *mem) {
+	mbc.bankNumbers.init(mem)
 	mbc.romBankNumber = 1 // can't go lower
 
-	// NOTE: could load last time, vals, and carry bit from save or something here, if we want
+	// NOTE: could load this/vals/carry from save or something
+	// here. Considering .sav is a simple format (just the RAM
+	// proper), should make e.g. an additional .rtc file for this
 	mbc.timeAtLastSet = time.Now()
 }
 
@@ -305,9 +336,6 @@ func (mbc *mbc3) updateLatch() {
 	mbc.latchedDays = mbc.days
 }
 
-func (mbc *mbc3) GetROMBankNumber() int {
-	return int(mbc.romBankNumber)
-}
 func (mbc *mbc3) Read(mem *mem, addr uint16) byte {
 	switch {
 	case addr < 0x4000:
@@ -347,18 +375,19 @@ func (mbc *mbc3) Write(mem *mem, addr uint16, val byte) {
 	case addr < 0x2000:
 		mbc.ramEnabled = val&0x0f == 0x0a
 	case addr >= 0x2000 && addr < 0x4000:
-		bankNum := val &^ 0x80 // 7bit selector
+		bankNum := uint16(val &^ 0x80) // 7bit selector
 		if bankNum == 0 {
 			// no bank 0 selection.
 			bankNum = 1
 		}
-		mbc.romBankNumber = bankNum
+		mbc.setROMBankNumber(bankNum)
 	case addr >= 0x4000 && addr < 0x6000:
 		switch val {
 		case 0, 1, 2, 3:
-			mbc.ramBankNumber = val
+			mbc.setRAMBankNumber(uint16(val))
 		case 8, 9, 10, 11, 12:
-			mbc.ramBankNumber = val
+			// sidestep the bank set semantics for the rtc regs
+			mbc.ramBankNumber = uint16(val)
 		default:
 			// all others nop
 			// NOTE: or should they e.g. select a bank that returns all 0xff's?
@@ -401,27 +430,19 @@ func (mbc *mbc3) Write(mem *mem, addr uint16, val byte) {
 	}
 }
 
-func (mbc *mbc3) romBankOffset() uint {
-	return uint(mbc.romBankNumber) * 0x4000
-}
-func (mbc *mbc3) ramBankOffset() uint {
-	return uint(mbc.ramBankNumber) * 0x2000
-}
-
 type mbc5 struct {
-	romBankNumber uint
-	ramBankNumber uint
-	ramEnabled    bool
+	bankNumbers
+
+	ramEnabled bool
 }
 
 func (mbc *mbc5) Init(mem *mem) {
-	// NOTE: can do bank 0 now, do we still start with 1?
+	mbc.bankNumbers.init(mem)
+
+	// NOTE: can do bank 0 now, but still start with 1
 	mbc.romBankNumber = 1
 }
 
-func (mbc *mbc5) GetROMBankNumber() int {
-	return int(mbc.romBankNumber)
-}
 func (mbc *mbc5) Read(mem *mem, addr uint16) byte {
 	switch {
 	case addr < 0x4000:
@@ -448,14 +469,14 @@ func (mbc *mbc5) Write(mem *mem, addr uint16, val byte) {
 	case addr < 0x2000:
 		mbc.ramEnabled = val&0x0f == 0x0a
 	case addr >= 0x2000 && addr < 0x3000:
-		mbc.romBankNumber = (mbc.romBankNumber &^ 0xff) | uint(val)
+		mbc.setROMBankNumber((mbc.romBankNumber &^ 0xff) | uint16(val))
 	case addr >= 0x3000 && addr < 0x4000:
 		// NOTE: TCAGBD says that games that don't use the 9th bit
 		// can use this to set the lower eight! I'll wait until I
 		// see a game try to do that before impl'ing
-		mbc.romBankNumber = (mbc.romBankNumber &^ 0x100) | (uint(val&0x01) << 8)
+		mbc.setROMBankNumber((mbc.romBankNumber &^ 0x100) | uint16(val&0x01)<<8)
 	case addr >= 0x4000 && addr < 0x6000:
-		mbc.ramBankNumber = uint(val & 0x0f)
+		mbc.setRAMBankNumber(uint16(val & 0x0f))
 	case addr >= 0x6000 && addr < 0x8000:
 		// nop?
 	case addr >= 0xa000 && addr < 0xc000:
@@ -466,11 +487,4 @@ func (mbc *mbc5) Write(mem *mem, addr uint16, val byte) {
 	default:
 		panic(fmt.Sprintf("mbc5: not implemented: write at %x\n", addr))
 	}
-}
-
-func (mbc *mbc5) romBankOffset() uint {
-	return mbc.romBankNumber * 0x4000
-}
-func (mbc *mbc5) ramBankOffset() uint {
-	return mbc.ramBankNumber * 0x2000
 }
