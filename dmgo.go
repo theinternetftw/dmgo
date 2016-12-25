@@ -262,9 +262,9 @@ func (cs *cpuState) setPC(val uint16) { cs.pc = val }
 
 func newState(cart []byte) *cpuState {
 	cartInfo := ParseCartInfo(cart)
-	if cartInfo.cgbOnly() {
-		fatalErr("CGB-only not supported yet")
-	}
+	// if cartInfo.cgbOnly() {
+	// 	fatalErr("CGB-only not supported yet")
+	// }
 	mem := mem{
 		cart:    cart,
 		cartRAM: make([]byte, cartInfo.GetRAMSize()),
