@@ -1,4 +1,4 @@
-package windowing
+package platform
 
 import (
 	"image"
@@ -14,14 +14,14 @@ import (
 	"golang.org/x/mobile/event/size"
 )
 
-// SharedState contains what the window loop and program proper both need to touch
-type SharedState struct {
+// WindowState contains what the window loop and program proper both need to touch
+type WindowState struct {
 	// the Width of the framebuffer
 	Width int
 	// the Height of the framebuffer
 	Height int
 
-	// a Mutex that must be held when reading or writing in SharedState
+	// a Mutex that must be held when reading or writing in WindowState
 	Mutex sync.Mutex
 
 	// Pix is the raw RGBA bytes of the framebuffer
@@ -32,11 +32,10 @@ type SharedState struct {
 
 	eventQueue screen.EventDeque
 	drawRequested bool
-	// e.g. keyboard/mouse goes here
 }
 
 // CharIsDown returns the key state for that char
-func (s *SharedState) CharIsDown(c rune) bool {
+func (s *WindowState) CharIsDown(c rune) bool {
 	val, ok := s.runeMap[c]
 	if ok {
 		return val
@@ -44,7 +43,7 @@ func (s *SharedState) CharIsDown(c rune) bool {
 	return false
 }
 // CodeIsDown returns the key state for that keyCode
-func (s *SharedState) CodeIsDown(c key.Code) bool {
+func (s *WindowState) CodeIsDown(c key.Code) bool {
 	val, ok := s.keycodeMap[c]
 	if ok {
 		return val
@@ -52,7 +51,7 @@ func (s *SharedState) CodeIsDown(c key.Code) bool {
 	return false
 }
 
-func (s *SharedState) updateKeymap(e key.Event) {
+func (s *WindowState) updateKeymap(e key.Event) {
 	if e.Direction == key.DirRelease {
 		s.keycodeMap[e.Code] = false
 		s.runeMap[e.Rune] = false
@@ -64,7 +63,7 @@ func (s *SharedState) updateKeymap(e key.Event) {
 
 // RequestDraw puts a draw request on the window loop queue
 // It is assumed the mutex is already held when this function is called.
-func (s *SharedState) RequestDraw() {
+func (s *WindowState) RequestDraw() {
 	if !s.drawRequested {
 		s.eventQueue.Send(drawRequest{})
 		s.drawRequested = true
@@ -74,7 +73,7 @@ func (s *SharedState) RequestDraw() {
 type drawRequest struct {}
 
 // InitDisplayLoop creates a window and starts event loop
-func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, updateLoop func(*SharedState)) {
+func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, updateLoop func(*WindowState)) {
 	driver.Main(func (s screen.Screen) {
 
 		w, err := s.NewWindow(&screen.NewWindowOptions{windowWidth, windowHeight})
@@ -92,7 +91,7 @@ func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, upd
 			panic(err)
 		}
 
-		sharedState := SharedState{
+		windowState := WindowState{
 			Width: frameWidth,
 			Height: frameHeight,
 			Pix: make([]byte, 4*frameWidth*frameHeight),
@@ -101,7 +100,7 @@ func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, upd
 			runeMap: map[rune]bool{},
 		}
 
-		go updateLoop(&sharedState)
+		go updateLoop(&windowState)
 
 		szRect := buf.Bounds()
 		justResized := true
@@ -109,21 +108,23 @@ func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, upd
 		for {
 			publish := false
 
+
 			switch e := w.NextEvent().(type) {
 			case lifecycle.Event:
 				if e.To == lifecycle.StageDead {
 					return
 				}
 			case key.Event:
-				sharedState.Mutex.Lock()
-				sharedState.updateKeymap(e)
-				sharedState.Mutex.Unlock()
+				windowState.Mutex.Lock()
+				windowState.updateKeymap(e)
+				windowState.Mutex.Unlock()
+
 			case drawRequest:
-				sharedState.Mutex.Lock()
-				copy(buf.RGBA().Pix, sharedState.Pix)
+				windowState.Mutex.Lock()
+				copy(buf.RGBA().Pix, windowState.Pix)
 				tex.Upload(image.Point{0, 0}, buf, buf.Bounds())
-				sharedState.drawRequested = false
-				sharedState.Mutex.Unlock()
+				windowState.drawRequested = false
+				windowState.Mutex.Unlock()
 
 				publish = true
 			case size.Event:

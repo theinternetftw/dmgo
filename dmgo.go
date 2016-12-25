@@ -348,15 +348,17 @@ func (cs *cpuState) runCycles(ncycles uint) {
 		cs.cycles++
 		cs.runTimerCycle()
 		cs.runSerialCycle()
+		cs.apu.runCycle()
 	}
 	cs.lcd.runCycles(cs, ncycles)
 }
 
-// Emulator exposes the publi1 facing fns for an emulation session
+// Emulator exposes the public facing fns for an emulation session
 type Emulator interface {
 	Framebuffer() []byte
 	FlipRequested() bool
 	FrameWaitRequested() bool
+	GetSoundBuffer(int) []byte
 	GetCartRAM() []byte
 	SetCartRAM([]byte) error
 	UpdateInput(input Input)
@@ -372,6 +374,19 @@ func NewEmulator(cart []byte) Emulator {
 // TODO: add dt?
 type Input struct {
 	Joypad Joypad
+}
+
+// GetSoundBuffer returns a 44100hz * 16bit * 2ch sound buffer.
+// The maximum length of buffer desired is requested, and that
+// amount of buffer is removed from the emulator and returned.
+func (cs *cpuState) GetSoundBuffer(maxBytesWanted int) []byte {
+	bytesToReturn := len(cs.apu.buffer)
+	if maxBytesWanted < bytesToReturn {
+		bytesToReturn = maxBytesWanted
+	}
+	result := cs.apu.buffer[:bytesToReturn]
+	cs.apu.buffer = cs.apu.buffer[bytesToReturn:]
+	return result
 }
 
 // GetCartRAM returns the current state of external RAM

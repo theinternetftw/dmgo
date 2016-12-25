@@ -1,7 +1,13 @@
 package dmgo
 
+import "math"
+
 type apu struct {
 	allSoundsOn bool
+
+	debugFreq float64
+	t         float64
+	buffer    []byte
 
 	sounds [4]sound
 
@@ -18,6 +24,24 @@ func (apu *apu) init() {
 	apu.sounds[1].soundType = squareSoundType
 	apu.sounds[2].soundType = waveSoundType
 	apu.sounds[3].soundType = noiseSoundType
+}
+
+const timePerSample = 1.0 / 44100.0
+
+func (apu *apu) runCycle() {
+	apu.debugFreq = 440
+	for len(apu.buffer) < 2*2*8192*8 {
+		sample := int16((4.0*math.Abs(apu.t-0.5) - 1.0) * 32767)
+		apu.buffer = append(apu.buffer,
+			byte(sample&0xff),
+			byte(sample>>8),
+			byte(sample&0xff),
+			byte(sample>>8))
+		apu.t += apu.debugFreq * timePerSample
+		if apu.t > 1.0 {
+			apu.t -= 1.0
+		}
+	}
 }
 
 type envDir bool

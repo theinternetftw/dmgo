@@ -3,7 +3,7 @@ package main
 import (
 	"theinternetftw.com/dmgo"
 	"theinternetftw.com/dmgo/profiling"
-	"theinternetftw.com/dmgo/windowing"
+	"theinternetftw.com/dmgo/platform"
 
 	"fmt"
 	"io/ioutil"
@@ -27,13 +27,13 @@ func main() {
 	fmt.Printf("Cart RAM size: %d\n", cartInfo.GetRAMSize())
 	fmt.Printf("Cart ROM size: %d\n", cartInfo.GetROMSize())
 
-	windowing.InitDisplayLoop(160*4, 144*4, 160, 144, func(sharedState *windowing.SharedState) {
+	platform.InitDisplayLoop(160*4, 144*4, 160, 144, func(sharedState *platform.WindowState) {
 		startEmu(cartFilename, sharedState, cartBytes)
 	})
 }
 
 // NOTE: assumes you have the mutex when you call
-func makeInput(window *windowing.SharedState) dmgo.Input {
+func makeInput(window *platform.WindowState) dmgo.Input {
 	return dmgo.Input {
 		Joypad: dmgo.Joypad {
 			Sel: window.CharIsDown('t'),
@@ -61,7 +61,7 @@ func startHeadlessEmu(cartBytes []byte) {
 	}
 }
 
-func startEmu(filename string, window *windowing.SharedState, cartBytes []byte) {
+func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 	emu := dmgo.NewEmulator(cartBytes)
 
 	// FIXME: settings are for debug right now
@@ -77,6 +77,9 @@ func startEmu(filename string, window *windowing.SharedState, cartBytes []byte) 
 		fmt.Println("loaded save!")
 	}
 
+	audio, err := platform.OpenAudioBuffer(4, 8192, 44100, 16, 2)
+	dieIf(err)
+
 	for {
 		window.Mutex.Lock()
 		newInput := makeInput(window)
@@ -84,6 +87,12 @@ func startEmu(filename string, window *windowing.SharedState, cartBytes []byte) 
 
 		emu.UpdateInput(newInput)
 		emu.Step()
+
+		//emuSound := emu.GetSoundBuffer(audio.BufferAvailable())
+		emuSound := emu.GetSoundBuffer(8192*2*2*64)
+		if len(emuSound) > 0 {
+			audio.Write(emuSound)
+		}
 
 		if emu.FlipRequested() {
 			window.Mutex.Lock()
