@@ -99,6 +99,9 @@ func (mbc *mbc1) Read(mem *mem, addr uint16) byte {
 		return mem.cart[addr]
 	case addr >= 0x4000 && addr < 0x8000:
 		localAddr := uint(addr-0x4000) + mbc.romBankOffset()
+		if localAddr >= uint(len(mem.cart)) {
+			panic(fmt.Sprintf("mbc1: bad rom local addr: 0x%06x, bank number: %d\r\n", localAddr, mbc.romBankNumber))
+		}
 		return mem.cart[localAddr]
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
@@ -182,6 +185,9 @@ func (mbc *mbc2) Read(mem *mem, addr uint16) byte {
 		return mem.cart[addr]
 	case addr >= 0x4000 && addr < 0x8000:
 		localAddr := uint(addr-0x4000) + mbc.romBankOffset()
+		if localAddr >= uint(len(mem.cart)) {
+			panic(fmt.Sprintf("mbc2: bad rom local addr: 0x%06x, bank number: %d\r\n", localAddr, mbc.romBankNumber))
+		}
 		return mem.cart[localAddr]
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr - 0xa000)
@@ -308,6 +314,9 @@ func (mbc *mbc3) Read(mem *mem, addr uint16) byte {
 		return mem.cart[addr]
 	case addr >= 0x4000 && addr < 0x8000:
 		localAddr := uint(addr-0x4000) + mbc.romBankOffset()
+		if localAddr >= uint(len(mem.cart)) {
+			panic(fmt.Sprintf("mbc3: bad rom local addr: 0x%06x, bank number: %d\r\n", localAddr, mbc.romBankNumber))
+		}
 		return mem.cart[localAddr]
 	case addr >= 0xa000 && addr < 0xc000:
 		switch mbc.ramBankNumber {
@@ -419,6 +428,9 @@ func (mbc *mbc5) Read(mem *mem, addr uint16) byte {
 		return mem.cart[addr]
 	case addr >= 0x4000 && addr < 0x8000:
 		localAddr := uint(addr-0x4000) + mbc.romBankOffset()
+		if localAddr >= uint(len(mem.cart)) {
+			panic(fmt.Sprintf("mbc5: bad rom local addr: 0x%06x, bank number: %d\r\n", localAddr, mbc.romBankNumber))
+		}
 		return mem.cart[localAddr]
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
