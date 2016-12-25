@@ -113,6 +113,14 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	if lcd.readingData && lcd.cyclesSinceLYInc >= 252 {
 		lcd.readingData = false
 		lcd.inHBlank = true
+
+		// It looks like most internal control bits are only
+		// updated at certain times. Some games (like tennis)
+		// do something like "ok, ly=lyc for the last line of
+		// my window, so lets turn the window off", which would
+		// fail to draw that last line if you didn't buffer up
+		// those changes until the hblank.
+		lcd.updateBufferedControlBits()
 	}
 
 	if lcd.cyclesSinceLYInc >= 456 {
@@ -127,16 +135,6 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 		}
 		lcd.inHBlank = false
 		lcd.lyReg++
-
-		// It looks like most internal control bits are only
-		// updated at the beginning of each scanline.
-		// Putting this here because it looks like a game
-		// does something like "ok, ly=lyc for the last
-		// line of my window, so lets turn the window off",
-		// which would fail to draw that last line if you
-		// didn't buffer up those changes until after the
-		// hblank.
-		lcd.updateBufferedControlBits()
 	}
 
 	if lcd.lyReg >= 144 && !lcd.inVBlank {
