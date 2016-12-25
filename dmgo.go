@@ -68,7 +68,7 @@ func (cs *cpuState) runTimerCycle() {
 }
 
 func (cs *cpuState) readTimerControlReg() byte {
-	return boolBit(cs.timerOn, 2) | cs.timerFreqSelector
+	return 0xf8 | boolBit(cs.timerOn, 2) | cs.timerFreqSelector
 }
 func (cs *cpuState) writeTimerControlReg(val byte) {
 	cs.timerOn = val&0x04 != 0
@@ -271,14 +271,11 @@ func newState(cart []byte) *cpuState {
 		mbc:     makeMBC(cartInfo),
 	}
 	state := cpuState{mem: mem}
-	state.mem.mbc.Init(&state.mem)
-	state.initRegisters()
-	state.lcd.init()
-	state.apu.init()
+	state.init()
 	return &state
 }
 
-func (cs *cpuState) initRegisters() {
+func (cs *cpuState) init() {
 	// NOTE: these are DMG values,
 	// others are different, see
 	// TCAGBD
@@ -288,6 +285,11 @@ func (cs *cpuState) initRegisters() {
 	cs.setHL(0x014d)
 	cs.setSP(0xfffe)
 	cs.setPC(0x0100)
+	cs.timerDivCycles = 0xabcc
+
+	cs.mem.mbc.Init(&cs.mem)
+	cs.lcd.init()
+	cs.apu.init()
 }
 
 // much TODO
