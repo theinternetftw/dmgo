@@ -88,10 +88,10 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 		emu.UpdateInput(newInput)
 		emu.Step()
 
-		//emuSound := emu.GetSoundBuffer(audio.BufferAvailable())
-		emuSound := emu.GetSoundBuffer(8192*2*2*64)
+		maxRequested := audio.BufferAvailable()
+		emuSound := emu.GetSoundBuffer(maxRequested)
 		if len(emuSound) > 0 {
-			audio.Write(emuSound)
+			audio.Receiver <- emuSound
 		}
 
 		if emu.FlipRequested() {

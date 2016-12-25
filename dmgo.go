@@ -376,16 +376,31 @@ type Input struct {
 	Joypad Joypad
 }
 
+var lastAudioBufSize = 0
+
 // GetSoundBuffer returns a 44100hz * 16bit * 2ch sound buffer.
 // The maximum length of buffer desired is requested, and that
 // amount of buffer is removed from the emulator and returned.
 func (cs *cpuState) GetSoundBuffer(maxBytesWanted int) []byte {
+
+	// if len(cs.apu.buffer) != lastAudioBufSize {
+	// 	lastAudioBufSize = len(cs.apu.buffer)
+	// 	fmt.Println(len(cs.apu.buffer))
+	// }
+
+	if maxBytesWanted == 0 {
+		return []byte{}
+	}
+
 	bytesToReturn := len(cs.apu.buffer)
 	if maxBytesWanted < bytesToReturn {
 		bytesToReturn = maxBytesWanted
 	}
 	result := cs.apu.buffer[:bytesToReturn]
 	cs.apu.buffer = cs.apu.buffer[bytesToReturn:]
+	cs.apu.lastMaxRequested += maxBytesWanted
+	cs.apu.lastMaxRequested /= 2
+
 	return result
 }
 

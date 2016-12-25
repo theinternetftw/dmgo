@@ -33,6 +33,9 @@ const (
 
 // AudioBuffer represents all you need to play sound.
 type AudioBuffer struct {
+	Receiver chan []byte
+	writer chan []byte
+
 	SamplesPerSecond uint32
 	BitsPerSample    uint32
 	ChannelCount     uint32
@@ -88,6 +91,8 @@ func OpenAudioBuffer(blockCount, blockSize, samplesPerSecond, bitsPerSample, cha
 		ChannelCount:     channelCount,
 		BlockCount: blockCount,
 		BlockSize: blockSize,
+		Receiver: make(chan []byte),
+		writer: make(chan []byte),
 	}
 	ab.blocks = make([]soundBlock, blockCount)
 	for i := range ab.blocks {
@@ -112,6 +117,9 @@ func OpenAudioBuffer(blockCount, blockSize, samplesPerSecond, bitsPerSample, cha
 		uintptr(0), uintptr(0), callbackNull); r1 != mmSysErrNoErr {
 		return nil, fmt.Errorf("waveOutOpen error: %v, %v, %v", r1, r2, lastErr)
 	}
+
+	go ab.receiverLoop()
+	go ab.writerLoop()
 	return &ab, nil
 }
 
@@ -169,8 +177,26 @@ func (ab *AudioBuffer) BufferAvailable() int {
 	return freeCount * int(ab.BlockSize)
 }
 
-// Write writes sample data to be played
-func (ab *AudioBuffer) Write(data []byte) error {
+func (ab *AudioBuffer) receiverLoop() {
+	bufList := [][]byte{}
+	for buf := range ab.Receiver {
+		bufList = append(bufList, buf)
+		if len(bufList) > 0 {
+			select {
+			case ab.writer<-bufList[0]:
+				bufList = bufList[1:]
+			default:
+			}
+		}
+	}
+}
+func (ab *AudioBuffer) writerLoop() {
+	for buf := range ab.writer {
+		ab.write(buf)
+	}
+}
+
+func (ab *AudioBuffer) write(data []byte) error {
 	for len(data) > 0 {
 
 		block := ab.currentBlock

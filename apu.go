@@ -5,6 +5,8 @@ import "math"
 type apu struct {
 	allSoundsOn bool
 
+	lastMaxRequested int
+
 	debugFreq float64
 	t         float64
 	buffer    []byte
@@ -20,6 +22,8 @@ type apu struct {
 }
 
 func (apu *apu) init() {
+	apu.lastMaxRequested = 8192 * 2 * 2
+
 	apu.sounds[0].soundType = squareSoundType
 	apu.sounds[1].soundType = squareSoundType
 	apu.sounds[2].soundType = waveSoundType
@@ -30,7 +34,7 @@ const timePerSample = 1.0 / 44100.0
 
 func (apu *apu) runCycle() {
 	apu.debugFreq = 440
-	for len(apu.buffer) < 2*2*8192*8 {
+	for len(apu.buffer) < 2*apu.lastMaxRequested {
 		sample := int16((4.0*math.Abs(apu.t-0.5) - 1.0) * 32767)
 		apu.buffer = append(apu.buffer,
 			byte(sample&0xff),
