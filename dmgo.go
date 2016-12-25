@@ -32,6 +32,8 @@ type cpuState struct {
 	serialTransferData            byte
 	serialTransferStartFlag       bool
 	serialTransferClockIsInternal bool
+	serialClock                   uint16
+	serialBitsTransferred         byte
 
 	timerOn           bool
 	timerModuloReg    byte
@@ -43,6 +45,32 @@ type cpuState struct {
 
 	steps  uint
 	cycles uint
+}
+
+func (cs *cpuState) runSerialCycle() {
+	if !cs.serialTransferStartFlag {
+		cs.serialBitsTransferred = 0
+		cs.serialClock = 0
+		return
+	}
+	if !cs.serialTransferClockIsInternal {
+		// no real link cable, so wait forever
+		// (hopefully til game times out transfer)
+		return
+	}
+	cs.serialClock++
+	if cs.serialClock == 512 { // 8192Hz
+		cs.serialClock = 0
+		cs.serialTransferData <<= 1
+		// emulate a disconnected cable
+		cs.serialTransferData |= 0x01
+		cs.serialBitsTransferred++
+		if cs.serialBitsTransferred == 8 {
+			cs.serialBitsTransferred = 0
+			cs.serialClock = 0
+			cs.serialIRQ = true
+		}
+	}
 }
 
 // NOTE: timer is more complicated than this.
@@ -315,11 +343,11 @@ func (cs *cpuState) init() {
 	cs.write(0xff49, 0xff)
 }
 
-// much TODO
 func (cs *cpuState) runCycles(ncycles uint) {
 	for i := uint(0); i < ncycles; i++ {
 		cs.cycles++
 		cs.runTimerCycle()
+		cs.runSerialCycle()
 	}
 	cs.lcd.runCycles(cs, ncycles)
 }
@@ -387,6 +415,17 @@ func (cs *cpuState) FrameWaitRequested() bool {
 	return val
 }
 
+var lastSP = int(-1)
+
+func (cs *cpuState) debugLineOnStackChange() {
+	if lastSP != int(cs.sp) {
+		lastSP = int(cs.sp)
+		fmt.Println(cs.debugStatusLine())
+	}
+}
+
+var hitTarget = false
+
 // Step steps the emulator one instruction
 func (cs *cpuState) Step() {
 
@@ -401,8 +440,12 @@ func (cs *cpuState) Step() {
 		}
 	}
 
-	// if !cs.inHaltMode && cs.steps&0x2ffff == 0 {
-	// if true {
+	// cs.debugLineOnStackChange()
+	// if cs.steps&0x2ffff == 0 {
+	// if cs.pc == 0x4d19 {
+	// 	hitTarget = true
+	// }
+	// if hitTarget {
 	// 	fmt.Println(cs.debugStatusLine())
 	// }
 
