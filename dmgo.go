@@ -348,7 +348,7 @@ func (cs *cpuState) runCycles(ncycles uint) {
 		cs.cycles++
 		cs.runTimerCycle()
 		cs.runSerialCycle()
-		cs.apu.runCycle()
+		cs.apu.runCycle(cs)
 	}
 	cs.lcd.runCycles(cs, ncycles)
 }

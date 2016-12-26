@@ -1,15 +1,11 @@
 package dmgo
 
-import "math"
-
 type apu struct {
 	allSoundsOn bool
 
 	lastMaxRequested int
 
-	debugFreq float64
-	t         float64
-	buffer    []byte
+	buffer []byte
 
 	sounds [4]sound
 
@@ -32,20 +28,44 @@ func (apu *apu) init() {
 
 const timePerSample = 1.0 / 44100.0
 
-func (apu *apu) runCycle() {
-	apu.debugFreq = 440
+func (apu *apu) runCycle(cs *cpuState) {
 	for len(apu.buffer) < 2*apu.lastMaxRequested {
-		sample := int16((4.0*math.Abs(apu.t-0.5) - 1.0) * 32767)
-		apu.buffer = append(apu.buffer,
-			byte(sample&0xff),
-			byte(sample>>8),
-			byte(sample&0xff),
-			byte(sample>>8))
-		apu.t += apu.debugFreq * timePerSample
-		if apu.t > 1.0 {
-			apu.t -= 1.0
+		apu.runFreqCycle()
+		if cs.timerDivCycles&0x3f == 0x3f {
+			apu.runLengthCycle()
 		}
+
+		left, right := int(0), int(0)
+		if apu.allSoundsOn {
+			left0, right0 := apu.sounds[0].getSample()
+			left1, right1 := apu.sounds[1].getSample()
+			left = (left0 + left1) / 2
+			right = (right0 + right1) / 2
+			//left2, right2 := apu.sounds[2].getSample()
+			//left = (left0 + left1 + left2) / 3
+			//right = (right0 + right1 + right2) / 3
+			left = left / 7 * int(apu.leftSpeakerVolume)
+			right = right / 7 * int(apu.rightSpeakerVolume)
+		}
+		apu.buffer = append(apu.buffer,
+			byte(left&0xff),
+			byte(left>>8),
+			byte(right&0xff),
+			byte(right>>8))
 	}
+}
+
+func (apu *apu) runFreqCycle() {
+	apu.sounds[0].runFreqCycle()
+	apu.sounds[1].runFreqCycle()
+	apu.sounds[2].runFreqCycle()
+	apu.sounds[3].runFreqCycle()
+}
+func (apu *apu) runLengthCycle() {
+	apu.sounds[0].runLengthCycle()
+	apu.sounds[1].runLengthCycle()
+	apu.sounds[2].runLengthCycle()
+	apu.sounds[3].runLengthCycle()
 }
 
 type envDir bool
@@ -83,8 +103,9 @@ type sound struct {
 	sweepTime      byte
 	sweepShift     byte
 
-	lengthData byte
-	waveDuty   byte
+	lengthData    uint16
+	currentLength uint16
+	waveDuty      byte
 
 	waveOutLvl     byte // sound[2] only
 	wavePatternRAM [16]byte
@@ -97,6 +118,80 @@ type sound struct {
 	restartRequested  bool
 
 	freqReg uint16
+
+	t float64
+}
+
+func (sound *sound) runFreqCycle() {
+	sound.t += sound.getFreq() * timePerSample
+	if sound.t > 1.0 {
+		sound.t -= 1.0
+	}
+}
+func (sound *sound) runLengthCycle() {
+	if sound.playsContinuously {
+		return
+	}
+	if sound.currentLength > 0 {
+		sound.currentLength--
+		if sound.currentLength == 0 {
+			sound.on = false
+		}
+	}
+	if sound.restartRequested {
+		sound.on = true
+		sound.restartRequested = false
+		sound.currentLength = sound.lengthData
+	}
+}
+func (sound *sound) getDutyCycle() float64 {
+	switch sound.waveDuty {
+	case 0:
+		return 0.125
+	case 1:
+		return 0.25
+	case 2:
+		return 0.50
+	default:
+		return 0.75
+	}
+}
+func (sound *sound) getSample() (int, int) {
+	if sound.currentLength == 0 && !sound.playsContinuously {
+		return 0, 0
+	}
+	var left, right int
+	if sound.t > sound.getDutyCycle() {
+		left, right = 32767, 32767
+	} else {
+		left, right = -32767, -32767
+	}
+	if !sound.leftSpeakerOn {
+		left = 0
+	}
+	if !sound.rightSpeakerOn {
+		right = 0
+	}
+	return left, right
+}
+func (sound *sound) getFreq() float64 {
+	switch sound.soundType {
+	case waveSoundType:
+		return 65536.0 / float64(sound.freqReg+1)
+	case noiseSoundType:
+		r := float64(sound.polyDivRatio)
+		if r == 0 {
+			r = 0.5
+		}
+		// NOTE: where does polystep fit into this?
+		twoShiftS := float64(uint(2) << uint(sound.polyShiftFreq))
+		if twoShiftS == 0 {
+			twoShiftS = 0.5
+		}
+		return 524288.0 / r / twoShiftS
+	default:
+		return 131072.0 / float64(sound.freqReg+1)
+	}
 }
 
 func (sound *sound) writePolyCounterReg(val byte) {
@@ -125,8 +220,16 @@ func (sound *sound) readWaveOutLvlReg() byte {
 	return (sound.waveOutLvl << 5) | 0x9f
 }
 
+func (sound *sound) writeLengthData(val byte) {
+	switch sound.soundType {
+	case waveSoundType:
+		sound.lengthData = 256 - uint16(val)
+	default:
+		sound.lengthData = 64 - uint16(val)
+	}
+}
 func (sound *sound) writeLenDutyReg(val byte) {
-	sound.lengthData = val & 0x3f
+	sound.lengthData = uint16(val & 0x3f)
 	sound.waveDuty = val >> 6
 }
 func (sound *sound) readLenDutyReg() byte {

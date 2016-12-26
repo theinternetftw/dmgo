@@ -77,7 +77,7 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 		fmt.Println("loaded save!")
 	}
 
-	audio, err := platform.OpenAudioBuffer(4, 8192, 44100, 16, 2)
+	audio, err := platform.OpenAudioBuffer(4, 4096, 44100, 16, 2)
 	dieIf(err)
 
 	for {
@@ -88,12 +88,6 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 		emu.UpdateInput(newInput)
 		emu.Step()
 
-		maxRequested := audio.BufferAvailable()
-		emuSound := emu.GetSoundBuffer(maxRequested)
-		if len(emuSound) > 0 {
-			audio.Receiver <- emuSound
-		}
-
 		if emu.FlipRequested() {
 			window.Mutex.Lock()
 			copy(window.Pix, emu.Framebuffer())
@@ -101,6 +95,13 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 			window.Mutex.Unlock()
 		}
 		if emu.FrameWaitRequested() {
+
+			maxRequested := audio.BufferAvailable()
+			emuSound := emu.GetSoundBuffer(maxRequested)
+			if len(emuSound) > 0 {
+				audio.Receiver <- emuSound
+			}
+
 			spent := time.Now().Sub(lastVBlankTime)
 			toWait := 17*time.Millisecond - spent
 			if toWait > time.Duration(0) {

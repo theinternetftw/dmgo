@@ -95,7 +95,7 @@ func (cs *cpuState) read(addr uint16) byte {
 	case addr == 0xff1a:
 		val = boolBit(cs.apu.sounds[2].on, 7) | 0x7f
 	case addr == 0xff1b:
-		val = cs.apu.sounds[2].lengthData
+		val = byte(cs.apu.sounds[2].lengthData)
 	case addr == 0xff1c:
 		val = cs.apu.sounds[2].readWaveOutLvlReg()
 	case addr == 0xff1d:
@@ -106,7 +106,7 @@ func (cs *cpuState) read(addr uint16) byte {
 	case addr == 0xff1f:
 		val = 0xff // unmapped bytes
 	case addr == 0xff20:
-		val = cs.apu.sounds[3].lengthData
+		val = byte(64 - cs.apu.sounds[3].lengthData)
 	case addr == 0xff21:
 		val = cs.apu.sounds[3].readSoundEnvReg()
 	case addr == 0xff22:
@@ -244,7 +244,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr == 0xff1a:
 		cs.apu.sounds[2].on = val&0x80 != 0
 	case addr == 0xff1b:
-		cs.apu.sounds[2].lengthData = val
+		cs.apu.sounds[2].writeLengthData(val)
 	case addr == 0xff1c:
 		cs.apu.sounds[2].writeWaveOutLvlReg(val)
 	case addr == 0xff1d:
@@ -256,7 +256,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		// nop (unmapped bytes)
 
 	case addr == 0xff20:
-		cs.apu.sounds[3].lengthData = val & 0x1f
+		cs.apu.sounds[3].writeLengthData(val & 0x1f)
 	case addr == 0xff21:
 		cs.apu.sounds[3].writeSoundEnvReg(val)
 	case addr == 0xff22:
