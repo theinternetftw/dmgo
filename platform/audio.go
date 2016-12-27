@@ -33,9 +33,6 @@ const (
 
 // AudioBuffer represents all you need to play sound.
 type AudioBuffer struct {
-	Receiver chan []byte
-	writer chan []byte
-
 	SamplesPerSecond uint32
 	BitsPerSample    uint32
 	ChannelCount     uint32
@@ -45,6 +42,8 @@ type AudioBuffer struct {
 	currentBlock *soundBlock
 	blocks       []soundBlock
 	hWaveOut     uintptr
+	closer chan bool
+	writer chan *soundBlock
 }
 
 type soundBlock struct {
@@ -91,8 +90,8 @@ func OpenAudioBuffer(blockCount, blockSize, samplesPerSecond, bitsPerSample, cha
 		ChannelCount:     channelCount,
 		BlockCount: blockCount,
 		BlockSize: blockSize,
-		Receiver: make(chan []byte),
-		writer: make(chan []byte),
+		writer: make(chan *soundBlock, blockCount+1),
+		closer: make(chan bool),
 	}
 	ab.blocks = make([]soundBlock, blockCount)
 	for i := range ab.blocks {
@@ -118,8 +117,8 @@ func OpenAudioBuffer(blockCount, blockSize, samplesPerSecond, bitsPerSample, cha
 		return nil, fmt.Errorf("waveOutOpen error: %v, %v, %v", r1, r2, lastErr)
 	}
 
-	go ab.receiverLoop()
 	go ab.writerLoop()
+
 	return &ab, nil
 }
 
@@ -142,6 +141,7 @@ func (ab *AudioBuffer) Close() error {
 	if r1 != 0 {
 		return fmt.Errorf("waveOutClose error: %v, %v, %v", r1, r2, lastErr)
 	}
+	ab.closer <- true
 	return nil
 }
 
@@ -161,7 +161,7 @@ func (ab *AudioBuffer) waitOnFreeBlock() *soundBlock {
 				return &ab.blocks[i]
 			}
 		}
-		time.Sleep(5)
+		time.Sleep(1)
 	}
 }
 
@@ -177,27 +177,41 @@ func (ab *AudioBuffer) BufferAvailable() int {
 	return freeCount * int(ab.BlockSize)
 }
 
-func (ab *AudioBuffer) receiverLoop() {
-	bufList := [][]byte{}
-	for buf := range ab.Receiver {
-		bufList = append(bufList, buf)
-		if len(bufList) > 0 {
-			select {
-			case ab.writer<-bufList[0]:
-				bufList = bufList[1:]
-			default:
+func (ab *AudioBuffer) BufferSize() int {
+	return int(ab.BlockCount * ab.BlockSize)
+}
+
+func (ab *AudioBuffer) writerLoop() {
+	for {
+		select {
+		case block := <-ab.writer:
+
+			block.lpData = uintptr(unsafe.Pointer(&block.bytes[0]))
+
+			r1, r2, lastErr := waveOutPrepareHeader.Call(
+				ab.hWaveOut, uintptr(unsafe.Pointer(&block.wavehdr)), unsafe.Sizeof(block.wavehdr))
+			if r1 != 0 {
+				fmt.Printf("waveOutPrepareHeader error: %v, %v, %v", r1, r2, lastErr)
 			}
+
+			r1, r2, lastErr = waveOutWrite.Call(
+				ab.hWaveOut, uintptr(unsafe.Pointer(&block.wavehdr)), unsafe.Sizeof(block.wavehdr))
+			if r1 != 0 {
+				fmt.Printf("waveOutWrite error: %v, %v, %v", r1, r2, lastErr)
+			}
+		case <-ab.closer:
+			return
 		}
 	}
 }
-func (ab *AudioBuffer) writerLoop() {
-	for buf := range ab.writer {
-		ab.write(buf)
-	}
-}
 
-func (ab *AudioBuffer) write(data []byte) error {
+func (ab *AudioBuffer) Write(data []byte) error {
 	for len(data) > 0 {
+
+		if ab.currentBlock.dwFlags & whdrDone == 0 {
+			ab.currentBlock = ab.waitOnFreeBlock()
+			ab.currentBlock.used = 0
+		}
 
 		block := ab.currentBlock
 
@@ -209,23 +223,13 @@ func (ab *AudioBuffer) write(data []byte) error {
 			break
 		}
 		copy(block.bytes[block.used:], data[:spaceLeft])
-		data = data[spaceLeft:]
 		block.dwBufferLength = uint32(len(block.bytes))
-		block.lpData = uintptr(unsafe.Pointer(&block.bytes[0]))
+		data = data[spaceLeft:]
 
-		r1, r2, lastErr := waveOutPrepareHeader.Call(
-			ab.hWaveOut, uintptr(unsafe.Pointer(&block.wavehdr)), unsafe.Sizeof(block.wavehdr))
-		if r1 != 0 {
-			return fmt.Errorf("waveOutPrepareHeader error: %v, %v, %v", r1, r2, lastErr)
-		}
-		r1, r2, lastErr = waveOutWrite.Call(
-			ab.hWaveOut, uintptr(unsafe.Pointer(&block.wavehdr)), unsafe.Sizeof(block.wavehdr))
-		if r1 != 0 {
-			return fmt.Errorf("waveOutWrite error: %v, %v, %v", r1, r2, lastErr)
-		}
+		block.dwFlags &^= whdrDone
 
-		ab.currentBlock = ab.waitOnFreeBlock()
-		ab.currentBlock.used = 0
+		// the api calls sometimes takes a few ms, so let's not wait on them
+		ab.writer <- block
 	}
 	return nil
 }

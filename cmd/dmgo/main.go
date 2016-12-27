@@ -88,6 +88,22 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 		emu.UpdateInput(newInput)
 		emu.Step()
 
+		bufferAvailable := audio.BufferAvailable()
+		if bufferAvailable == audio.BufferSize() {
+			fmt.Println("Platform AudioBuffer empty!")
+		}
+		if bufferAvailable > 0 {
+			emuSound := emu.ReadSoundBuffer(bufferAvailable)
+			if len(emuSound) > 0 {
+				start := time.Now()
+				audio.Write(emuSound)
+				spent := time.Now().Sub(start)
+				if spent > time.Millisecond {
+					fmt.Printf("Stalled in a supposedly stall-free audio.Write(): %1.2f ms\r\n", spent.Seconds()*1000)
+				}
+			}
+		}
+
 		if emu.FlipRequested() {
 			window.Mutex.Lock()
 			copy(window.Pix, emu.Framebuffer())
@@ -95,12 +111,6 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 			window.Mutex.Unlock()
 		}
 		if emu.FrameWaitRequested() {
-
-			maxRequested := audio.BufferAvailable()
-			emuSound := emu.GetSoundBuffer(maxRequested)
-			if len(emuSound) > 0 {
-				audio.Receiver <- emuSound
-			}
 
 			spent := time.Now().Sub(lastVBlankTime)
 			toWait := 17*time.Millisecond - spent
