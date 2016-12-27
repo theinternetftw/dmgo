@@ -3,9 +3,7 @@ package dmgo
 type apu struct {
 	allSoundsOn bool
 
-	lastMaxRequested int
-
-	buffer []byte
+	buffer apuCircleBuf
 
 	sounds [4]sound
 
@@ -18,40 +16,83 @@ type apu struct {
 }
 
 func (apu *apu) init() {
-	apu.lastMaxRequested = 8192 * 2 * 2
-
 	apu.sounds[0].soundType = squareSoundType
 	apu.sounds[1].soundType = squareSoundType
 	apu.sounds[2].soundType = waveSoundType
 	apu.sounds[3].soundType = noiseSoundType
 }
 
-const timePerSample = 1.0 / 44100.0
+const (
+	amountGenerateAhead = 2048 * 4
+	samplesPerSecond    = 44100
+	timePerSample       = 1.0 / samplesPerSecond
+)
+
+const apuCircleBufSize = amountGenerateAhead
+
+// NOTE: size must be power of 2
+type apuCircleBuf struct {
+	writeIndex uint
+	readIndex  uint
+	buf        [apuCircleBufSize]byte
+}
+
+func (c *apuCircleBuf) write(bytes []byte) (writeCount int) {
+	for _, b := range bytes {
+		if c.full() {
+			return writeCount
+		}
+		c.buf[c.mask(c.writeIndex)] = b
+		c.writeIndex++
+		writeCount++
+	}
+	return writeCount
+}
+func (c *apuCircleBuf) read(preSizedBuf []byte) []byte {
+	readCount := 0
+	for i := range preSizedBuf {
+		if c.size() == 0 {
+			break
+		}
+		preSizedBuf[i] = c.buf[c.mask(c.readIndex)]
+		c.readIndex++
+		readCount++
+	}
+	return preSizedBuf[:readCount]
+}
+func (c *apuCircleBuf) mask(i uint) uint { return i & (uint(len(c.buf)) - 1) }
+func (c *apuCircleBuf) size() uint       { return c.writeIndex - c.readIndex }
+func (c *apuCircleBuf) full() bool       { return c.size() == uint(len(c.buf)) }
 
 func (apu *apu) runCycle(cs *cpuState) {
-	for len(apu.buffer) < 2*apu.lastMaxRequested {
-		apu.runFreqCycle()
-		if cs.timerDivCycles&0x3f == 0x3f {
-			apu.runLengthCycle()
-		}
 
-		left, right := int(0), int(0)
+	if cs.timerDivCycles&0x3f == 0x3f { // 256hz
+		apu.runLengthCycle()
+	}
+	if cs.timerDivCycles&0xff == 0xff { // 64hz
+		apu.runEnvCycle()
+	}
+
+	for !apu.buffer.full() {
+		left, right := 0.0, 0.0
 		if apu.allSoundsOn {
+			apu.runFreqCycle()
+
 			left0, right0 := apu.sounds[0].getSample()
 			left1, right1 := apu.sounds[1].getSample()
-			left = (left0 + left1) / 2
-			right = (right0 + right1) / 2
-			//left2, right2 := apu.sounds[2].getSample()
-			//left = (left0 + left1 + left2) / 3
-			//right = (right0 + right1 + right2) / 3
-			left = left / 7 * int(apu.leftSpeakerVolume)
-			right = right / 7 * int(apu.rightSpeakerVolume)
+			left2, right2 := apu.sounds[2].getSample()
+			left = (left0 + left1 + left2) / 3
+			right = (right0 + right1 + right2) / 3
+			left = left / 7.0 * float64(apu.leftSpeakerVolume)
+			right = right / 7.0 * float64(apu.rightSpeakerVolume)
 		}
-		apu.buffer = append(apu.buffer,
-			byte(left&0xff),
-			byte(left>>8),
-			byte(right&0xff),
-			byte(right>>8))
+		sampleL, sampleR := int16(left*32767.0), int16(right*32767.0)
+		apu.buffer.write([]byte{
+			byte(sampleL & 0xff),
+			byte(sampleL >> 8),
+			byte(sampleR & 0xff),
+			byte(sampleR >> 8),
+		})
 	}
 }
 
@@ -66,6 +107,12 @@ func (apu *apu) runLengthCycle() {
 	apu.sounds[1].runLengthCycle()
 	apu.sounds[2].runLengthCycle()
 	apu.sounds[3].runLengthCycle()
+}
+func (apu *apu) runEnvCycle() {
+	apu.sounds[0].runEnvCycle()
+	apu.sounds[1].runEnvCycle()
+	apu.sounds[2].runEnvCycle()
+	apu.sounds[3].runEnvCycle()
 }
 
 type envDir bool
@@ -98,6 +145,8 @@ type sound struct {
 	envelopeDirection envDir
 	envelopeStartVal  byte
 	envelopeSweepVal  byte
+	currentEnvelope   byte
+	envelopeCounter   byte
 
 	sweepDirection sweepDir
 	sweepTime      byte
@@ -128,11 +177,9 @@ func (sound *sound) runFreqCycle() {
 		sound.t -= 1.0
 	}
 }
+
 func (sound *sound) runLengthCycle() {
-	if sound.playsContinuously {
-		return
-	}
-	if sound.currentLength > 0 {
+	if sound.currentLength > 0 && !sound.playsContinuously {
 		sound.currentLength--
 		if sound.currentLength == 0 {
 			sound.on = false
@@ -142,29 +189,54 @@ func (sound *sound) runLengthCycle() {
 		sound.on = true
 		sound.restartRequested = false
 		sound.currentLength = sound.lengthData
+		sound.currentEnvelope = sound.envelopeStartVal
 	}
 }
-func (sound *sound) getDutyCycle() float64 {
+
+func (sound *sound) runEnvCycle() {
+	if sound.envelopeCounter < sound.envelopeSweepVal {
+		sound.envelopeCounter++
+		if sound.envelopeCounter == sound.envelopeSweepVal {
+			if sound.envelopeDirection == envUp {
+				if sound.currentEnvelope < 0x0f {
+					sound.currentEnvelope++
+					sound.envelopeCounter = 0
+				}
+			} else {
+				if sound.currentEnvelope > 0x00 {
+					sound.currentEnvelope--
+					sound.envelopeCounter = 0
+				}
+			}
+		}
+	}
+}
+
+func (sound *sound) inDutyCycle() bool {
 	switch sound.waveDuty {
 	case 0:
-		return 0.125
+		return sound.t > 0.875
 	case 1:
-		return 0.25
+		return sound.t < 0.125 || sound.t > 0.875
 	case 2:
-		return 0.50
+		return sound.t < 0.125 || sound.t > 0.625
+	case 3:
+		return sound.t > 0.125 && sound.t < 0.875
 	default:
-		return 0.75
+		panic("unknown wave duty")
 	}
 }
-func (sound *sound) getSample() (int, int) {
+
+func (sound *sound) getSample() (float64, float64) {
 	if sound.currentLength == 0 && !sound.playsContinuously {
 		return 0, 0
 	}
-	var left, right int
-	if sound.t > sound.getDutyCycle() {
-		left, right = 32767, 32767
+	left, right := 0.0, 0.0
+	vol := float64(sound.currentEnvelope) / 15.0
+	if sound.inDutyCycle() {
+		left, right = 1.0*vol, 1.0*vol
 	} else {
-		left, right = -32767, -32767
+		left, right = -1.0*vol, -1.0*vol
 	}
 	if !sound.leftSpeakerOn {
 		left = 0
@@ -174,10 +246,11 @@ func (sound *sound) getSample() (int, int) {
 	}
 	return left, right
 }
+
 func (sound *sound) getFreq() float64 {
 	switch sound.soundType {
 	case waveSoundType:
-		return 65536.0 / float64(sound.freqReg+1)
+		return 65536.0 / float64(2048-sound.freqReg)
 	case noiseSoundType:
 		r := float64(sound.polyDivRatio)
 		if r == 0 {
@@ -189,8 +262,10 @@ func (sound *sound) getFreq() float64 {
 			twoShiftS = 0.5
 		}
 		return 524288.0 / r / twoShiftS
+	case squareSoundType:
+		return 131072.0 / float64(2048-sound.freqReg)
 	default:
-		return 131072.0 / float64(sound.freqReg+1)
+		panic("unexpected sound type")
 	}
 }
 
@@ -224,8 +299,10 @@ func (sound *sound) writeLengthData(val byte) {
 	switch sound.soundType {
 	case waveSoundType:
 		sound.lengthData = 256 - uint16(val)
-	default:
+	case noiseSoundType, squareSoundType:
 		sound.lengthData = 64 - uint16(val)
+	default:
+		panic("writeLengthData: unexpected sound type")
 	}
 }
 func (sound *sound) writeLenDutyReg(val byte) {
@@ -255,12 +332,12 @@ func (sound *sound) readSweepReg() byte {
 }
 
 func (sound *sound) writeSoundEnvReg(val byte) {
+	sound.envelopeStartVal = val >> 4
 	if val&0x08 != 0 {
 		sound.envelopeDirection = envUp
 	} else {
 		sound.envelopeDirection = envDown
 	}
-	sound.envelopeStartVal = val >> 4
 	sound.envelopeSweepVal = val & 0x07
 }
 func (sound *sound) readSoundEnvReg() byte {
