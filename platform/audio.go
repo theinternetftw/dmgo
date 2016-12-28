@@ -168,13 +168,18 @@ func (ab *AudioBuffer) waitOnFreeBlock() *soundBlock {
 // BufferAvailable returns the number of bytes available
 // to be filled in all the blocks not currently queued.
 func (ab *AudioBuffer) BufferAvailable() int {
-	freeCount := 0
+	available := 0
 	for i := range ab.blocks {
 		if ab.blocks[i].dwFlags&whdrDone != 0 {
-			freeCount++
+			block := &ab.blocks[i]
+			if block == ab.currentBlock {
+				available += int(ab.BlockSize) - block.used
+			} else {
+				available += int(ab.BlockSize)
+			}
 		}
 	}
-	return freeCount * int(ab.BlockSize)
+	return available
 }
 
 func (ab *AudioBuffer) BufferSize() int {
