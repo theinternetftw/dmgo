@@ -5,6 +5,11 @@ type apu struct {
 
 	buffer apuCircleBuf
 
+	sampleTimeCounter float64
+	lastSweepCycle    float64
+	lastEnvCycle      float64
+	lastLengthCycle   float64
+
 	sounds [4]sound
 
 	// cart chip sounds. never used by any game?
@@ -13,6 +18,8 @@ type apu struct {
 
 	rightSpeakerVolume byte // right=S01 in docs
 	leftSpeakerVolume  byte // left=S02 in docs
+
+	counter byte
 }
 
 func (apu *apu) init() {
@@ -23,7 +30,7 @@ func (apu *apu) init() {
 }
 
 const (
-	amountGenerateAhead = 2048 * 4
+	amountGenerateAhead = 64 * 4
 	samplesPerSecond    = 44100
 	timePerSample       = 1.0 / samplesPerSecond
 )
@@ -66,14 +73,17 @@ func (c *apuCircleBuf) full() bool       { return c.size() == uint(len(c.buf)) }
 
 func (apu *apu) runCycle(cs *cpuState) {
 
-	if cs.timerDivCycles&0x3f == 0x3f { // 256hz
-		apu.runLengthCycle()
-	}
-	if cs.timerDivCycles&0xff == 0xff { // 64hz
-		apu.runEnvCycle()
-	}
+	if !apu.buffer.full() {
 
-	for !apu.buffer.full() {
+		if apu.sampleTimeCounter-apu.lastLengthCycle >= 1.0/256.0 {
+			apu.runLengthCycle()
+			apu.lastLengthCycle = apu.sampleTimeCounter
+		}
+		if apu.sampleTimeCounter-apu.lastEnvCycle >= 1.0/64.0 {
+			apu.runEnvCycle()
+			apu.lastEnvCycle = apu.sampleTimeCounter
+		}
+
 		left, right := 0.0, 0.0
 		if apu.allSoundsOn {
 			apu.runFreqCycle()
@@ -81,10 +91,10 @@ func (apu *apu) runCycle(cs *cpuState) {
 			left0, right0 := apu.sounds[0].getSample()
 			left1, right1 := apu.sounds[1].getSample()
 			left2, right2 := apu.sounds[2].getSample()
-			left = (left0 + left1 + left2) / 3
-			right = (right0 + right1 + right2) / 3
-			left = left / 7.0 * float64(apu.leftSpeakerVolume)
-			right = right / 7.0 * float64(apu.rightSpeakerVolume)
+			left = (left0 + left1 + left2) / 3.0
+			right = (right0 + right1 + right2) / 3.0
+			left = left / 8.0 * float64(apu.leftSpeakerVolume+1)
+			right = right / 8.0 * float64(apu.rightSpeakerVolume+1)
 		}
 		sampleL, sampleR := int16(left*32767.0), int16(right*32767.0)
 		apu.buffer.write([]byte{
@@ -93,6 +103,13 @@ func (apu *apu) runCycle(cs *cpuState) {
 			byte(sampleR & 0xff),
 			byte(sampleR >> 8),
 		})
+
+		if apu.sampleTimeCounter-apu.lastSweepCycle >= 1.0/128.0 {
+			apu.sounds[0].runSweepCycle()
+			apu.lastSweepCycle = apu.sampleTimeCounter
+		}
+
+		apu.sampleTimeCounter += timePerSample
 	}
 }
 
@@ -148,6 +165,10 @@ type sound struct {
 	currentEnvelope   byte
 	envelopeCounter   byte
 
+	t            float64
+	freqReg      uint16
+	sweepCounter byte
+
 	sweepDirection sweepDir
 	sweepTime      byte
 	sweepShift     byte
@@ -158,6 +179,7 @@ type sound struct {
 
 	waveOutLvl     byte // sound[2] only
 	wavePatternRAM [16]byte
+	waveCursor     byte
 
 	polyShiftFreq byte // sound[3] only
 	polyStep      byte
@@ -165,16 +187,17 @@ type sound struct {
 
 	playsContinuously bool
 	restartRequested  bool
-
-	freqReg uint16
-
-	t float64
 }
 
 func (sound *sound) runFreqCycle() {
+
 	sound.t += sound.getFreq() * timePerSample
+
 	if sound.t > 1.0 {
 		sound.t -= 1.0
+		if sound.soundType == waveSoundType {
+			sound.waveCursor = (sound.waveCursor + 1) & 31
+		}
 	}
 }
 
@@ -188,24 +211,55 @@ func (sound *sound) runLengthCycle() {
 	if sound.restartRequested {
 		sound.on = true
 		sound.restartRequested = false
+		if sound.lengthData == 0 {
+			if sound.soundType == waveSoundType {
+				sound.lengthData = 256
+			} else {
+				sound.lengthData = 64
+			}
+		}
 		sound.currentLength = sound.lengthData
 		sound.currentEnvelope = sound.envelopeStartVal
+		sound.sweepCounter = 0
+		sound.waveCursor = 0
+	}
+}
+
+func (sound *sound) runSweepCycle() {
+	if sound.sweepTime != 0 {
+		if sound.sweepCounter < sound.sweepTime {
+			sound.sweepCounter++
+		} else {
+			sound.sweepCounter = 0
+			var nextFreq uint16
+			if sound.sweepDirection == sweepUp {
+				nextFreq = sound.freqReg + (sound.freqReg >> uint16(sound.sweepShift))
+			} else {
+				nextFreq = sound.freqReg - (sound.freqReg >> uint16(sound.sweepShift))
+			}
+			if nextFreq > 2047 {
+				sound.on = false
+			} else {
+				sound.freqReg = nextFreq
+			}
+		}
 	}
 }
 
 func (sound *sound) runEnvCycle() {
-	if sound.envelopeCounter < sound.envelopeSweepVal {
-		sound.envelopeCounter++
-		if sound.envelopeCounter == sound.envelopeSweepVal {
+	// more complicated, see GBSOUND
+	if sound.envelopeSweepVal != 0 {
+		if sound.envelopeCounter < sound.envelopeSweepVal {
+			sound.envelopeCounter++
+		} else {
+			sound.envelopeCounter = 0
 			if sound.envelopeDirection == envUp {
 				if sound.currentEnvelope < 0x0f {
 					sound.currentEnvelope++
-					sound.envelopeCounter = 0
 				}
 			} else {
 				if sound.currentEnvelope > 0x00 {
 					sound.currentEnvelope--
-					sound.envelopeCounter = 0
 				}
 			}
 		}
@@ -228,21 +282,37 @@ func (sound *sound) inDutyCycle() bool {
 }
 
 func (sound *sound) getSample() (float64, float64) {
-	if sound.currentLength == 0 && !sound.playsContinuously {
-		return 0, 0
+	sample := 0.0
+	if sound.on {
+		switch sound.soundType {
+		case squareSoundType:
+			vol := float64(sound.currentEnvelope) / 15.0
+			if sound.inDutyCycle() {
+				sample = vol
+			} else {
+				sample = -vol
+			}
+		case waveSoundType:
+			if sound.waveOutLvl > 0 {
+				sampleByte := sound.wavePatternRAM[sound.waveCursor/2]
+				var sampleBits byte
+				if sound.waveCursor&1 == 0 {
+					sampleBits = sampleByte >> 4
+				} else {
+					sampleBits = sampleByte & 0x0f
+				}
+				sample = (2.0 * float64(sampleBits>>(sound.waveOutLvl-1)) / 15.0) - 1.0
+			}
+		case noiseSoundType:
+		}
 	}
+
 	left, right := 0.0, 0.0
-	vol := float64(sound.currentEnvelope) / 15.0
-	if sound.inDutyCycle() {
-		left, right = 1.0*vol, 1.0*vol
-	} else {
-		left, right = -1.0*vol, -1.0*vol
+	if sound.leftSpeakerOn {
+		left = sample
 	}
-	if !sound.leftSpeakerOn {
-		left = 0
-	}
-	if !sound.rightSpeakerOn {
-		right = 0
+	if sound.rightSpeakerOn {
+		right = sample
 	}
 	return left, right
 }
@@ -250,7 +320,7 @@ func (sound *sound) getSample() (float64, float64) {
 func (sound *sound) getFreq() float64 {
 	switch sound.soundType {
 	case waveSoundType:
-		return 65536.0 / float64(2048-sound.freqReg)
+		return 32 * 65536.0 / float64(2048-sound.freqReg)
 	case noiseSoundType:
 		r := float64(sound.polyDivRatio)
 		if r == 0 {
