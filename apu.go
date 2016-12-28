@@ -177,9 +177,10 @@ type sound struct {
 	currentLength uint16
 	waveDuty      byte
 
-	waveOutLvl     byte // sound[2] only
-	wavePatternRAM [16]byte
-	waveCursor     byte
+	waveOutLvl        byte // sound[2] only
+	wavePatternRAM    [16]byte
+	wavePatternCursor byte
+	wavePatternBias   float64
 
 	polyShiftFreq byte // sound[3] only
 	polyStep      byte
@@ -196,7 +197,7 @@ func (sound *sound) runFreqCycle() {
 	if sound.t > 1.0 {
 		sound.t -= 1.0
 		if sound.soundType == waveSoundType {
-			sound.waveCursor = (sound.waveCursor + 1) & 31
+			sound.wavePatternCursor = (sound.wavePatternCursor + 1) & 31
 		}
 	}
 }
@@ -221,7 +222,7 @@ func (sound *sound) runLengthCycle() {
 		sound.currentLength = sound.lengthData
 		sound.currentEnvelope = sound.envelopeStartVal
 		sound.sweepCounter = 0
-		sound.waveCursor = 0
+		sound.wavePatternCursor = 0
 	}
 }
 
@@ -294,14 +295,18 @@ func (sound *sound) getSample() (float64, float64) {
 			}
 		case waveSoundType:
 			if sound.waveOutLvl > 0 {
-				sampleByte := sound.wavePatternRAM[sound.waveCursor/2]
+				sampleByte := sound.wavePatternRAM[sound.wavePatternCursor/2]
 				var sampleBits byte
-				if sound.waveCursor&1 == 0 {
+				if sound.wavePatternCursor&1 == 0 {
 					sampleBits = sampleByte >> 4
 				} else {
 					sampleBits = sampleByte & 0x0f
 				}
-				sample = (2.0 * float64(sampleBits>>(sound.waveOutLvl-1)) / 15.0) - 1.0
+				unbiasedSample := float64(sampleBits) - sound.wavePatternBias
+				sample = (2.0 * unbiasedSample / 15.0) - 1.0
+				if sound.waveOutLvl > 1 {
+					sample /= float64(2 * (sound.waveOutLvl - 1))
+				}
 			}
 		case noiseSoundType:
 		}
@@ -337,6 +342,34 @@ func (sound *sound) getFreq() float64 {
 	default:
 		panic("unexpected sound type")
 	}
+}
+
+func (sound *sound) writeWaveOnOffReg(val byte) {
+	sound.on = val&0x80 != 0
+	if sound.on {
+		sound.updateWavePatternBias()
+	}
+}
+
+func (sound *sound) updateWavePatternBias() {
+	max, min := byte(0), byte(0)
+	update := func(nib byte) {
+		if nib < min {
+			min = nib
+		}
+		if nib > max {
+			max = nib
+		}
+	}
+	for _, b := range sound.wavePatternRAM {
+		update(b >> 4)
+		update(b & 0x0f)
+	}
+	sound.wavePatternBias = float64(max-min)/2.0 - 7.5
+}
+
+func (sound *sound) writeWavePatternValue(addr uint16, val byte) {
+	sound.wavePatternRAM[addr] = val
 }
 
 func (sound *sound) writePolyCounterReg(val byte) {

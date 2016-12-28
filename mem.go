@@ -242,7 +242,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.apu.sounds[1].writeFreqHighReg(val)
 
 	case addr == 0xff1a:
-		cs.apu.sounds[2].on = val&0x80 != 0
+		cs.apu.sounds[2].writeWaveOnOffReg(val)
 	case addr == 0xff1b:
 		cs.apu.sounds[2].writeLengthData(val)
 	case addr == 0xff1c:
@@ -275,7 +275,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		// nop (unmapped bytes)
 
 	case addr >= 0xff30 && addr < 0xff40:
-		cs.apu.sounds[2].wavePatternRAM[addr-0xff30] = val
+		cs.apu.sounds[2].writeWavePatternValue(addr-0xff30, val)
 
 	case addr == 0xff40:
 		cs.lcd.writeControlReg(val)
