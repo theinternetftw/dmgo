@@ -255,7 +255,7 @@ func (sound *sound) runLengthCycle() {
 		sound.currentEnvelope = sound.envelopeStartVal
 		sound.sweepCounter = 0
 		sound.wavePatternCursor = 0
-		sound.polyFeedbackReg = 0xff
+		sound.polyFeedbackReg = 0xffff
 	}
 }
 
@@ -364,6 +364,9 @@ func (sound *sound) getFreq() float64 {
 	case noiseSoundType:
 		divisor := 8.0
 		if sound.polyDivisorBase > 0 {
+			if sound.polyDivisorShift >= 14 {
+				return 0.0 // clock stops on invalid shift value
+			}
 			divisor = float64(uint16(sound.polyDivisorBase) << uint16(sound.polyDivisorShift+4))
 		}
 		return 4194304.0 / divisor
@@ -404,10 +407,7 @@ func (sound *sound) writeWavePatternValue(addr uint16, val byte) {
 
 func (sound *sound) writePolyCounterReg(val byte) {
 	sound.poly7BitMode = val&0x08 != 0
-	shift := val >> 4
-	if shift < 14 {
-		sound.polyDivisorShift = shift
-	}
+	sound.polyDivisorShift = val >> 4
 	sound.polyDivisorBase = val & 0x07
 }
 func (sound *sound) readPolyCounterReg() byte {
