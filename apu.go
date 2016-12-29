@@ -167,6 +167,7 @@ type sound struct {
 	envelopeCounter   byte
 
 	t            float64
+	freq         float64
 	freqReg      uint16
 	sweepCounter byte
 
@@ -195,7 +196,7 @@ type sound struct {
 
 func (sound *sound) runFreqCycle() {
 
-	sound.t += sound.getFreq() * timePerSample
+	sound.t += sound.freq * timePerSample
 
 	for sound.t > 1.0 {
 		sound.t -= 1.0
@@ -223,7 +224,7 @@ func (sound *sound) updatePolyCounter() {
 	} else {
 		newSample = -1
 	}
-	if sound.poly7BitMode && sound.getFreq() > 22050 {
+	if sound.poly7BitMode && sound.freq > 22050 {
 		// HACK: high freq 7bit doesn't sound right without one hell
 		// of a low-pass filter. Even this is a bit wrong (freq sounds
 		// low). Doing this for now/until I do something more drastic, e.g.
@@ -275,6 +276,7 @@ func (sound *sound) runSweepCycle() {
 				sound.on = false
 			} else {
 				sound.freqReg = nextFreq
+				sound.updateFreq()
 			}
 		}
 	}
@@ -357,21 +359,21 @@ func (sound *sound) getSample() (float64, float64) {
 	return left, right
 }
 
-func (sound *sound) getFreq() float64 {
+func (sound *sound) updateFreq() {
 	switch sound.soundType {
 	case waveSoundType:
-		return 32 * 65536.0 / float64(2048-sound.freqReg)
+		sound.freq = 32 * 65536.0 / float64(2048-sound.freqReg)
 	case noiseSoundType:
 		divisor := 8.0
 		if sound.polyDivisorBase > 0 {
 			if sound.polyDivisorShift >= 14 {
-				return 0.0 // clock stops on invalid shift value
+				sound.freq = 0.0 // clock stops on invalid shift value
 			}
 			divisor = float64(uint16(sound.polyDivisorBase) << uint16(sound.polyDivisorShift+4))
 		}
-		return 4194304.0 / divisor
+		sound.freq = 4194304.0 / divisor
 	case squareSoundType:
-		return 131072.0 / float64(2048-sound.freqReg)
+		sound.freq = 131072.0 / float64(2048-sound.freqReg)
 	default:
 		panic("unexpected sound type")
 	}
@@ -493,6 +495,7 @@ func (sound *sound) readSoundEnvReg() byte {
 func (sound *sound) writeFreqLowReg(val byte) {
 	sound.freqReg &^= 0x00ff
 	sound.freqReg |= uint16(val)
+	sound.updateFreq()
 }
 func (sound *sound) readFreqLowReg() byte {
 	return 0xff
@@ -505,6 +508,7 @@ func (sound *sound) writeFreqHighReg(val byte) {
 	sound.playsContinuously = val&0x40 == 0
 	sound.freqReg &^= 0xff00
 	sound.freqReg |= uint16(val&0x07) << 8
+	sound.updateFreq()
 }
 func (sound *sound) readFreqHighReg() byte {
 	val := byte(0xff)
