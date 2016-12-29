@@ -25,6 +25,8 @@ func (apu *apu) init() {
 	apu.sounds[1].soundType = squareSoundType
 	apu.sounds[2].soundType = waveSoundType
 	apu.sounds[3].soundType = noiseSoundType
+
+	apu.sounds[3].polyFeedbackReg = 0x01
 }
 
 const (
@@ -89,8 +91,9 @@ func (apu *apu) runCycle(cs *cpuState) {
 			left0, right0 := apu.sounds[0].getSample()
 			left1, right1 := apu.sounds[1].getSample()
 			left2, right2 := apu.sounds[2].getSample()
-			left = (left0 + left1 + left2) / 3.0
-			right = (right0 + right1 + right2) / 3.0
+			left3, right3 := apu.sounds[3].getSample()
+			left = (left0 + left1 + left2 + left3) / 4.0
+			right = (right0 + right1 + right2 + right3) / 4.0
 			left = left / 8.0 * float64(apu.leftSpeakerVolume+1)
 			right = right / 8.0 * float64(apu.rightSpeakerVolume+1)
 		}
@@ -180,9 +183,11 @@ type sound struct {
 	wavePatternCursor byte
 	wavePatternBias   float64
 
-	polyShiftFreq byte // sound[3] only
-	polyStep      byte
-	polyDivRatio  byte
+	polyFeedbackReg  uint16 // sound[3] only
+	polyDivisorShift byte
+	polyDivisorBase  byte
+	poly7BitMode     bool
+	polySample       float64
 
 	playsContinuously bool
 	restartRequested  bool
@@ -192,12 +197,41 @@ func (sound *sound) runFreqCycle() {
 
 	sound.t += sound.getFreq() * timePerSample
 
-	if sound.t > 1.0 {
+	for sound.t > 1.0 {
 		sound.t -= 1.0
 		if sound.soundType == waveSoundType {
 			sound.wavePatternCursor = (sound.wavePatternCursor + 1) & 31
 		}
+		if sound.soundType == noiseSoundType {
+			sound.updatePolyCounter()
+		}
 	}
+}
+
+func (sound *sound) updatePolyCounter() {
+	newHigh := (sound.polyFeedbackReg & 0x01) ^ ((sound.polyFeedbackReg >> 1) & 0x01)
+	sound.polyFeedbackReg >>= 1
+	sound.polyFeedbackReg &^= 1 << 14
+	sound.polyFeedbackReg |= newHigh << 14
+	if sound.poly7BitMode {
+		sound.polyFeedbackReg &^= 1 << 6
+		sound.polyFeedbackReg |= newHigh << 6
+	}
+	var newSample float64
+	if sound.polyFeedbackReg&0x01 == 0 {
+		newSample = 1
+	} else {
+		newSample = -1
+	}
+	if sound.poly7BitMode && sound.getFreq() > 22050 {
+		// HACK: high freq 7bit doesn't sound right without one hell
+		// of a low-pass filter. Even this is a bit wrong (freq sounds
+		// low). Doing this for now/until I do something more drastic, e.g.
+		// switching from per-sample sound generation to per-clock
+		// generation with some final interpolation step for everything.
+		newSample = sound.polySample + 0.2*(newSample-sound.polySample)
+	}
+	sound.polySample = newSample
 }
 
 func (sound *sound) runLengthCycle() {
@@ -221,6 +255,7 @@ func (sound *sound) runLengthCycle() {
 		sound.currentEnvelope = sound.envelopeStartVal
 		sound.sweepCounter = 0
 		sound.wavePatternCursor = 0
+		sound.polyFeedbackReg = 0xff
 	}
 }
 
@@ -307,6 +342,8 @@ func (sound *sound) getSample() (float64, float64) {
 				}
 			}
 		case noiseSoundType:
+			vol := float64(sound.currentEnvelope) / 15.0
+			sample = vol * sound.polySample
 		}
 	}
 
@@ -325,16 +362,11 @@ func (sound *sound) getFreq() float64 {
 	case waveSoundType:
 		return 32 * 65536.0 / float64(2048-sound.freqReg)
 	case noiseSoundType:
-		r := float64(sound.polyDivRatio)
-		if r == 0 {
-			r = 0.5
+		divisor := 8.0
+		if sound.polyDivisorBase > 0 {
+			divisor = float64(uint16(sound.polyDivisorBase) << uint16(sound.polyDivisorShift+4))
 		}
-		// NOTE: where does polystep fit into this?
-		twoShiftS := float64(uint(2) << uint(sound.polyShiftFreq))
-		if twoShiftS == 0 {
-			twoShiftS = 0.5
-		}
-		return 524288.0 / r / twoShiftS
+		return 4194304.0 / divisor
 	case squareSoundType:
 		return 131072.0 / float64(2048-sound.freqReg)
 	default:
@@ -371,21 +403,20 @@ func (sound *sound) writeWavePatternValue(addr uint16, val byte) {
 }
 
 func (sound *sound) writePolyCounterReg(val byte) {
-	if val&0x08 != 0 {
-		sound.polyStep = 7
-	} else {
-		sound.polyStep = 15
+	sound.poly7BitMode = val&0x08 != 0
+	shift := val >> 4
+	if shift < 14 {
+		sound.polyDivisorShift = shift
 	}
-	sound.polyShiftFreq = val >> 4
-	sound.polyDivRatio = val & 0x07
+	sound.polyDivisorBase = val & 0x07
 }
 func (sound *sound) readPolyCounterReg() byte {
 	val := byte(0)
-	if sound.polyStep == 7 {
-		val |= 8
+	if sound.poly7BitMode {
+		val |= 0x08
 	}
-	val |= sound.polyShiftFreq << 4
-	val |= sound.polyDivRatio
+	val |= sound.polyDivisorShift << 4
+	val |= sound.polyDivisorBase
 	return val
 }
 
