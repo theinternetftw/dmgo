@@ -372,7 +372,7 @@ func (sound *sound) updateFreq() {
 			if sound.polyDivisorShift >= 14 {
 				sound.freq = 0.0 // clock stops on invalid shift value
 			}
-			divisor = float64(uint16(sound.polyDivisorBase) << uint16(sound.polyDivisorShift+4))
+			divisor = float64(uint(sound.polyDivisorBase) << uint(sound.polyDivisorShift+4))
 		}
 		sound.freq = 4194304.0 / divisor
 	case squareSoundType:
