@@ -468,7 +468,9 @@ func (sound *sound) readFreqLowReg() byte {
 }
 
 func (sound *sound) writeFreqHighReg(val byte) {
-	sound.restartRequested = val&0x80 != 0
+	if val&0x80 != 0 {
+		sound.restartRequested = true
+	}
 	sound.playsContinuously = val&0x40 == 0
 	sound.freqReg &^= 0xff00
 	sound.freqReg |= uint16(val&0x07) << 8
