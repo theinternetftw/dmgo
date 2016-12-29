@@ -282,7 +282,10 @@ func (cs *cpuState) getBC() uint16 { return (uint16(cs.b) << 8) | uint16(cs.c) }
 func (cs *cpuState) getDE() uint16 { return (uint16(cs.d) << 8) | uint16(cs.e) }
 func (cs *cpuState) getHL() uint16 { return (uint16(cs.h) << 8) | uint16(cs.l) }
 
-func (cs *cpuState) setAF(val uint16) { cs.a, cs.f = byte(val>>8), byte(val) }
+func (cs *cpuState) setAF(val uint16) {
+	cs.a = byte(val >> 8)
+	cs.f = byte(val) &^ 0x0f
+}
 func (cs *cpuState) setBC(val uint16) { cs.b, cs.c = byte(val>>8), byte(val) }
 func (cs *cpuState) setDE(val uint16) { cs.d, cs.e = byte(val>>8), byte(val) }
 func (cs *cpuState) setHL(val uint16) { cs.h, cs.l = byte(val>>8), byte(val) }
