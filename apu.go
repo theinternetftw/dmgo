@@ -18,8 +18,6 @@ type apu struct {
 
 	rightSpeakerVolume byte // right=S01 in docs
 	leftSpeakerVolume  byte // left=S02 in docs
-
-	counter byte
 }
 
 func (apu *apu) init() {
@@ -398,18 +396,28 @@ func (sound *sound) readWaveOutLvlReg() byte {
 	return (sound.waveOutLvl << 5) | 0x9f
 }
 
-func (sound *sound) writeLengthData(val byte) {
+func (sound *sound) writeLengthDataReg(val byte) {
 	switch sound.soundType {
 	case waveSoundType:
 		sound.lengthData = 256 - uint16(val)
-	case noiseSoundType, squareSoundType:
-		sound.lengthData = 64 - uint16(val)
+	case noiseSoundType:
+		sound.lengthData = 64 - uint16(val&0x3f)
+	default:
+		panic("writeLengthData: unexpected sound type")
+	}
+}
+func (sound *sound) readLengthDataReg() byte {
+	switch sound.soundType {
+	case waveSoundType:
+		return byte(256 - sound.lengthData)
+	case noiseSoundType:
+		return byte(64 - sound.lengthData)
 	default:
 		panic("writeLengthData: unexpected sound type")
 	}
 }
 func (sound *sound) writeLenDutyReg(val byte) {
-	sound.lengthData = uint16(val & 0x3f)
+	sound.lengthData = 64 - uint16(val&0x3f)
 	sound.waveDuty = val >> 6
 }
 func (sound *sound) readLenDutyReg() byte {
