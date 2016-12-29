@@ -71,18 +71,20 @@ func (c *apuCircleBuf) mask(i uint) uint { return i & (uint(len(c.buf)) - 1) }
 func (c *apuCircleBuf) size() uint       { return c.writeIndex - c.readIndex }
 func (c *apuCircleBuf) full() bool       { return c.size() == uint(len(c.buf)) }
 
+const timePerCycle = 1.0 / (4 * 1024 * 1024)
+
 func (apu *apu) runCycle(cs *cpuState) {
 
-	if !apu.buffer.full() {
+	if apu.sampleTimeCounter-apu.lastLengthCycle >= 1.0/256.0 {
+		apu.runLengthCycle()
+		apu.lastLengthCycle = apu.sampleTimeCounter
+	}
+	if apu.sampleTimeCounter-apu.lastEnvCycle >= 1.0/64.0 {
+		apu.runEnvCycle()
+		apu.lastEnvCycle = apu.sampleTimeCounter
+	}
 
-		if apu.sampleTimeCounter-apu.lastLengthCycle >= 1.0/256.0 {
-			apu.runLengthCycle()
-			apu.lastLengthCycle = apu.sampleTimeCounter
-		}
-		if apu.sampleTimeCounter-apu.lastEnvCycle >= 1.0/64.0 {
-			apu.runEnvCycle()
-			apu.lastEnvCycle = apu.sampleTimeCounter
-		}
+	if !apu.buffer.full() {
 
 		left, right := 0.0, 0.0
 		if apu.allSoundsOn {
@@ -92,11 +94,12 @@ func (apu *apu) runCycle(cs *cpuState) {
 			left1, right1 := apu.sounds[1].getSample()
 			left2, right2 := apu.sounds[2].getSample()
 			left3, right3 := apu.sounds[3].getSample()
-			left = (left0 + left1 + left2 + left3) / 4.0
-			right = (right0 + right1 + right2 + right3) / 4.0
-			left = left / 8.0 * float64(apu.leftSpeakerVolume+1)
-			right = right / 8.0 * float64(apu.rightSpeakerVolume+1)
+			left = (left0 + left1 + left2 + left3) * 0.25
+			right = (right0 + right1 + right2 + right3) * 0.25
+			left = left * 0.125 * float64(apu.leftSpeakerVolume+1)
+			right = right * 0.125 * float64(apu.rightSpeakerVolume+1)
 		}
+
 		sampleL, sampleR := int16(left*32767.0), int16(right*32767.0)
 		apu.buffer.write([]byte{
 			byte(sampleL & 0xff),
@@ -104,14 +107,14 @@ func (apu *apu) runCycle(cs *cpuState) {
 			byte(sampleR & 0xff),
 			byte(sampleR >> 8),
 		})
-
-		if apu.sampleTimeCounter-apu.lastSweepCycle >= 1.0/128.0 {
-			apu.sounds[0].runSweepCycle()
-			apu.lastSweepCycle = apu.sampleTimeCounter
-		}
-
-		apu.sampleTimeCounter += timePerSample
 	}
+
+	if apu.sampleTimeCounter-apu.lastSweepCycle >= 1.0/128.0 {
+		apu.sounds[0].runSweepCycle()
+		apu.lastSweepCycle = apu.sampleTimeCounter
+	}
+
+	apu.sampleTimeCounter += timePerCycle
 }
 
 func (apu *apu) runFreqCycle() {
