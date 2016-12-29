@@ -578,7 +578,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0x2e: // ld l, d8
 		cs.setOpL(8, 2, cs.read(cs.pc+1), 0x2222)
 	case 0x2f: // cpl
-		cs.setOpA(4, 1, ^cs.a, 0x2222)
+		cs.setOpA(4, 1, ^cs.a, 0x2112)
 
 	case 0x30: // jr z, r8
 		cs.jmpRel8(12, 8, 2, !cs.getCarryFlag(), int8(cs.read(cs.pc+1)))
