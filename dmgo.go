@@ -343,6 +343,11 @@ func (cs *cpuState) init() {
 	cs.write(0xff47, 0xfc)
 	cs.write(0xff48, 0xff)
 	cs.write(0xff49, 0xff)
+
+	cs.apu.sounds[0].restartRequested = false
+	cs.apu.sounds[1].restartRequested = false
+	cs.apu.sounds[2].restartRequested = false
+	cs.apu.sounds[3].restartRequested = false
 }
 
 func (cs *cpuState) runCycles(ncycles uint) {
