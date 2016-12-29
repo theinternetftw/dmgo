@@ -244,14 +244,14 @@ func (cs *cpuState) readInterruptFlagReg() byte {
 }
 
 func (cs *cpuState) getZeroFlag() bool      { return cs.f&0x80 > 0 }
-func (cs *cpuState) getAddSubFlag() bool    { return cs.f&0x40 > 0 }
+func (cs *cpuState) getSubFlag() bool       { return cs.f&0x40 > 0 }
 func (cs *cpuState) getHalfCarryFlag() bool { return cs.f&0x20 > 0 }
 func (cs *cpuState) getCarryFlag() bool     { return cs.f&0x10 > 0 }
 
 func (cs *cpuState) setFlags(flags uint16) {
 
 	setZero, clearZero := flags&0x1000 != 0, flags&0xf000 == 0
-	setAddSub, clearAddSub := flags&0x100 != 0, flags&0xf00 == 0
+	setSub, clearSub := flags&0x100 != 0, flags&0xf00 == 0
 	setHalfCarry, clearHalfCarry := flags&0x10 != 0, flags&0xf0 == 0
 	setCarry, clearCarry := flags&0x1 != 0, flags&0xf == 0
 
@@ -260,9 +260,9 @@ func (cs *cpuState) setFlags(flags uint16) {
 	} else if clearZero {
 		cs.f &^= 0x80
 	}
-	if setAddSub {
+	if setSub {
 		cs.f |= 0x40
-	} else if clearAddSub {
+	} else if clearSub {
 		cs.f &^= 0x40
 	}
 	if setHalfCarry {

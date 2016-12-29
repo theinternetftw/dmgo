@@ -240,20 +240,34 @@ func (cs *cpuState) decOpHL() {
 }
 
 func (cs *cpuState) daaOp() {
+
 	diff := byte(0)
-	if cs.a&0x0f > 0x09 || cs.getHalfCarryFlag() {
-		diff += 0x06
-		cs.f |= 0x20
+	newCarryFlag := uint16(0)
+	if cs.getSubFlag() {
+		if cs.getHalfCarryFlag() {
+			diff += 0x06
+		}
+		if cs.getCarryFlag() {
+			newCarryFlag = 0x0001
+			diff += 0x60
+		}
+	} else {
+		if cs.a&0x0f > 0x09 || cs.getHalfCarryFlag() {
+			diff += 0x06
+		}
+		if cs.a > 0x99 || cs.getCarryFlag() {
+			newCarryFlag = 0x0001
+			diff += 0x60
+		}
 	}
-	if cs.a&0xf0 > 0x90 || cs.getCarryFlag() {
-		diff += 0x60
-		cs.f |= 0x10
-	}
-	if cs.getAddSubFlag() {
+
+	if cs.getSubFlag() {
 		cs.a -= diff
 	} else {
 		cs.a += diff
 	}
+
+	cs.setFlags(zFlag(cs.a) | 0x0200 | newCarryFlag)
 	cs.runCycles(4)
 	cs.pc++
 }
