@@ -480,6 +480,9 @@ func (sound *sound) readSweepReg() byte {
 
 func (sound *sound) writeSoundEnvReg(val byte) {
 	sound.envelopeStartVal = val >> 4
+	if sound.envelopeStartVal == 0 {
+		sound.on = false
+	}
 	if val&0x08 != 0 {
 		sound.envelopeDirection = envUp
 	} else {
