@@ -391,8 +391,11 @@ type Input struct {
 // amount of buffer (if available) is removed from the emulator's
 // buffer and returned.
 func (cs *cpuState) ReadSoundBuffer(maxBytesWanted int) []byte {
-	return cs.apu.buffer.read(make([]byte, gobi.Uint.Min(
-		uint(maxBytesWanted), cs.apu.buffer.size())))
+	minSize, bufSize := uint(maxBytesWanted), cs.apu.buffer.size()
+	if bufSize < minSize {
+		minSize = bufSize
+	}
+	return cs.apu.buffer.read(make([]byte, minSize))
 }
 
 // GetCartRAM returns the current state of external RAM
