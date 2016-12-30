@@ -4,10 +4,12 @@ I put together dmgo in about a week and half over the holidays. Much is left to 
 
 #### Features:
  * Audio (on windows)!
+ * Saved game support!
  * Many games playable!
+ * All major MBCs suppported!
  * Glitches are relatively rare but still totally happen!
- * Graphical cross-platform support in native golang, with no hooks into C libraries needed.
- 
+ * Graphical cross-platform support in native golang, with no hooks into C libraries needed!
+
 That last bit relies on [exp/shiny](https://github.com/golang/exp/tree/master/shiny), which is still a work in progress. Let me know if it fails on your platform.
 
 #### Build instructions:
