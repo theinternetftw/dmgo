@@ -103,17 +103,17 @@ func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, upd
 		go updateLoop(&windowState)
 
 		szRect := buf.Bounds()
-		justResized := true
+		needFullRepaint := true
 
 		for {
 			publish := false
-
 
 			switch e := w.NextEvent().(type) {
 			case lifecycle.Event:
 				if e.To == lifecycle.StageDead {
 					return
 				}
+
 			case key.Event:
 				windowState.Mutex.Lock()
 				windowState.updateKeymap(e)
@@ -125,12 +125,13 @@ func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, upd
 				tex.Upload(image.Point{0, 0}, buf, buf.Bounds())
 				windowState.drawRequested = false
 				windowState.Mutex.Unlock()
-
 				publish = true
+
 			case size.Event:
 				szRect = e.Bounds()
-				justResized = true
+
 			case paint.Event:
+				needFullRepaint = true
 				publish = true
 			}
 
@@ -153,11 +154,11 @@ func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, upd
 					1, 0, 0,
 					0, 1, 0,
 				}
-				// get flicker when we do two draws, so
-				// only do it when we resize
-				if justResized {
+				// get flicker when we do two draws all the time, so
+				// only do it when we resize or get moved on/offscreen
+				if needFullRepaint {
 					w.DrawUniform(identTrans, color.Black, szRect, screen.Src, nil)
-					justResized = false
+					needFullRepaint = false
 				}
 				w.Draw(src2dst, tex, tex.Bounds(), screen.Src, nil)
 				w.Publish()
