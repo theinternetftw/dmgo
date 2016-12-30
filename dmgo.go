@@ -367,7 +367,6 @@ func (cs *cpuState) runCycles(ncycles uint) {
 type Emulator interface {
 	Framebuffer() []byte
 	FlipRequested() bool
-	FrameWaitRequested() bool
 	ReadSoundBuffer(int) []byte
 	GetCartRAM() []byte
 	SetCartRAM([]byte) error
@@ -427,15 +426,6 @@ func (cs *cpuState) Framebuffer() []byte {
 func (cs *cpuState) FlipRequested() bool {
 	val := cs.lcd.flipRequested
 	cs.lcd.flipRequested = false
-	return val
-}
-
-// FrameWaitRequested indicates, separatate from an actual
-// draw event, whether or not there should be a wait until
-// when the frame would have been drawn
-func (cs *cpuState) FrameWaitRequested() bool {
-	val := cs.lcd.frameWaitRequested
-	cs.lcd.frameWaitRequested = false
 	return val
 }
 

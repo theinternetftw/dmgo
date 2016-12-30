@@ -36,7 +36,7 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = cs.mem.mbcRead(addr)
 
 	case addr >= 0x8000 && addr < 0xa000:
-		val = cs.lcd.videoRAM[addr-0x8000]
+		val = cs.lcd.readVideoRAM(addr - 0x8000)
 
 	case addr >= 0xa000 && addr < 0xc000:
 		val = cs.mem.mbcRead(addr)

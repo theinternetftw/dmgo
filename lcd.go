@@ -5,16 +5,13 @@ import (
 )
 
 type lcd struct {
-	framebuffer        []byte
-	flipRequested      bool // for whatever really draws the fb
-	frameWaitRequested bool // for timing when we skip redraws
+	framebuffer   []byte
+	flipRequested bool // for whatever really draws the fb
 
 	videoRAM [0x4000]byte // go ahead and do CGB size
 
 	oam            [160]byte
 	oamForScanline []oamEntry
-
-	stateChangeSinceLastVblank bool
 
 	// for oam sprite priority
 	bgMask     [160]bool
@@ -64,7 +61,7 @@ type lcd struct {
 
 func (lcd *lcd) writeOAM(addr uint16, val byte) {
 	// TODO: display mode checks (most disallow writing)
-	lcd.checkStateChangeAndAssignByte(&lcd.oam[addr], val)
+	lcd.oam[addr] = val
 }
 func (lcd *lcd) readOAM(addr uint16) byte {
 	if !lcd.accessingOAM && !lcd.readingData {
@@ -81,7 +78,15 @@ func (lcd *lcd) init() {
 }
 
 func (lcd *lcd) writeVideoRAM(addr uint16, val byte) {
-	lcd.checkStateChangeAndAssignByte(&lcd.videoRAM[addr], val)
+	if !lcd.readingData {
+		lcd.videoRAM[addr] = val
+	}
+}
+func (lcd *lcd) readVideoRAM(addr uint16) byte {
+	if !lcd.readingData {
+		return lcd.videoRAM[addr]
+	}
+	return 0xff
 }
 
 func (lcd *lcd) shouldStatIRQ() bool {
@@ -112,21 +117,10 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	if lcd.readingData && lcd.cyclesSinceLYInc >= 252 {
 		lcd.readingData = false
 		lcd.inHBlank = true
-
-		// It looks like most internal control bits are only
-		// updated at certain times. Some games (like tennis)
-		// do something like "ok, ly=lyc for the last line of
-		// my window, so lets turn the window off", which would
-		// fail to draw that last line if you didn't buffer up
-		// those changes until the hblank.
-		lcd.updateBufferedControlBits()
+		lcd.renderScanline()
 	}
 
 	if lcd.cyclesSinceLYInc >= 456 {
-
-		if lcd.stateChangeSinceLastVblank {
-			lcd.renderScanline()
-		}
 
 		lcd.cyclesSinceLYInc = 0
 		if !lcd.inVBlank {
@@ -138,14 +132,7 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 
 	if lcd.lyReg >= 144 && !lcd.inVBlank {
 		lcd.inVBlank = true
-
-		lcd.frameWaitRequested = true
-		if lcd.stateChangeSinceLastVblank {
-			lcd.flipRequested = true
-		}
-
-		lcd.stateChangeSinceLastVblank = false
-
+		lcd.flipRequested = true
 		cs.vBlankIRQ = true
 	}
 
@@ -412,45 +399,37 @@ func (lcd *lcd) fillScanline(val byte) {
 	}
 }
 
-func (lcd *lcd) checkStateChangeAndAssignByte(dest *byte, val byte) {
-	if *dest != val {
-		lcd.stateChangeSinceLastVblank = true
-		*dest = val
-	}
-}
-
 func (lcd *lcd) writeScrollY(val byte) {
-	lcd.checkStateChangeAndAssignByte(&lcd.scrollY, val)
+	lcd.scrollY = val
 }
 func (lcd *lcd) writeScrollX(val byte) {
-	lcd.checkStateChangeAndAssignByte(&lcd.scrollX, val)
+	lcd.scrollX = val
 }
 func (lcd *lcd) writeLycReg(val byte) {
 	lcd.lycReg = val
 }
 func (lcd *lcd) writeLyReg(val byte) {
-	lcd.checkStateChangeAndAssignByte(&lcd.lyReg, val)
+	lcd.lyReg = val
 }
 func (lcd *lcd) writeBackgroundPaletteReg(val byte) {
-	lcd.checkStateChangeAndAssignByte(&lcd.backgroundPaletteReg, val)
+	lcd.backgroundPaletteReg = val
 }
 func (lcd *lcd) writeObjectPalette0Reg(val byte) {
-	lcd.checkStateChangeAndAssignByte(&lcd.objectPalette0Reg, val)
+	lcd.objectPalette0Reg = val
 }
 func (lcd *lcd) writeObjectPalette1Reg(val byte) {
-	lcd.checkStateChangeAndAssignByte(&lcd.objectPalette1Reg, val)
+	lcd.objectPalette1Reg = val
 }
 func (lcd *lcd) writeWindowY(val byte) {
-	lcd.checkStateChangeAndAssignByte(&lcd.windowY, val)
+	lcd.windowY = val
 }
 func (lcd *lcd) writeWindowX(val byte) {
-	lcd.checkStateChangeAndAssignByte(&lcd.windowX, val)
+	lcd.windowX = val
 }
 
-func (lcd *lcd) updateBufferedControlBits() {
-	// everything except displayOn is buffered
-	boolsFromByte(lcd.pendingControlBits,
-		nil,
+func (lcd *lcd) writeControlReg(val byte) {
+	boolsFromByte(val,
+		&lcd.displayOn,
 		&lcd.useUpperWindowTileMap,
 		&lcd.displayWindow,
 		&lcd.useLowerBGAndWindowTileData,
@@ -459,21 +438,22 @@ func (lcd *lcd) updateBufferedControlBits() {
 		&lcd.displaySprites,
 		&lcd.displayBG,
 	)
-}
-func (lcd *lcd) writeControlReg(val byte) {
-	if lcd.readControlReg() != val {
-		lcd.stateChangeSinceLastVblank = true
 
-		lcd.pendingControlBits = val
-
-		lcd.displayOn = val&0x80 != 0
-		if !lcd.displayOn {
-			lcd.lyReg = 0
-		}
+	if !lcd.displayOn {
+		lcd.lyReg = 0
 	}
 }
 func (lcd *lcd) readControlReg() byte {
-	return lcd.pendingControlBits
+	return byteFromBools(
+		lcd.displayOn,
+		lcd.useUpperWindowTileMap,
+		lcd.displayWindow,
+		lcd.useLowerBGAndWindowTileData,
+		lcd.useUpperBGTileMap,
+		lcd.bigSprites,
+		lcd.displaySprites,
+		lcd.displayBG,
+	)
 }
 
 func (lcd *lcd) writeStatusReg(val byte) {

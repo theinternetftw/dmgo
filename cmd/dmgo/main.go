@@ -104,8 +104,6 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 			copy(window.Pix, emu.Framebuffer())
 			window.RequestDraw()
 			window.Mutex.Unlock()
-		}
-		if emu.FrameWaitRequested() {
 
 			spent := time.Now().Sub(lastVBlankTime)
 			toWait := 17*time.Millisecond - spent
