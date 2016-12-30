@@ -6,7 +6,7 @@ I put together dmgo in about a week and half over the holidays. Much is left to 
  * Audio (on windows)!
  * Saved game support!
  * Many games playable!
- * All major MBCs suppported!
+ * All major [MBCs](http://gbdev.gg8.se/wiki/articles/Memory_Bank_Controllers) suppported!
  * Glitches are relatively rare but still totally happen!
  * Graphical cross-platform support in native golang, with no hooks into C libraries needed!
 
