@@ -95,12 +95,7 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 		if bufferAvailable > 0 {
 			emuSound := emu.ReadSoundBuffer(bufferAvailable)
 			if len(emuSound) > 0 {
-				start := time.Now()
 				audio.Write(emuSound)
-				spent := time.Now().Sub(start)
-				if spent > time.Millisecond {
-					fmt.Printf("Stalled in a supposedly stall-free audio.Write(): %1.2f ms\r\n", spent.Seconds()*1000)
-				}
 			}
 		}
 
