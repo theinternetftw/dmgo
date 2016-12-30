@@ -1,6 +1,7 @@
 package dmgo
 
 import (
+	"fmt"
 	"sort"
 )
 
@@ -60,8 +61,11 @@ type lcd struct {
 }
 
 func (lcd *lcd) writeOAM(addr uint16, val byte) {
-	// TODO: display mode checks (most disallow writing)
-	lcd.oam[addr] = val
+	if !lcd.accessingOAM && !lcd.readingData {
+		lcd.oam[addr] = val
+	} else {
+		fmt.Println("TOUCHED OAM DURING USE: cyclesSinceLYInc", lcd.cyclesSinceLYInc, "lyReg", lcd.lyReg)
+	}
 }
 func (lcd *lcd) readOAM(addr uint16) byte {
 	if !lcd.accessingOAM && !lcd.readingData {
@@ -121,19 +125,19 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	}
 
 	if lcd.cyclesSinceLYInc >= 456 {
+		lcd.inHBlank = false
+		lcd.lyReg++
+
+		if lcd.lyReg >= 144 && !lcd.inVBlank {
+			lcd.inVBlank = true
+			lcd.flipRequested = true
+			cs.vBlankIRQ = true
+		}
 
 		lcd.cyclesSinceLYInc = 0
 		if !lcd.inVBlank {
 			lcd.accessingOAM = true
 		}
-		lcd.inHBlank = false
-		lcd.lyReg++
-	}
-
-	if lcd.lyReg >= 144 && !lcd.inVBlank {
-		lcd.inVBlank = true
-		lcd.flipRequested = true
-		cs.vBlankIRQ = true
 	}
 
 	if lcd.inVBlank {
