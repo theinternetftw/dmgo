@@ -1,4 +1,4 @@
-# dmgo - a gameboy emulator in native go
+# dmgo - a gameboy emulator in go
 
 I put together dmgo in about a week and half over the holidays. Much is left to be done, but things have progessed enough to throw it up on here.
 
