@@ -210,7 +210,7 @@ func (ab *AudioBuffer) writerLoop() {
 	}
 }
 
-func (ab *AudioBuffer) Write(data []byte) error {
+func (ab *AudioBuffer) Write(data []byte) {
 	for len(data) > 0 {
 
 		if ab.currentBlock.dwFlags & whdrDone == 0 {
@@ -236,5 +236,4 @@ func (ab *AudioBuffer) Write(data []byte) error {
 		// the api calls sometimes takes a few ms, so let's not wait on them
 		ab.writer <- block
 	}
-	return nil
 }

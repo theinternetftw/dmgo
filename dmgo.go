@@ -367,7 +367,7 @@ func (cs *cpuState) runCycles(ncycles uint) {
 type Emulator interface {
 	Framebuffer() []byte
 	FlipRequested() bool
-	ReadSoundBuffer(int) []byte
+	ReadSoundBuffer([]byte) []byte
 	GetCartRAM() []byte
 	SetCartRAM([]byte) error
 	UpdateInput(input Input)
@@ -386,15 +386,10 @@ type Input struct {
 }
 
 // GetSoundBuffer returns a 44100hz * 16bit * 2ch sound buffer.
-// The maximum length of buffer desired is requested, and that
-// amount of buffer (if available) is removed from the emulator's
-// buffer and returned.
-func (cs *cpuState) ReadSoundBuffer(maxBytesWanted int) []byte {
-	minSize, bufSize := uint(maxBytesWanted), cs.apu.buffer.size()
-	if bufSize < minSize {
-		minSize = bufSize
-	}
-	return cs.apu.buffer.read(make([]byte, minSize))
+// A pre-sized buffer must be provided, which is returned resized
+// if the buffer was less full than the length requested.
+func (cs *cpuState) ReadSoundBuffer(toFill []byte) []byte {
+	return cs.apu.buffer.read(toFill)
 }
 
 // GetCartRAM returns the current state of external RAM

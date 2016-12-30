@@ -78,6 +78,7 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 	}
 
 	audio, err := platform.OpenAudioBuffer(4, 4096, 44100, 16, 2)
+	workingAudioBuffer := make([]byte, audio.BufferSize())
 	dieIf(err)
 
 	for {
@@ -92,12 +93,8 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 		if bufferAvailable == audio.BufferSize() {
 			fmt.Println("Platform AudioBuffer empty!")
 		}
-		if bufferAvailable > 0 {
-			emuSound := emu.ReadSoundBuffer(bufferAvailable)
-			if len(emuSound) > 0 {
-				audio.Write(emuSound)
-			}
-		}
+		workingAudioBuffer = workingAudioBuffer[:bufferAvailable]
+		audio.Write(emu.ReadSoundBuffer(workingAudioBuffer))
 
 		if emu.FlipRequested() {
 			window.Mutex.Lock()
