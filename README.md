@@ -15,7 +15,7 @@ Tested on windows 10 and xubuntu.
 
 #### Build instructions:
 
-dmgo uses [glide](https://github.com/Masterminds/glide) for dependencies, so run `glide update` first (or just `go get` the packages mentioned in `glide.yaml` file).
+dmgo uses [glide](https://github.com/Masterminds/glide) for dependencies, so run `glide update` first (or just `go get` the packages mentioned in the `glide.yaml` file).
 
 After that, `go build ./cmd/dmgo` should be enough. The interested can also see my build script `b` for more options (profiling and cross-compiling and such).
 
