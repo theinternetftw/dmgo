@@ -66,6 +66,12 @@ func (lcd *lcd) writeOAM(addr uint16, val byte) {
 	// TODO: display mode checks (most disallow writing)
 	lcd.checkStateChangeAndAssignByte(&lcd.oam[addr], val)
 }
+func (lcd *lcd) readOAM(addr uint16) byte {
+	if !lcd.accessingOAM && !lcd.readingData {
+		return lcd.oam[addr]
+	}
+	return 0xff
+}
 
 func (lcd *lcd) init() {
 

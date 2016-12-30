@@ -45,6 +45,12 @@ func (cs *cpuState) read(addr uint16) byte {
 		ramAddr := (addr - 0xc000) & 0x1fff // 8kb with wraparound
 		val = cs.mem.internalRAM[ramAddr]
 
+	case addr >= 0xfe00 && addr < 0xfea0:
+		val = cs.lcd.readOAM(addr - 0xfe00)
+
+	case addr >= 0xfea0 && addr < 0xff00:
+		val = 0xff // (empty mem, but can be more complicated, see TCAGBD)
+
 	case addr == 0xff00:
 		val = cs.joypad.readJoypadReg()
 	case addr == 0xff01:
