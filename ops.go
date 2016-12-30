@@ -725,7 +725,7 @@ func (cs *cpuState) stepOpcode() {
 
 	case 0xe8: // add sp, r8
 		v1, v2 := cs.sp, uint16(int8(cs.read(cs.pc+1)))
-		cs.setOpSP(16, 2, v1+v2, (hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
+		cs.setOpSP(16, 2, v1+v2, (hFlagAdd(byte(v1), byte(v2)) | cFlagAdd(byte(v1), byte(v2))))
 	case 0xe9: // jp hl (also written jp (hl))
 		cs.setOpPC(4, 1, cs.getHL(), 0x2222)
 	case 0xea: // ld (a16), a
@@ -762,7 +762,7 @@ func (cs *cpuState) stepOpcode() {
 
 	case 0xf8: // ld hl, sp+r8
 		v1, v2 := cs.sp, uint16(int8(cs.read(cs.pc+1)))
-		cs.setOpHL(12, 2, v1+v2, (hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
+		cs.setOpHL(12, 2, v1+v2, (hFlagAdd(byte(v1), byte(v2)) | cFlagAdd(byte(v1), byte(v2))))
 	case 0xf9: // ld sp, hl
 		cs.setOpSP(8, 1, cs.getHL(), 0x2222)
 	case 0xfa: // ld a, (a16)
