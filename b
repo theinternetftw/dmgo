@@ -2,7 +2,7 @@
 
 projectname=dmgo
 
-pkg=theinternetftw.com/$projectname/cmd/$projectname
+pkg=github.com/theinternetftw/$projectname/cmd/$projectname
 
 if [ "$1" == "f" ]
 then

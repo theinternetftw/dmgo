@@ -1,9 +1,9 @@
 package main
 
 import (
-	"theinternetftw.com/dmgo"
-	"theinternetftw.com/dmgo/profiling"
-	"theinternetftw.com/dmgo/platform"
+	"github.com/theinternetftw/dmgo"
+	"github.com/theinternetftw/dmgo/profiling"
+	"github.com/theinternetftw/dmgo/platform"
 
 	"fmt"
 	"io/ioutil"

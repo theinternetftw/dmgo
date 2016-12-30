@@ -1,4 +1,4 @@
-package: theinternetftw.com/dmgo
+package: github.com/theinternetftw/dmgo
 import:
 - package: github.com/pkg/profile
   version: ^1.2.0
