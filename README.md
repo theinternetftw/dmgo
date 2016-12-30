@@ -11,6 +11,7 @@ I put together dmgo in about a week and half over the holidays. Much is left to 
  * Graphical cross-platform support in native golang, with no hooks into C libraries needed!
 
 That last bit relies on [exp/shiny](https://github.com/golang/exp/tree/master/shiny), which is still a work in progress. Let me know if it fails on your platform.
+Tested on windows 10 and xubuntu.
 
 #### Build instructions:
 
