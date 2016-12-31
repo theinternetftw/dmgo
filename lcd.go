@@ -142,7 +142,7 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 			}
 		}
 
-		lcd.cyclesSinceLYInc = 0
+		lcd.cyclesSinceLYInc = lcd.cyclesSinceLYInc - 456
 		if !lcd.inVBlank {
 			lcd.accessingOAM = true
 		}
@@ -152,6 +152,7 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 		lcd.cyclesSinceVBlankStart += ncycles
 		if lcd.cyclesSinceVBlankStart >= 456*10 {
 			lcd.lyReg = 0
+			lcd.cyclesSinceLYInc = lcd.cyclesSinceVBlankStart - 456*10
 			lcd.inVBlank = false
 			lcd.accessingOAM = true
 			lcd.cyclesSinceVBlankStart = 0
