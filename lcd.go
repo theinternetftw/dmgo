@@ -9,6 +9,8 @@ type lcd struct {
 	framebuffer   []byte
 	flipRequested bool // for whatever really draws the fb
 
+	pastFirstFrame bool
+
 	videoRAM [0x4000]byte // go ahead and do CGB size
 
 	oam            [160]byte
@@ -130,8 +132,13 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 
 		if lcd.lyReg >= 144 && !lcd.inVBlank {
 			lcd.inVBlank = true
-			lcd.flipRequested = true
 			cs.vBlankIRQ = true
+
+			if lcd.pastFirstFrame {
+				lcd.flipRequested = true
+			} else {
+				lcd.pastFirstFrame = true
+			}
 		}
 
 		lcd.cyclesSinceLYInc = 0
