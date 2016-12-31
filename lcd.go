@@ -62,11 +62,18 @@ type lcd struct {
 	statIRQSignal bool
 }
 
+var lastOAMWarningCycles uint
+var lastOAMWarningLine byte
+
 func (lcd *lcd) writeOAM(addr uint16, val byte) {
 	if !lcd.accessingOAM && !lcd.readingData {
 		lcd.oam[addr] = val
 	} else {
-		fmt.Println("TOUCHED OAM DURING USE: cyclesSinceLYInc", lcd.cyclesSinceLYInc, "lyReg", lcd.lyReg)
+		if lcd.cyclesSinceLYInc != lastOAMWarningCycles || lcd.lyReg != lastOAMWarningLine {
+			lastOAMWarningCycles = lcd.cyclesSinceLYInc
+			lastOAMWarningLine = lcd.lyReg
+			fmt.Println("TOUCHED OAM DURING USE: cyclesSinceLYInc", lcd.cyclesSinceLYInc, "lyReg", lcd.lyReg)
+		}
 	}
 }
 func (lcd *lcd) readOAM(addr uint16) byte {
