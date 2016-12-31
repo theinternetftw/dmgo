@@ -116,6 +116,7 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	lcd.cyclesSinceLYInc += ncycles
 
 	if lcd.accessingOAM && lcd.cyclesSinceLYInc >= 80 {
+		lcd.parseOAMForScanline(lcd.lyReg)
 		lcd.accessingOAM = false
 		lcd.readingData = true
 	}
@@ -360,7 +361,6 @@ func (lcd *lcd) renderScanline() {
 	}
 
 	if lcd.displaySprites {
-		lcd.parseOAMForScanline(y)
 		for i := range lcd.oamForScanline {
 			e := &lcd.oamForScanline[i]
 			lcd.renderSpriteAtScanline(e, y)
