@@ -265,10 +265,6 @@ func (e *oamEntry) yFlip() bool       { return e.flagsByte&0x40 != 0 }
 func (e *oamEntry) xFlip() bool       { return e.flagsByte&0x20 != 0 }
 func (e *oamEntry) palSelector() bool { return e.flagsByte&0x10 != 0 }
 
-func (e *oamEntry) inX(xByte byte) bool {
-	x := int16(xByte)
-	return x >= e.x && x < e.x+8
-}
 func yInSprite(y byte, spriteY int16, height int) bool {
 	return int16(y) >= spriteY && int16(y) < spriteY+int16(height)
 }
@@ -292,12 +288,21 @@ func (lcd *lcd) parseOAMForScanline(scanline byte) {
 			})
 		}
 	}
-	// lower xs have higher priority
-	sort.Stable(sortableOAM(lcd.oamForScanline))
+
+	// NOTE: pandocs suggest that on DMG, x coord is first sort priority,
+	// oam index second, and that may be true for object draw sort order,
+	// but dkland suggests indexes reign supreme for the total number of
+	// drawable sprites. In that game they set x to zero to disable, and
+	// dk is never drawn below those sprites because his sprites are
+	// always at the front of the oam table.
+
 	// limit of 10 sprites per line
 	if len(lcd.oamForScanline) > 10 {
 		lcd.oamForScanline = lcd.oamForScanline[:10]
 	}
+
+	// resort to x-coord order (DMG only, CGB stops with the above)
+	sort.Stable(sortableOAM(lcd.oamForScanline))
 }
 
 type sortableOAM []oamEntry
