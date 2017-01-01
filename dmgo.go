@@ -8,72 +8,72 @@ type cpuState struct {
 	PC                     uint16
 	SP                     uint16
 	A, F, B, C, D, E, H, L byte
-	mem                    mem
+	Mem                    mem
 
-	title          string
-	headerChecksum byte
+	Title          string
+	HeaderChecksum byte
 
-	lcd lcd
-	apu apu
+	LCD lcd
+	APU apu
 
-	inHaltMode bool
-	inStopMode bool
+	InHaltMode bool
+	InStopMode bool
 
-	interruptMasterEnable bool
+	InterruptMasterEnable bool
 
-	vBlankInterruptEnabled  bool
-	lcdStatInterruptEnabled bool
-	timerInterruptEnabled   bool
-	serialInterruptEnabled  bool
-	joypadInterruptEnabled  bool
-	dummyEnableBits         [3]bool
+	VBlankInterruptEnabled  bool
+	LCDStatInterruptEnabled bool
+	TimerInterruptEnabled   bool
+	SerialInterruptEnabled  bool
+	JoypadInterruptEnabled  bool
+	DummyEnableBits         [3]bool
 
-	vBlankIRQ  bool
-	lcdStatIRQ bool
-	timerIRQ   bool
-	serialIRQ  bool
-	joypadIRQ  bool
+	VBlankIRQ  bool
+	LCDStatIRQ bool
+	TimerIRQ   bool
+	SerialIRQ  bool
+	JoypadIRQ  bool
 
-	serialTransferData            byte
-	serialTransferStartFlag       bool
-	serialTransferClockIsInternal bool
-	serialClock                   uint16
-	serialBitsTransferred         byte
+	SerialTransferData            byte
+	SerialTransferStartFlag       bool
+	SerialTransferClockIsInternal bool
+	SerialClock                   uint16
+	SerialBitsTransferred         byte
 
-	timerOn           bool
-	timerModuloReg    byte
-	timerCounterReg   byte
-	timerFreqSelector byte
-	timerDivCycles    uint16 // div reg is top 8 bits of this
+	TimerOn           bool
+	TimerModuloReg    byte
+	TimerCounterReg   byte
+	TimerFreqSelector byte
+	TimerDivCycles    uint16 // div reg is top 8 bits of this
 
-	joypad Joypad
+	Joypad Joypad
 
-	steps  uint
-	cycles uint
+	Steps  uint
+	Cycles uint
 }
 
 func (cs *cpuState) runSerialCycle() {
-	if !cs.serialTransferStartFlag {
-		cs.serialBitsTransferred = 0
-		cs.serialClock = 0
+	if !cs.SerialTransferStartFlag {
+		cs.SerialBitsTransferred = 0
+		cs.SerialClock = 0
 		return
 	}
-	if !cs.serialTransferClockIsInternal {
+	if !cs.SerialTransferClockIsInternal {
 		// no real link cable, so wait forever
 		// (hopefully til game times out transfer)
 		return
 	}
-	cs.serialClock++
-	if cs.serialClock == 512 { // 8192Hz
-		cs.serialClock = 0
-		cs.serialTransferData <<= 1
+	cs.SerialClock++
+	if cs.SerialClock == 512 { // 8192Hz
+		cs.SerialClock = 0
+		cs.SerialTransferData <<= 1
 		// emulate a disconnected cable
-		cs.serialTransferData |= 0x01
-		cs.serialBitsTransferred++
-		if cs.serialBitsTransferred == 8 {
-			cs.serialBitsTransferred = 0
-			cs.serialClock = 0
-			cs.serialIRQ = true
+		cs.SerialTransferData |= 0x01
+		cs.SerialBitsTransferred++
+		if cs.SerialBitsTransferred == 8 {
+			cs.SerialBitsTransferred = 0
+			cs.SerialClock = 0
+			cs.SerialIRQ = true
 		}
 	}
 }
@@ -82,38 +82,38 @@ func (cs *cpuState) runSerialCycle() {
 // See TCAGBD
 func (cs *cpuState) runTimerCycle() {
 
-	cs.timerDivCycles++
+	cs.TimerDivCycles++
 
-	if !cs.timerOn {
+	if !cs.TimerOn {
 		return
 	}
 
 	cycleCount := [...]uint{
 		1024, 16, 64, 256,
-	}[cs.timerFreqSelector]
-	if cs.cycles&(cycleCount-1) == 0 {
-		cs.timerCounterReg++
-		if cs.timerCounterReg == 0 {
-			cs.timerCounterReg = cs.timerModuloReg
-			cs.timerIRQ = true
+	}[cs.TimerFreqSelector]
+	if cs.Cycles&(cycleCount-1) == 0 {
+		cs.TimerCounterReg++
+		if cs.TimerCounterReg == 0 {
+			cs.TimerCounterReg = cs.TimerModuloReg
+			cs.TimerIRQ = true
 		}
 	}
 }
 
 func (cs *cpuState) readTimerControlReg() byte {
-	return 0xf8 | boolBit(cs.timerOn, 2) | cs.timerFreqSelector
+	return 0xf8 | boolBit(cs.TimerOn, 2) | cs.TimerFreqSelector
 }
 func (cs *cpuState) writeTimerControlReg(val byte) {
-	cs.timerOn = val&0x04 != 0
-	cs.timerFreqSelector = val & 0x03
+	cs.TimerOn = val&0x04 != 0
+	cs.TimerFreqSelector = val & 0x03
 }
 
 func (cs *cpuState) readSerialControlReg() byte {
-	return boolBit(cs.serialTransferStartFlag, 7) | boolBit(cs.serialTransferClockIsInternal, 0)
+	return boolBit(cs.SerialTransferStartFlag, 7) | boolBit(cs.SerialTransferClockIsInternal, 0)
 }
 func (cs *cpuState) writeSerialControlReg(val byte) {
-	cs.serialTransferStartFlag = val&0x80 != 0
-	cs.serialTransferClockIsInternal = val&0x01 != 0
+	cs.SerialTransferStartFlag = val&0x80 != 0
+	cs.SerialTransferClockIsInternal = val&0x01 != 0
 }
 
 // Joypad represents the buttons on a gameboy
@@ -150,24 +150,24 @@ func (jp *Joypad) readJoypadReg() byte {
 }
 
 func (cs *cpuState) updateJoypad(newJP Joypad) {
-	lastVal := cs.joypad.readJoypadReg() & 0x0f
-	if cs.joypad.readMask&0x01 == 0 {
-		cs.joypad.Down = newJP.Down
-		cs.joypad.Up = newJP.Up
-		cs.joypad.Left = newJP.Left
-		cs.joypad.Right = newJP.Right
+	lastVal := cs.Joypad.readJoypadReg() & 0x0f
+	if cs.Joypad.readMask&0x01 == 0 {
+		cs.Joypad.Down = newJP.Down
+		cs.Joypad.Up = newJP.Up
+		cs.Joypad.Left = newJP.Left
+		cs.Joypad.Right = newJP.Right
 	}
-	if cs.joypad.readMask&0x10 == 0 {
-		cs.joypad.Start = newJP.Start
-		cs.joypad.Sel = newJP.Sel
-		cs.joypad.B = newJP.B
-		cs.joypad.A = newJP.A
+	if cs.Joypad.readMask&0x10 == 0 {
+		cs.Joypad.Start = newJP.Start
+		cs.Joypad.Sel = newJP.Sel
+		cs.Joypad.B = newJP.B
+		cs.Joypad.A = newJP.A
 	}
-	newVal := cs.joypad.readJoypadReg() & 0x0f
+	newVal := cs.Joypad.readJoypadReg() & 0x0f
 	// this is correct behavior. it only triggers irq
 	// if it goes from no-buttons-pressed to any-pressed.
 	if lastVal == 0x0f && newVal < lastVal {
-		cs.joypadIRQ = true
+		cs.JoypadIRQ = true
 	}
 }
 
@@ -176,21 +176,21 @@ func (cs *cpuState) handleInterrupts() bool {
 
 	var intFlag *bool
 	var intAddr uint16
-	if cs.vBlankInterruptEnabled && cs.vBlankIRQ {
-		intFlag, intAddr = &cs.vBlankIRQ, 0x0040
-	} else if cs.lcdStatInterruptEnabled && cs.lcdStatIRQ {
-		intFlag, intAddr = &cs.lcdStatIRQ, 0x0048
-	} else if cs.timerInterruptEnabled && cs.timerIRQ {
-		intFlag, intAddr = &cs.timerIRQ, 0x0050
-	} else if cs.serialInterruptEnabled && cs.serialIRQ {
-		intFlag, intAddr = &cs.serialIRQ, 0x0058
-	} else if cs.joypadInterruptEnabled && cs.joypadIRQ {
-		intFlag, intAddr = &cs.joypadIRQ, 0x0060
+	if cs.VBlankInterruptEnabled && cs.VBlankIRQ {
+		intFlag, intAddr = &cs.VBlankIRQ, 0x0040
+	} else if cs.LCDStatInterruptEnabled && cs.LCDStatIRQ {
+		intFlag, intAddr = &cs.LCDStatIRQ, 0x0048
+	} else if cs.TimerInterruptEnabled && cs.TimerIRQ {
+		intFlag, intAddr = &cs.TimerIRQ, 0x0050
+	} else if cs.SerialInterruptEnabled && cs.SerialIRQ {
+		intFlag, intAddr = &cs.SerialIRQ, 0x0058
+	} else if cs.JoypadInterruptEnabled && cs.JoypadIRQ {
+		intFlag, intAddr = &cs.JoypadIRQ, 0x0060
 	}
 
 	if intFlag != nil {
-		if cs.interruptMasterEnable {
-			cs.interruptMasterEnable = false
+		if cs.InterruptMasterEnable {
+			cs.InterruptMasterEnable = false
 			*intFlag = false
 			cs.pushOp16(20, 0, cs.PC)
 			cs.PC = intAddr
@@ -202,47 +202,47 @@ func (cs *cpuState) handleInterrupts() bool {
 
 func (cs *cpuState) writeInterruptEnableReg(val byte) {
 	boolsFromByte(val,
-		&cs.dummyEnableBits[2],
-		&cs.dummyEnableBits[1],
-		&cs.dummyEnableBits[0],
-		&cs.joypadInterruptEnabled,
-		&cs.serialInterruptEnabled,
-		&cs.timerInterruptEnabled,
-		&cs.lcdStatInterruptEnabled,
-		&cs.vBlankInterruptEnabled,
+		&cs.DummyEnableBits[2],
+		&cs.DummyEnableBits[1],
+		&cs.DummyEnableBits[0],
+		&cs.JoypadInterruptEnabled,
+		&cs.SerialInterruptEnabled,
+		&cs.TimerInterruptEnabled,
+		&cs.LCDStatInterruptEnabled,
+		&cs.VBlankInterruptEnabled,
 	)
 }
 func (cs *cpuState) readInterruptEnableReg() byte {
 	return byteFromBools(
-		cs.dummyEnableBits[2],
-		cs.dummyEnableBits[1],
-		cs.dummyEnableBits[0],
-		cs.joypadInterruptEnabled,
-		cs.serialInterruptEnabled,
-		cs.timerInterruptEnabled,
-		cs.lcdStatInterruptEnabled,
-		cs.vBlankInterruptEnabled,
+		cs.DummyEnableBits[2],
+		cs.DummyEnableBits[1],
+		cs.DummyEnableBits[0],
+		cs.JoypadInterruptEnabled,
+		cs.SerialInterruptEnabled,
+		cs.TimerInterruptEnabled,
+		cs.LCDStatInterruptEnabled,
+		cs.VBlankInterruptEnabled,
 	)
 }
 
 func (cs *cpuState) writeInterruptFlagReg(val byte) {
 	boolsFromByte(val,
 		nil, nil, nil,
-		&cs.joypadIRQ,
-		&cs.serialIRQ,
-		&cs.timerIRQ,
-		&cs.lcdStatIRQ,
-		&cs.vBlankIRQ,
+		&cs.JoypadIRQ,
+		&cs.SerialIRQ,
+		&cs.TimerIRQ,
+		&cs.LCDStatIRQ,
+		&cs.VBlankIRQ,
 	)
 }
 func (cs *cpuState) readInterruptFlagReg() byte {
 	return byteFromBools(
 		true, true, true,
-		cs.joypadIRQ,
-		cs.serialIRQ,
-		cs.timerIRQ,
-		cs.lcdStatIRQ,
-		cs.vBlankIRQ,
+		cs.JoypadIRQ,
+		cs.SerialIRQ,
+		cs.TimerIRQ,
+		cs.LCDStatIRQ,
+		cs.VBlankIRQ,
 	)
 }
 
@@ -301,18 +301,16 @@ func newState(cart []byte) *cpuState {
 	// if cartInfo.cgbOnly() {
 	// 	fatalErr("CGB-only not supported yet")
 	// }
-	mem := mem{
-		cart:        cart,
-		cartRAM:     make([]byte, cartInfo.GetRAMSize()),
-		internalRAM: make([]byte, 0x2000), // only DMG size for now
-		mbc:         makeMBC(cartInfo),
-	}
 	state := cpuState{
-		title:          cartInfo.Title,
-		headerChecksum: cartInfo.HeaderChecksum,
-
-		mem: mem,
-		lcd: lcd{
+		Title:          cartInfo.Title,
+		HeaderChecksum: cartInfo.HeaderChecksum,
+		Mem: mem{
+			cart:        cart,
+			cartRAM:     make([]byte, cartInfo.GetRAMSize()),
+			internalRAM: make([]byte, 0x2000), // only DMG size for now
+			mbc:         makeMBC(cartInfo),
+		},
+		LCD: lcd{
 			videoRAM: make([]byte, 0x2000), // only DMG size for now
 		},
 	}
@@ -331,12 +329,12 @@ func (cs *cpuState) init() {
 	cs.setSP(0xfffe)
 	cs.setPC(0x0100)
 
-	cs.timerDivCycles = 0xabcc
+	cs.TimerDivCycles = 0xabcc
 
-	cs.lcd.init()
-	cs.apu.init()
+	cs.LCD.init()
+	cs.APU.init()
 
-	cs.mem.mbc.Init(&cs.mem)
+	cs.Mem.mbc.Init(&cs.Mem)
 
 	cs.write(0xff10, 0x80)
 	cs.write(0xff11, 0xbf)
@@ -359,10 +357,10 @@ func (cs *cpuState) init() {
 	cs.write(0xff48, 0xff)
 	cs.write(0xff49, 0xff)
 
-	cs.apu.sounds[0].restartRequested = false
-	cs.apu.sounds[1].restartRequested = false
-	cs.apu.sounds[2].restartRequested = false
-	cs.apu.sounds[3].restartRequested = false
+	cs.APU.sounds[0].restartRequested = false
+	cs.APU.sounds[1].restartRequested = false
+	cs.APU.sounds[2].restartRequested = false
+	cs.APU.sounds[3].restartRequested = false
 
 	cs.initVRAM()
 }
@@ -399,14 +397,14 @@ func (cs *cpuState) initVRAM() {
 	}
 }
 
-func (cs *cpuState) runCycles(ncycles uint) {
-	for i := uint(0); i < ncycles; i++ {
-		cs.cycles++
+func (cs *cpuState) runCycles(numCycles uint) {
+	for i := uint(0); i < numCycles; i++ {
+		cs.Cycles++
 		cs.runTimerCycle()
 		cs.runSerialCycle()
-		cs.apu.runCycle(cs)
+		cs.APU.runCycle(cs)
 	}
-	cs.lcd.runCycles(cs, ncycles)
+	cs.LCD.runCycles(cs, numCycles)
 }
 
 // Emulator exposes the public facing fns for an emulation session
@@ -435,21 +433,21 @@ type Input struct {
 // A pre-sized buffer must be provided, which is returned resized
 // if the buffer was less full than the length requested.
 func (cs *cpuState) ReadSoundBuffer(toFill []byte) []byte {
-	return cs.apu.buffer.read(toFill)
+	return cs.APU.buffer.read(toFill)
 }
 
 // GetCartRAM returns the current state of external RAM
 func (cs *cpuState) GetCartRAM() []byte {
-	return cs.mem.cartRAM
+	return cs.Mem.cartRAM
 }
 
 // SetCartRAM attempts to set the RAM, returning error if size not correct
 func (cs *cpuState) SetCartRAM(ram []byte) error {
-	if len(cs.mem.cartRAM) == len(ram) {
-		copy(cs.mem.cartRAM, ram)
+	if len(cs.Mem.cartRAM) == len(ram) {
+		copy(cs.Mem.cartRAM, ram)
 		return nil
 	}
-	// TODO: better checks (e.g. real format, cart title/checksum, etc.)
+	// TODO: better checks if possible (e.g. real format, cart title/checksum, etc.)
 	return fmt.Errorf("ram size mismatch")
 }
 
@@ -459,14 +457,14 @@ func (cs *cpuState) UpdateInput(input Input) {
 
 // Framebuffer returns the current state of the lcd screen
 func (cs *cpuState) Framebuffer() []byte {
-	return cs.lcd.framebuffer[:]
+	return cs.LCD.framebuffer[:]
 }
 
 // FlipRequested indicates if a draw request is pending
 // and clears it before returning
 func (cs *cpuState) FlipRequested() bool {
-	val := cs.lcd.flipRequested
-	cs.lcd.flipRequested = false
+	val := cs.LCD.flipRequested
+	cs.LCD.flipRequested = false
 	return val
 }
 
@@ -485,10 +483,10 @@ var hitTarget = false
 func (cs *cpuState) Step() {
 
 	ieAndIfFlagMatch := cs.handleInterrupts()
-	if cs.inHaltMode {
+	if cs.InHaltMode {
 		if ieAndIfFlagMatch {
 			cs.runCycles(4)
-			cs.inHaltMode = false
+			cs.InHaltMode = false
 		} else {
 			cs.runCycles(4)
 			return
@@ -496,7 +494,7 @@ func (cs *cpuState) Step() {
 	}
 
 	// cs.debugLineOnStackChange()
-	// if cs.steps&0x2ffff == 0 {
+	// if cs.Steps&0x2ffff == 0 {
 	// if cs.PC == 0x4d19 {
 	// 	hitTarget = true
 	// }
@@ -507,13 +505,15 @@ func (cs *cpuState) Step() {
 	// TODO: correct behavior, e.g. check for
 	// button press only. but for now lets
 	// treat it like halt
-	if ieAndIfFlagMatch && cs.inStopMode {
+	if ieAndIfFlagMatch && cs.InStopMode {
 		cs.runCycles(4)
-		cs.inHaltMode = false
+		cs.InHaltMode = false
 	}
-	if cs.inStopMode {
+	if cs.InStopMode {
 		cs.runCycles(4)
 	}
+
+	cs.Steps++
 
 	cs.stepOpcode()
 }

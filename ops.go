@@ -273,62 +273,52 @@ func (cs *cpuState) daaOp() {
 }
 
 func (cs *cpuState) ifToString() string {
-	out := []byte("    ")
-	if cs.vBlankIRQ {
+	out := []byte("     ")
+	if cs.VBlankIRQ {
 		out[0] = 'V'
 	}
-	if cs.lcdStatIRQ {
+	if cs.LCDStatIRQ {
 		out[1] = 'L'
 	}
-	if cs.serialIRQ {
-		out[2] = 'S'
+	if cs.TimerIRQ {
+		out[2] = 'T'
 	}
-	if cs.joypadIRQ {
-		out[3] = 'J'
+	if cs.SerialIRQ {
+		out[3] = 'S'
+	}
+	if cs.JoypadIRQ {
+		out[4] = 'J'
 	}
 	return string(out)
 }
 func (cs *cpuState) ieToString() string {
-	out := []byte("    ")
-	if cs.vBlankInterruptEnabled {
+	out := []byte("     ")
+	if cs.VBlankInterruptEnabled {
 		out[0] = 'V'
 	}
-	if cs.lcdStatInterruptEnabled {
+	if cs.LCDStatInterruptEnabled {
 		out[1] = 'L'
 	}
-	if cs.serialInterruptEnabled {
-		out[2] = 'S'
+	if cs.TimerInterruptEnabled {
+		out[2] = 'T'
 	}
-	if cs.joypadInterruptEnabled {
-		out[3] = 'J'
+	if cs.SerialInterruptEnabled {
+		out[3] = 'S'
+	}
+	if cs.JoypadInterruptEnabled {
+		out[4] = 'J'
 	}
 	return string(out)
 }
 func (cs *cpuState) imeToString() string {
-	if cs.interruptMasterEnable {
+	if cs.InterruptMasterEnable {
 		return "1"
 	}
 	return "0"
 }
-func (cs *cpuState) lcdStatInterruptsToString() string {
-	out := []byte("    ")
-	if cs.vBlankInterruptEnabled {
-		out[0] = 'Y'
-	}
-	if cs.lcdStatInterruptEnabled {
-		out[1] = 'O'
-	}
-	if cs.serialInterruptEnabled {
-		out[2] = 'V'
-	}
-	if cs.joypadInterruptEnabled {
-		out[3] = 'H'
-	}
-	return string(out)
-}
 func (cs *cpuState) debugStatusLine() string {
 
-	return fmt.Sprintf("step:%08d, ", cs.steps) +
+	return fmt.Sprintf("step:%08d, ", cs.Steps) +
 		fmt.Sprintf("(*PC)[0:2]:%02x%02x%02x, ", cs.read(cs.PC), cs.read(cs.PC+1), cs.read(cs.PC+2)) +
 		fmt.Sprintf("(*SP):%04x, ", cs.read16(cs.SP)) +
 		fmt.Sprintf("[PC:%04x ", cs.PC) +
@@ -340,11 +330,11 @@ func (cs *cpuState) debugStatusLine() string {
 		fmt.Sprintf("ime:%v ", cs.imeToString()) +
 		fmt.Sprintf("ie:%v ", cs.ieToString()) +
 		fmt.Sprintf("if:%v ", cs.ifToString()) +
-		fmt.Sprintf("Ly:%02x ", cs.lcd.lyReg) +
-		fmt.Sprintf("Lyc:%02x ", cs.lcd.lycReg) +
-		fmt.Sprintf("Lc:%02x ", cs.lcd.readControlReg()) +
-		fmt.Sprintf("Ls:%02x ", cs.lcd.readStatusReg()) +
-		fmt.Sprintf("ROM:%d]", cs.mem.mbc.GetROMBankNumber())
+		fmt.Sprintf("Ly:%02x ", cs.LCD.lyReg) +
+		fmt.Sprintf("Lyc:%02x ", cs.LCD.lycReg) +
+		fmt.Sprintf("Lc:%02x ", cs.LCD.readControlReg()) +
+		fmt.Sprintf("Ls:%02x ", cs.LCD.readStatusReg()) +
+		fmt.Sprintf("ROM:%d]", cs.Mem.mbc.GetROMBankNumber())
 }
 
 func (cs *cpuState) addOpA(cycles uint, instLen uint16, val byte) {
@@ -465,7 +455,6 @@ func (cs *cpuState) stepSimpleOp(opcode byte) bool {
 
 func (cs *cpuState) stepOpcode() {
 
-	cs.steps++
 	opcode := cs.read(cs.PC)
 
 	// simple cases
@@ -512,7 +501,7 @@ func (cs *cpuState) stepOpcode() {
 		cs.rrcaOp()
 
 	case 0x10: // stop
-		cs.setOpFn(4, 2, func() { cs.inStopMode = true }, 0x2222)
+		cs.setOpFn(4, 2, func() { cs.InStopMode = true }, 0x2222)
 	case 0x11: // ld de, n16
 		cs.setOpDE(12, 3, cs.read16(cs.PC+1), 0x2222)
 	case 0x12: // ld (de), a
@@ -634,7 +623,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0x75: // ld (hl), l
 		cs.setOpMem8(8, 1, cs.getHL(), cs.L, 0x2222)
 	case 0x76: // halt
-		cs.setOpFn(4, 1, func() { cs.inHaltMode = true }, 0x2222)
+		cs.setOpFn(4, 1, func() { cs.InHaltMode = true }, 0x2222)
 	case 0x77: // ld (hl), a
 		cs.setOpMem8(8, 1, cs.getHL(), cs.A, 0x2222)
 
@@ -693,7 +682,7 @@ func (cs *cpuState) stepOpcode() {
 		cs.jmpRet(20, 8, 1, cs.getCarryFlag())
 	case 0xd9: // reti
 		cs.popOp16(16, 1, cs.setPC)
-		cs.interruptMasterEnable = true
+		cs.InterruptMasterEnable = true
 	case 0xda: // jp c, a16
 		cs.jmpAbs16(16, 12, 3, cs.getCarryFlag(), cs.read16(cs.PC+1))
 	case 0xdb: // illegal
@@ -753,7 +742,7 @@ func (cs *cpuState) stepOpcode() {
 		val := cs.C
 		cs.setOpA(8, 1, cs.read(0xff00+uint16(val)), 0x2222)
 	case 0xf3: // di
-		cs.setOpFn(4, 1, func() { cs.interruptMasterEnable = false }, 0x2222)
+		cs.setOpFn(4, 1, func() { cs.InterruptMasterEnable = false }, 0x2222)
 	case 0xf4: // illegal
 		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xf5: // push af
@@ -771,7 +760,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xfa: // ld a, (a16)
 		cs.setOpA(16, 3, cs.read(cs.read16(cs.PC+1)), 0x2222)
 	case 0xfb: // ei
-		cs.setOpFn(4, 1, func() { cs.interruptMasterEnable = true }, 0x2222)
+		cs.setOpFn(4, 1, func() { cs.InterruptMasterEnable = true }, 0x2222)
 	case 0xfc: // illegal
 		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xfd: // illegal

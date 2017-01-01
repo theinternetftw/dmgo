@@ -113,12 +113,12 @@ func (lcd *lcd) shouldStatIRQ() bool {
 // FIXME: timings will have to change for double-speed mode
 // (maybe instead of counting cycles I'll count actual instruction time?)
 // (or maybe it'll always be dmg cycles and gbc will just produce half as many of them?
-func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
+func (lcd *lcd) runCycles(cs *cpuState, numCycles uint) {
 	if !lcd.displayOn {
 		return
 	}
 
-	lcd.cyclesSinceLYInc += ncycles
+	lcd.cyclesSinceLYInc += numCycles
 
 	if lcd.accessingOAM && lcd.cyclesSinceLYInc >= 80 {
 		lcd.parseOAMForScanline(lcd.lyReg)
@@ -138,7 +138,7 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 
 		if lcd.lyReg >= 144 && !lcd.inVBlank {
 			lcd.inVBlank = true
-			cs.vBlankIRQ = true
+			cs.VBlankIRQ = true
 
 			if lcd.pastFirstFrame {
 				lcd.flipRequested = true
@@ -154,7 +154,7 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	}
 
 	if lcd.inVBlank {
-		lcd.cyclesSinceVBlankStart += ncycles
+		lcd.cyclesSinceVBlankStart += numCycles
 		if lcd.cyclesSinceVBlankStart >= 456*10 {
 			lcd.lyReg = 0
 			lcd.cyclesSinceLYInc = lcd.cyclesSinceVBlankStart - 456*10
@@ -165,7 +165,7 @@ func (lcd *lcd) runCycles(cs *cpuState, ncycles uint) {
 	}
 
 	if lcd.shouldStatIRQ() {
-		cs.lcdStatIRQ = true
+		cs.LCDStatIRQ = true
 	}
 }
 

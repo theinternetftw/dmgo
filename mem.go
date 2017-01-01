@@ -33,28 +33,28 @@ func (cs *cpuState) read(addr uint16) byte {
 	switch {
 
 	case addr < 0x8000:
-		val = cs.mem.mbcRead(addr)
+		val = cs.Mem.mbcRead(addr)
 
 	case addr >= 0x8000 && addr < 0xa000:
-		val = cs.lcd.readVideoRAM(addr - 0x8000)
+		val = cs.LCD.readVideoRAM(addr - 0x8000)
 
 	case addr >= 0xa000 && addr < 0xc000:
-		val = cs.mem.mbcRead(addr)
+		val = cs.Mem.mbcRead(addr)
 
 	case addr >= 0xc000 && addr < 0xfe00:
 		ramAddr := (addr - 0xc000) & 0x1fff // 8kb with wraparound
-		val = cs.mem.internalRAM[ramAddr]
+		val = cs.Mem.internalRAM[ramAddr]
 
 	case addr >= 0xfe00 && addr < 0xfea0:
-		val = cs.lcd.readOAM(addr - 0xfe00)
+		val = cs.LCD.readOAM(addr - 0xfe00)
 
 	case addr >= 0xfea0 && addr < 0xff00:
 		val = 0xff // (empty mem, but can be more complicated, see TCAGBD)
 
 	case addr == 0xff00:
-		val = cs.joypad.readJoypadReg()
+		val = cs.Joypad.readJoypadReg()
 	case addr == 0xff01:
-		val = cs.serialTransferData
+		val = cs.SerialTransferData
 	case addr == 0xff02:
 		val = cs.readSerialControlReg()
 
@@ -62,11 +62,11 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = 0xff // unmapped bytes
 
 	case addr == 0xff04:
-		val = byte(cs.timerDivCycles >> 8)
+		val = byte(cs.TimerDivCycles >> 8)
 	case addr == 0xff05:
-		val = cs.timerCounterReg
+		val = cs.TimerCounterReg
 	case addr == 0xff06:
-		val = cs.timerModuloReg
+		val = cs.TimerModuloReg
 	case addr == 0xff07:
 		val = cs.readTimerControlReg()
 
@@ -77,94 +77,94 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = cs.readInterruptFlagReg()
 
 	case addr == 0xff10:
-		val = cs.apu.sounds[0].readSweepReg()
+		val = cs.APU.sounds[0].readSweepReg()
 	case addr == 0xff11:
-		val = cs.apu.sounds[0].readLenDutyReg()
+		val = cs.APU.sounds[0].readLenDutyReg()
 	case addr == 0xff12:
-		val = cs.apu.sounds[0].readSoundEnvReg()
+		val = cs.APU.sounds[0].readSoundEnvReg()
 	case addr == 0xff13:
-		val = cs.apu.sounds[0].readFreqLowReg()
+		val = cs.APU.sounds[0].readFreqLowReg()
 	case addr == 0xff14:
-		val = cs.apu.sounds[0].readFreqHighReg()
+		val = cs.APU.sounds[0].readFreqHighReg()
 
 	case addr == 0xff15:
 		val = 0xff // unmapped bytes
 	case addr == 0xff16:
-		val = cs.apu.sounds[1].readLenDutyReg()
+		val = cs.APU.sounds[1].readLenDutyReg()
 	case addr == 0xff17:
-		val = cs.apu.sounds[1].readSoundEnvReg()
+		val = cs.APU.sounds[1].readSoundEnvReg()
 	case addr == 0xff18:
-		val = cs.apu.sounds[1].readFreqLowReg()
+		val = cs.APU.sounds[1].readFreqLowReg()
 	case addr == 0xff19:
-		val = cs.apu.sounds[1].readFreqHighReg()
+		val = cs.APU.sounds[1].readFreqHighReg()
 
 	case addr == 0xff1a:
-		val = boolBit(cs.apu.sounds[2].on, 7) | 0x7f
+		val = boolBit(cs.APU.sounds[2].on, 7) | 0x7f
 	case addr == 0xff1b:
-		val = cs.apu.sounds[2].readLengthDataReg()
+		val = cs.APU.sounds[2].readLengthDataReg()
 	case addr == 0xff1c:
-		val = cs.apu.sounds[2].readWaveOutLvlReg()
+		val = cs.APU.sounds[2].readWaveOutLvlReg()
 	case addr == 0xff1d:
-		val = cs.apu.sounds[2].readFreqLowReg()
+		val = cs.APU.sounds[2].readFreqLowReg()
 	case addr == 0xff1e:
-		val = cs.apu.sounds[2].readFreqHighReg()
+		val = cs.APU.sounds[2].readFreqHighReg()
 
 	case addr == 0xff1f:
 		val = 0xff // unmapped bytes
 	case addr == 0xff20:
-		val = cs.apu.sounds[3].readLengthDataReg()
+		val = cs.APU.sounds[3].readLengthDataReg()
 	case addr == 0xff21:
-		val = cs.apu.sounds[3].readSoundEnvReg()
+		val = cs.APU.sounds[3].readSoundEnvReg()
 	case addr == 0xff22:
-		val = cs.apu.sounds[3].readPolyCounterReg()
+		val = cs.APU.sounds[3].readPolyCounterReg()
 	case addr == 0xff23:
-		val = cs.apu.sounds[3].readFreqHighReg()
+		val = cs.APU.sounds[3].readFreqHighReg()
 
 	case addr == 0xff24:
-		val = cs.apu.readVolumeReg()
+		val = cs.APU.readVolumeReg()
 	case addr == 0xff25:
-		val = cs.apu.readSpeakerSelectReg()
+		val = cs.APU.readSpeakerSelectReg()
 	case addr == 0xff26:
-		val = cs.apu.readSoundOnOffReg()
+		val = cs.APU.readSoundOnOffReg()
 
 	case addr >= 0xff27 && addr < 0xff30:
 		val = 0xff // unmapped bytes
 
 	case addr >= 0xff30 && addr < 0xff40:
-		val = cs.apu.sounds[2].wavePatternRAM[addr-0xff30]
+		val = cs.APU.sounds[2].wavePatternRAM[addr-0xff30]
 
 	case addr == 0xff40:
-		val = cs.lcd.readControlReg()
+		val = cs.LCD.readControlReg()
 	case addr == 0xff41:
-		val = cs.lcd.readStatusReg()
+		val = cs.LCD.readStatusReg()
 	case addr == 0xff42:
-		val = cs.lcd.scrollY
+		val = cs.LCD.scrollY
 	case addr == 0xff43:
-		val = cs.lcd.scrollX
+		val = cs.LCD.scrollX
 	case addr == 0xff44:
-		val = cs.lcd.lyReg
+		val = cs.LCD.lyReg
 	case addr == 0xff45:
-		val = cs.lcd.lycReg
+		val = cs.LCD.lycReg
 
 	case addr == 0xff46:
 		val = 0xff // oam DMA reg, write-only
 
 	case addr == 0xff47:
-		val = cs.lcd.backgroundPaletteReg
+		val = cs.LCD.backgroundPaletteReg
 	case addr == 0xff48:
-		val = cs.lcd.objectPalette0Reg
+		val = cs.LCD.objectPalette0Reg
 	case addr == 0xff49:
-		val = cs.lcd.objectPalette1Reg
+		val = cs.LCD.objectPalette1Reg
 	case addr == 0xff4a:
-		val = cs.lcd.windowY
+		val = cs.LCD.windowY
 	case addr == 0xff4b:
-		val = cs.lcd.windowX
+		val = cs.LCD.windowX
 
 	case addr >= 0xff4c && addr < 0xff80:
 		val = 0xff // unmapped bytes
 
 	case addr >= 0xff80 && addr < 0xffff:
-		val = cs.mem.highInternalRAM[addr-0xff80]
+		val = cs.Mem.highInternalRAM[addr-0xff80]
 	case addr == 0xffff:
 		val = cs.readInterruptEnableReg()
 
@@ -184,25 +184,25 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	switch {
 
 	case addr < 0x8000:
-		cs.mem.mbcWrite(addr, val)
+		cs.Mem.mbcWrite(addr, val)
 
 	case addr >= 0x8000 && addr < 0xa000:
-		cs.lcd.writeVideoRAM(addr-0x8000, val)
+		cs.LCD.writeVideoRAM(addr-0x8000, val)
 
 	case addr >= 0xa000 && addr < 0xc000:
-		cs.mem.mbcWrite(addr, val)
+		cs.Mem.mbcWrite(addr, val)
 
 	case addr >= 0xc000 && addr < 0xfe00:
-		cs.mem.internalRAM[((addr - 0xc000) & 0x1fff)] = val // 8kb with wraparound
+		cs.Mem.internalRAM[((addr - 0xc000) & 0x1fff)] = val // 8kb with wraparound
 	case addr >= 0xfe00 && addr < 0xfea0:
-		cs.lcd.writeOAM(addr-0xfe00, val)
+		cs.LCD.writeOAM(addr-0xfe00, val)
 	case addr >= 0xfea0 && addr < 0xff00:
 		// empty, nop (can be more complicated, see TCAGBD)
 
 	case addr == 0xff00:
-		cs.joypad.writeJoypadReg(val)
+		cs.Joypad.writeJoypadReg(val)
 	case addr == 0xff01:
-		cs.serialTransferData = val
+		cs.SerialTransferData = val
 	case addr == 0xff02:
 		cs.writeSerialControlReg(val)
 
@@ -210,11 +210,11 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		// nop (unmapped bytes)
 
 	case addr == 0xff04:
-		cs.timerDivCycles = 0
+		cs.TimerDivCycles = 0
 	case addr == 0xff05:
-		cs.timerCounterReg = val
+		cs.TimerCounterReg = val
 	case addr == 0xff06:
-		cs.timerModuloReg = val
+		cs.TimerModuloReg = val
 	case addr == 0xff07:
 		cs.writeTimerControlReg(val)
 
@@ -225,72 +225,72 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.writeInterruptFlagReg(val)
 
 	case addr == 0xff10:
-		cs.apu.sounds[0].writeSweepReg(val)
+		cs.APU.sounds[0].writeSweepReg(val)
 	case addr == 0xff11:
-		cs.apu.sounds[0].writeLenDutyReg(val)
+		cs.APU.sounds[0].writeLenDutyReg(val)
 	case addr == 0xff12:
-		cs.apu.sounds[0].writeSoundEnvReg(val)
+		cs.APU.sounds[0].writeSoundEnvReg(val)
 	case addr == 0xff13:
-		cs.apu.sounds[0].writeFreqLowReg(val)
+		cs.APU.sounds[0].writeFreqLowReg(val)
 	case addr == 0xff14:
-		cs.apu.sounds[0].writeFreqHighReg(val)
+		cs.APU.sounds[0].writeFreqHighReg(val)
 
 	case addr == 0xff15:
 		// nop (unmapped bytes)
 
 	case addr == 0xff16:
-		cs.apu.sounds[1].writeLenDutyReg(val)
+		cs.APU.sounds[1].writeLenDutyReg(val)
 	case addr == 0xff17:
-		cs.apu.sounds[1].writeSoundEnvReg(val)
+		cs.APU.sounds[1].writeSoundEnvReg(val)
 	case addr == 0xff18:
-		cs.apu.sounds[1].writeFreqLowReg(val)
+		cs.APU.sounds[1].writeFreqLowReg(val)
 	case addr == 0xff19:
-		cs.apu.sounds[1].writeFreqHighReg(val)
+		cs.APU.sounds[1].writeFreqHighReg(val)
 
 	case addr == 0xff1a:
-		cs.apu.sounds[2].writeWaveOnOffReg(val)
+		cs.APU.sounds[2].writeWaveOnOffReg(val)
 	case addr == 0xff1b:
-		cs.apu.sounds[2].writeLengthDataReg(val)
+		cs.APU.sounds[2].writeLengthDataReg(val)
 	case addr == 0xff1c:
-		cs.apu.sounds[2].writeWaveOutLvlReg(val)
+		cs.APU.sounds[2].writeWaveOutLvlReg(val)
 	case addr == 0xff1d:
-		cs.apu.sounds[2].writeFreqLowReg(val)
+		cs.APU.sounds[2].writeFreqLowReg(val)
 	case addr == 0xff1e:
-		cs.apu.sounds[2].writeFreqHighReg(val)
+		cs.APU.sounds[2].writeFreqHighReg(val)
 
 	case addr == 0xff1f:
 		// nop (unmapped bytes)
 
 	case addr == 0xff20:
-		cs.apu.sounds[3].writeLengthDataReg(val)
+		cs.APU.sounds[3].writeLengthDataReg(val)
 	case addr == 0xff21:
-		cs.apu.sounds[3].writeSoundEnvReg(val)
+		cs.APU.sounds[3].writeSoundEnvReg(val)
 	case addr == 0xff22:
-		cs.apu.sounds[3].writePolyCounterReg(val)
+		cs.APU.sounds[3].writePolyCounterReg(val)
 	case addr == 0xff23:
-		cs.apu.sounds[3].writeFreqHighReg(val) // noise channel uses control bits, freq ignored
+		cs.APU.sounds[3].writeFreqHighReg(val) // noise channel uses control bits, freq ignored
 
 	case addr == 0xff24:
-		cs.apu.writeVolumeReg(val)
+		cs.APU.writeVolumeReg(val)
 	case addr == 0xff25:
-		cs.apu.writeSpeakerSelectReg(val)
+		cs.APU.writeSpeakerSelectReg(val)
 	case addr == 0xff26:
-		cs.apu.writeSoundOnOffReg(val)
+		cs.APU.writeSoundOnOffReg(val)
 
 	case addr >= 0xff27 && addr < 0xff30:
 		// nop (unmapped bytes)
 
 	case addr >= 0xff30 && addr < 0xff40:
-		cs.apu.sounds[2].writeWavePatternValue(addr-0xff30, val)
+		cs.APU.sounds[2].writeWavePatternValue(addr-0xff30, val)
 
 	case addr == 0xff40:
-		cs.lcd.writeControlReg(val)
+		cs.LCD.writeControlReg(val)
 	case addr == 0xff41:
-		cs.lcd.writeStatusReg(val)
+		cs.LCD.writeStatusReg(val)
 	case addr == 0xff42:
-		cs.lcd.writeScrollY(val)
+		cs.LCD.writeScrollY(val)
 	case addr == 0xff43:
-		cs.lcd.writeScrollX(val)
+		cs.LCD.writeScrollX(val)
 	case addr == 0xff44:
 		// nop? pandocs says something
 		// about "resetting the counter",
@@ -298,24 +298,24 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		// reset lyReg, doesn't change any
 		// counter I see...
 	case addr == 0xff45:
-		cs.lcd.writeLycReg(val)
+		cs.LCD.writeLycReg(val)
 	case addr == 0xff46:
 		cs.oamDMA(uint16(val) << 8)
 	case addr == 0xff47:
-		cs.lcd.writeBackgroundPaletteReg(val)
+		cs.LCD.writeBackgroundPaletteReg(val)
 	case addr == 0xff48:
-		cs.lcd.writeObjectPalette0Reg(val)
+		cs.LCD.writeObjectPalette0Reg(val)
 	case addr == 0xff49:
-		cs.lcd.writeObjectPalette1Reg(val)
+		cs.LCD.writeObjectPalette1Reg(val)
 	case addr == 0xff4a:
-		cs.lcd.writeWindowY(val)
+		cs.LCD.writeWindowY(val)
 	case addr == 0xff4b:
-		cs.lcd.writeWindowX(val)
+		cs.LCD.writeWindowX(val)
 
 	case addr >= 0xff4c && addr < 0xff80:
 		// empty, nop (can be more complicated, see TCAGBD)
 	case addr >= 0xff80 && addr < 0xffff:
-		cs.mem.highInternalRAM[addr-0xff80] = val
+		cs.Mem.highInternalRAM[addr-0xff80] = val
 	case addr == 0xffff:
 		cs.writeInterruptEnableReg(val)
 	default:
