@@ -1,8 +1,11 @@
 package dmgo
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 )
 
 const currentSnapshotVersion = 1
@@ -21,8 +24,17 @@ type snapshot struct {
 }
 
 func (cs *cpuState) loadSnapshot(snapBytes []byte) (*cpuState, error) {
+	reader, err := gzip.NewReader(bytes.NewReader(snapBytes))
+	if err != nil {
+		return nil, err
+	}
+	unpackedBytes, err := ioutil.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+
 	var snap snapshot
-	err := json.Unmarshal(snapBytes, &snap)
+	err = json.Unmarshal(unpackedBytes, &snap)
 	if err != nil {
 		return nil, err
 	}
@@ -51,5 +63,9 @@ func (cs *cpuState) makeSnapshot() []byte {
 	if err != nil {
 		panic(err)
 	}
-	return rawJSON
+	buf := &bytes.Buffer{}
+	writer := gzip.NewWriter(buf)
+	writer.Write(rawJSON)
+	writer.Close()
+	return buf.Bytes()
 }
