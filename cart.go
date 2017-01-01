@@ -28,6 +28,8 @@ type CartInfo struct {
 	OldLicenseeCode byte
 	// MaskRomVersion is the version of the game cart. Usually 0x00.
 	MaskRomVersion byte
+	// HeaderChecksum is a checksum of the header which must be correct for the game to run
+	HeaderChecksum byte
 }
 
 // GetRAMSize decodes the ram size code into an actual size
@@ -92,6 +94,7 @@ func ParseCartInfo(cartBytes []byte) *CartInfo {
 		cart.NewLicenseeCode = string(cartBytes[0x144:0x146])
 	}
 	cart.MaskRomVersion = cartBytes[0x14c]
+	cart.HeaderChecksum = cartBytes[0x14d]
 
 	return &cart
 }

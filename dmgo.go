@@ -10,6 +10,9 @@ type cpuState struct {
 	a, f, b, c, d, e, h, l byte
 	mem                    mem
 
+	title          string
+	headerChecksum byte
+
 	lcd lcd
 	apu apu
 
@@ -299,11 +302,20 @@ func newState(cart []byte) *cpuState {
 	// 	fatalErr("CGB-only not supported yet")
 	// }
 	mem := mem{
-		cart:    cart,
-		cartRAM: make([]byte, cartInfo.GetRAMSize()),
-		mbc:     makeMBC(cartInfo),
+		cart:        cart,
+		cartRAM:     make([]byte, cartInfo.GetRAMSize()),
+		internalRAM: make([]byte, 0x2000), // only DMG size for now
+		mbc:         makeMBC(cartInfo),
 	}
-	state := cpuState{mem: mem}
+	state := cpuState{
+		title:          cartInfo.Title,
+		headerChecksum: cartInfo.HeaderChecksum,
+
+		mem: mem,
+		lcd: lcd{
+			videoRAM: make([]byte, 0x2000), // only DMG size for now
+		},
+	}
 	state.init()
 	return &state
 }
@@ -447,7 +459,7 @@ func (cs *cpuState) UpdateInput(input Input) {
 
 // Framebuffer returns the current state of the lcd screen
 func (cs *cpuState) Framebuffer() []byte {
-	return cs.lcd.framebuffer
+	return cs.lcd.framebuffer[:]
 }
 
 // FlipRequested indicates if a draw request is pending

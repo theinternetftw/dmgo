@@ -6,12 +6,13 @@ import (
 )
 
 type lcd struct {
-	framebuffer   []byte
+	framebuffer [160 * 144 * 4]byte
+
 	flipRequested bool // for whatever really draws the fb
 
 	pastFirstFrame bool
 
-	videoRAM [0x4000]byte // go ahead and do CGB size
+	videoRAM []byte
 
 	oam            [160]byte
 	oamForScanline []oamEntry
@@ -84,9 +85,6 @@ func (lcd *lcd) readOAM(addr uint16) byte {
 }
 
 func (lcd *lcd) init() {
-
-	lcd.framebuffer = make([]byte, 160*144*4)
-
 	lcd.accessingOAM = true // at start of line
 }
 
@@ -289,9 +287,12 @@ func (lcd *lcd) parseOAMForScanline(scanline byte) {
 	if lcd.bigSprites {
 		height = 16
 	}
-	// use re-slice so we keep backing arry and don't realloc
+
+	// reslice so we don't realloc
 	lcd.oamForScanline = lcd.oamForScanline[:0]
-	for i := 0; i < 40; i++ {
+
+	// search all sprites, limit total found to 10 per scanline
+	for i := 0; len(lcd.oamForScanline) < 10 && i < 40; i++ {
 		addr := i * 4
 		spriteY := int16(lcd.oam[addr]) - 16
 		if yInSprite(scanline, spriteY, height) {
@@ -305,17 +306,21 @@ func (lcd *lcd) parseOAMForScanline(scanline byte) {
 		}
 	}
 
-	// NOTE: pandocs suggest that on DMG, x coord is first sort priority,
+	// NOTE: Pandocs suggest that on DMG, x coord is first sort priority,
 	// oam index second, and that may be true for object draw sort order,
 	// but dkland suggests indexes reign supreme for the total number of
 	// drawable sprites. In that game they set x to zero to disable, and
 	// dk is never drawn below those sprites because his sprites are
 	// always at the front of the oam table.
-
-	// limit of 10 sprites per line
-	if len(lcd.oamForScanline) > 10 {
-		lcd.oamForScanline = lcd.oamForScanline[:10]
-	}
+	//
+	// NOTE 2: After watching The Ultimate Game Boy talk, which is highly
+	// recommended, my opinion here has solidified. There it's suggested
+	// that the only thing that happens in oam search is the selection
+	// of the top ten, and the ten are decided on based on scanline test
+	// alone (well, Michael also suggests that an x != 0 test is made,
+	// but he's wrong about other things in the talk, so I'm holding out
+	// until I see evidence of this. it would make the setting of x to
+	// zero in disabled dkland sprites make more sense, though)
 
 	// resort to x-coord order (DMG only, CGB stops with the above)
 	sort.Stable(sortableOAM(lcd.oamForScanline))

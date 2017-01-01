@@ -6,8 +6,8 @@ type mem struct {
 	cart    []byte
 	cartRAM []byte
 
-	internalRAM     [0x8000]byte // go ahead and do CGB size
-	highInternalRAM [0x7f]byte   // go ahead and do CGB size
+	internalRAM     []byte
+	highInternalRAM [0x7f]byte
 	mbc             mbc
 }
 
