@@ -5,9 +5,9 @@ import (
 )
 
 type cpuState struct {
-	pc                     uint16
-	sp                     uint16
-	a, f, b, c, d, e, h, l byte
+	PC                     uint16
+	SP                     uint16
+	A, F, B, C, D, E, H, L byte
 	mem                    mem
 
 	title          string
@@ -192,8 +192,8 @@ func (cs *cpuState) handleInterrupts() bool {
 		if cs.interruptMasterEnable {
 			cs.interruptMasterEnable = false
 			*intFlag = false
-			cs.pushOp16(20, 0, cs.pc)
-			cs.pc = intAddr
+			cs.pushOp16(20, 0, cs.PC)
+			cs.PC = intAddr
 		}
 		return true
 	}
@@ -246,10 +246,10 @@ func (cs *cpuState) readInterruptFlagReg() byte {
 	)
 }
 
-func (cs *cpuState) getZeroFlag() bool      { return cs.f&0x80 > 0 }
-func (cs *cpuState) getSubFlag() bool       { return cs.f&0x40 > 0 }
-func (cs *cpuState) getHalfCarryFlag() bool { return cs.f&0x20 > 0 }
-func (cs *cpuState) getCarryFlag() bool     { return cs.f&0x10 > 0 }
+func (cs *cpuState) getZeroFlag() bool      { return cs.F&0x80 > 0 }
+func (cs *cpuState) getSubFlag() bool       { return cs.F&0x40 > 0 }
+func (cs *cpuState) getHalfCarryFlag() bool { return cs.F&0x20 > 0 }
+func (cs *cpuState) getCarryFlag() bool     { return cs.F&0x10 > 0 }
 
 func (cs *cpuState) setFlags(flags uint16) {
 
@@ -259,42 +259,42 @@ func (cs *cpuState) setFlags(flags uint16) {
 	setCarry, clearCarry := flags&0x1 != 0, flags&0xf == 0
 
 	if setZero {
-		cs.f |= 0x80
+		cs.F |= 0x80
 	} else if clearZero {
-		cs.f &^= 0x80
+		cs.F &^= 0x80
 	}
 	if setSub {
-		cs.f |= 0x40
+		cs.F |= 0x40
 	} else if clearSub {
-		cs.f &^= 0x40
+		cs.F &^= 0x40
 	}
 	if setHalfCarry {
-		cs.f |= 0x20
+		cs.F |= 0x20
 	} else if clearHalfCarry {
-		cs.f &^= 0x20
+		cs.F &^= 0x20
 	}
 	if setCarry {
-		cs.f |= 0x10
+		cs.F |= 0x10
 	} else if clearCarry {
-		cs.f &^= 0x10
+		cs.F &^= 0x10
 	}
 }
 
-func (cs *cpuState) getAF() uint16 { return (uint16(cs.a) << 8) | uint16(cs.f) }
-func (cs *cpuState) getBC() uint16 { return (uint16(cs.b) << 8) | uint16(cs.c) }
-func (cs *cpuState) getDE() uint16 { return (uint16(cs.d) << 8) | uint16(cs.e) }
-func (cs *cpuState) getHL() uint16 { return (uint16(cs.h) << 8) | uint16(cs.l) }
+func (cs *cpuState) getAF() uint16 { return (uint16(cs.A) << 8) | uint16(cs.F) }
+func (cs *cpuState) getBC() uint16 { return (uint16(cs.B) << 8) | uint16(cs.C) }
+func (cs *cpuState) getDE() uint16 { return (uint16(cs.D) << 8) | uint16(cs.E) }
+func (cs *cpuState) getHL() uint16 { return (uint16(cs.H) << 8) | uint16(cs.L) }
 
 func (cs *cpuState) setAF(val uint16) {
-	cs.a = byte(val >> 8)
-	cs.f = byte(val) &^ 0x0f
+	cs.A = byte(val >> 8)
+	cs.F = byte(val) &^ 0x0f
 }
-func (cs *cpuState) setBC(val uint16) { cs.b, cs.c = byte(val>>8), byte(val) }
-func (cs *cpuState) setDE(val uint16) { cs.d, cs.e = byte(val>>8), byte(val) }
-func (cs *cpuState) setHL(val uint16) { cs.h, cs.l = byte(val>>8), byte(val) }
+func (cs *cpuState) setBC(val uint16) { cs.B, cs.C = byte(val>>8), byte(val) }
+func (cs *cpuState) setDE(val uint16) { cs.D, cs.E = byte(val>>8), byte(val) }
+func (cs *cpuState) setHL(val uint16) { cs.H, cs.L = byte(val>>8), byte(val) }
 
-func (cs *cpuState) setSP(val uint16) { cs.sp = val }
-func (cs *cpuState) setPC(val uint16) { cs.pc = val }
+func (cs *cpuState) setSP(val uint16) { cs.SP = val }
+func (cs *cpuState) setPC(val uint16) { cs.PC = val }
 
 func newState(cart []byte) *cpuState {
 	cartInfo := ParseCartInfo(cart)
@@ -473,8 +473,8 @@ func (cs *cpuState) FlipRequested() bool {
 var lastSP = int(-1)
 
 func (cs *cpuState) debugLineOnStackChange() {
-	if lastSP != int(cs.sp) {
-		lastSP = int(cs.sp)
+	if lastSP != int(cs.SP) {
+		lastSP = int(cs.SP)
 		fmt.Println(cs.debugStatusLine())
 	}
 }
@@ -497,7 +497,7 @@ func (cs *cpuState) Step() {
 
 	// cs.debugLineOnStackChange()
 	// if cs.steps&0x2ffff == 0 {
-	// if cs.pc == 0x4d19 {
+	// if cs.PC == 0x4d19 {
 	// 	hitTarget = true
 	// }
 	// if hitTarget {
