@@ -411,13 +411,27 @@ func (cs *cpuState) runCycles(numCycles uint) {
 
 // Emulator exposes the public facing fns for an emulation session
 type Emulator interface {
+	Step()
+
 	Framebuffer() []byte
 	FlipRequested() bool
+
+	UpdateInput(input Input)
 	ReadSoundBuffer([]byte) []byte
+
 	GetCartRAM() []byte
 	SetCartRAM([]byte) error
-	UpdateInput(input Input)
-	Step()
+
+	MakeSnapshot() []byte
+	LoadSnapshot([]byte) (Emulator, error)
+}
+
+func (cs *cpuState) MakeSnapshot() []byte {
+	return cs.makeSnapshot()
+}
+
+func (cs *cpuState) LoadSnapshot(snapBytes []byte) (Emulator, error) {
+	return cs.loadSnapshot(snapBytes)
 }
 
 // NewEmulator creates an emulation session

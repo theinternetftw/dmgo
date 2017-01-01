@@ -1,6 +1,7 @@
 package dmgo
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -45,6 +46,46 @@ type mbc interface {
 
 	// Gets the ROM map number (for debug)
 	GetROMBankNumber() int
+
+	Marshal() marshalledMBC
+}
+
+type marshalledMBC struct {
+	Name string
+	Data []byte
+}
+
+func unmarshalMBC(m marshalledMBC) (mbc, error) {
+	switch m.Name {
+	case "nullMBC":
+		return &nullMBC{}, nil
+	case "mbc1":
+		var mbc1 mbc1
+		if err := json.Unmarshal(m.Data, &mbc1); err != nil {
+			return nil, err
+		}
+		return &mbc1, nil
+	case "mbc2":
+		var mbc2 mbc2
+		if err := json.Unmarshal(m.Data, &mbc2); err != nil {
+			return nil, err
+		}
+		return &mbc2, nil
+	case "mbc3":
+		var mbc3 mbc3
+		if err := json.Unmarshal(m.Data, &mbc3); err != nil {
+			return nil, err
+		}
+		return &mbc3, nil
+	case "mbc5":
+		var mbc5 mbc5
+		if err := json.Unmarshal(m.Data, &mbc5); err != nil {
+			return nil, err
+		}
+		return &mbc5, nil
+	default:
+		return nil, fmt.Errorf("state contained unknown mbc %q", m.Name)
+	}
 }
 
 type bankNumbers struct {
@@ -115,6 +156,9 @@ func (mbc *nullMBC) Write(mem *mem, addr uint16, val byte) {
 	if int(localAddr) < len(mem.CartRAM) {
 		mem.CartRAM[localAddr] = val
 	}
+}
+func (mbc *nullMBC) Marshal() marshalledMBC {
+	return marshalledMBC{Name: "nullMBC"}
 }
 
 const (
@@ -200,6 +244,17 @@ func (mbc *mbc1) Write(mem *mem, addr uint16, val byte) {
 	}
 }
 
+func (mbc *mbc1) Marshal() marshalledMBC {
+	rawJSON, err := json.Marshal(mbc)
+	if err != nil {
+		panic(err)
+	}
+	return marshalledMBC{
+		Name: "mbc1",
+		Data: rawJSON,
+	}
+}
+
 type mbc2 struct {
 	bankNumbers
 
@@ -263,6 +318,17 @@ func (mbc *mbc2) Write(mem *mem, addr uint16, val byte) {
 		}
 	default:
 		panic(fmt.Sprintf("mbc2: not implemented: write at %x\n", addr))
+	}
+}
+
+func (mbc *mbc2) Marshal() marshalledMBC {
+	rawJSON, err := json.Marshal(mbc)
+	if err != nil {
+		panic(err)
+	}
+	return marshalledMBC{
+		Name: "mbc2",
+		Data: rawJSON,
 	}
 }
 
@@ -433,6 +499,17 @@ func (mbc *mbc3) Write(mem *mem, addr uint16, val byte) {
 	}
 }
 
+func (mbc *mbc3) Marshal() marshalledMBC {
+	rawJSON, err := json.Marshal(mbc)
+	if err != nil {
+		panic(err)
+	}
+	return marshalledMBC{
+		Name: "mbc3",
+		Data: rawJSON,
+	}
+}
+
 type mbc5 struct {
 	bankNumbers
 
@@ -489,5 +566,16 @@ func (mbc *mbc5) Write(mem *mem, addr uint16, val byte) {
 		}
 	default:
 		panic(fmt.Sprintf("mbc5: not implemented: write at %x\n", addr))
+	}
+}
+
+func (mbc *mbc5) Marshal() marshalledMBC {
+	rawJSON, err := json.Marshal(mbc)
+	if err != nil {
+		panic(err)
+	}
+	return marshalledMBC{
+		Name: "mbc5",
+		Data: rawJSON,
 	}
 }

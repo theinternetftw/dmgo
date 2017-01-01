@@ -32,22 +32,6 @@ func main() {
 	})
 }
 
-// NOTE: assumes you have the mutex when you call
-func makeInput(window *platform.WindowState) dmgo.Input {
-	return dmgo.Input {
-		Joypad: dmgo.Joypad {
-			Sel: window.CharIsDown('t'),
-			Start: window.CharIsDown('y'),
-			Up: window.CharIsDown('w'),
-			Down: window.CharIsDown('s'),
-			Left: window.CharIsDown('a'),
-			Right: window.CharIsDown('d'),
-			A: window.CharIsDown('j'),
-			B: window.CharIsDown('k'),
-		},
-	}
-}
-
 func startHeadlessEmu(cartBytes []byte) {
 	emu := dmgo.NewEmulator(cartBytes)
 	// FIXME: settings are for debug right now
@@ -68,6 +52,8 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 	lastVBlankTime := time.Now()
 	lastSaveTime := time.Now()
 
+	snapshotPrefix := filename + ".snapshot"
+
 	saveFilename := filename + ".sav"
 	if saveFile, err := ioutil.ReadFile(saveFilename); err == nil {
 		err = emu.SetCartRAM(saveFile)
@@ -81,10 +67,53 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 	workingAudioBuffer := make([]byte, audio.BufferSize())
 	dieIf(err)
 
+	snapshotMode := 'x'
+
 	for {
 		window.Mutex.Lock()
-		newInput := makeInput(window)
+		newInput := dmgo.Input {
+			Joypad: dmgo.Joypad {
+				Sel:  window.CharIsDown('t'), Start: window.CharIsDown('y'),
+				Up:   window.CharIsDown('w'), Down:  window.CharIsDown('s'),
+				Left: window.CharIsDown('a'), Right: window.CharIsDown('d'),
+				A:    window.CharIsDown('j'), B:     window.CharIsDown('k'),
+			},
+		}
+		numDown := 'x'
+		for r := '0'; r <= '9'; r++ {
+			if window.CharIsDown(r) {
+				numDown = r
+				break
+			}
+		}
+		if window.CharIsDown('m') {
+			snapshotMode = 'm'
+		} else if window.CharIsDown('l') {
+			snapshotMode = 'l'
+		}
 		window.Mutex.Unlock()
+
+		if numDown > '0' && numDown <= '9' {
+			snapFilename := snapshotPrefix+string(numDown)
+			if snapshotMode == 'm' {
+				snapshotMode = 'x'
+				snapshot := emu.MakeSnapshot()
+				ioutil.WriteFile(snapFilename, snapshot, os.FileMode(0644))
+			} else if snapshotMode == 'l' {
+				snapshotMode = 'x'
+				snapBytes, err := ioutil.ReadFile(snapFilename)
+				if err != nil {
+					fmt.Println("failed to load snapshot:", err)
+					continue
+				}
+				newEmu, err := emu.LoadSnapshot(snapBytes)
+				if err != nil {
+					fmt.Println("failed to load snapshot:", err)
+					continue
+				}
+				emu = newEmu
+			}
+		}
 
 		emu.UpdateInput(newInput)
 		emu.Step()
