@@ -5,7 +5,7 @@ I put together dmgo in about a week and half over the holidays. Much is left to 
 #### Features:
  * Audio (on windows)!
  * Saved game support!
- * Many games playable!
+ * Quicksave/Quickload, too!
  * All major [MBCs](http://gbdev.gg8.se/wiki/articles/Memory_Bank_Controllers) suppported!
  * Glitches are relatively rare but still totally happen!
  * Graphical cross-platform support in native golang, with no hooks into C libraries needed!
@@ -23,3 +23,4 @@ After that, `go build ./cmd/dmgo` should be enough. The interested can also see 
 
  * Keybindings are currently hardcoded to WSAD / JK / TY (arrowpad, ab, start/select)
  * Saved games use/expect a slightly different naming convention than usual: romfilename.gb.sav
+ * Quicksave/Quickload is done by pressing m or l (make or load quicksave), followed by a number key
