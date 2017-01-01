@@ -380,7 +380,7 @@ func (cs *cpuState) callOp(cycles uint, instLen, callAddr uint16) {
 }
 
 // NOTE: should be the relevant bits only
-func (cs *cpuState) getSrcFromOpBits(opBits byte) *byte {
+func (cs *cpuState) getRegFromOpBits(opBits byte) *byte {
 	switch opBits {
 	case 0:
 		return &cs.B
@@ -399,25 +399,28 @@ func (cs *cpuState) getSrcFromOpBits(opBits byte) *byte {
 	case 7:
 		return &cs.A
 	}
-	panic("getSrcFromOpBits: unknown bits passed")
+	panic("getRegFromOpBits: unknown bits passed")
+}
+
+func (cs *cpuState) getCyclesAndValFromOpBits(cyclesReg uint, cyclesHL uint, opcode byte) (uint, byte) {
+	if reg := cs.getRegFromOpBits(opcode & 0x07); reg != nil {
+		return cyclesReg, *reg
+	}
+	return cyclesHL, cs.followHL()
 }
 
 func (cs *cpuState) loadOp(cyclesReg uint, cyclesHL uint, instLen uint16,
 	opcode byte, fnPtr func(uint, uint16, byte, uint16)) {
-	if reg := cs.getSrcFromOpBits(opcode & 0x07); reg != nil {
-		fnPtr(cyclesReg, instLen, *reg, 0x2222)
-	} else {
-		fnPtr(cyclesHL, instLen, cs.followHL(), 0x2222)
-	}
+
+	cycles, val := cs.getCyclesAndValFromOpBits(cyclesReg, cyclesHL, opcode)
+	fnPtr(cycles, instLen, val, 0x2222)
 }
 
 func (cs *cpuState) aluOp(cyclesReg uint, cyclesHL uint, instLen uint16,
 	opcode byte, fnPtr func(uint, uint16, byte)) {
-	if reg := cs.getSrcFromOpBits(opcode & 0x07); reg != nil {
-		fnPtr(cyclesReg, instLen, *reg)
-	} else {
-		fnPtr(cyclesHL, instLen, cs.followHL())
-	}
+
+	cycles, val := cs.getCyclesAndValFromOpBits(cyclesReg, cyclesHL, opcode)
+	fnPtr(cycles, instLen, val)
 }
 
 func (cs *cpuState) stepSimpleOp(opcode byte) bool {
@@ -787,707 +790,163 @@ func (cs *cpuState) stepExtendedOpcode() {
 
 	extOpcode := cs.read(cs.PC + 1)
 
-	switch extOpcode {
+	switch extOpcode & 0xf8 {
 
-	case 0x00: // rlc b
-		cs.rlcOpReg(&cs.B)
-	case 0x01: // rlc c
-		cs.rlcOpReg(&cs.C)
-	case 0x02: // rlc d
-		cs.rlcOpReg(&cs.D)
-	case 0x03: // rlc e
-		cs.rlcOpReg(&cs.E)
-	case 0x04: // rlc h
-		cs.rlcOpReg(&cs.H)
-	case 0x05: // rlc l
-		cs.rlcOpReg(&cs.L)
-	case 0x06: // rlc (hl)
-		cs.rlcOpHL()
-	case 0x07: // rlc a
-		cs.rlcOpReg(&cs.A)
+	case 0x00: // rlc R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.rlcOp)
+	case 0x08: // rrc R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.rrcOp)
+	case 0x10: // rl R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.rlOp)
+	case 0x18: // rr R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.rrOp)
+	case 0x20: // sla R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.slaOp)
+	case 0x28: // sra R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.sraOp)
+	case 0x30: // swap R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.swapOp)
+	case 0x38: // srl R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.srlOp)
 
-	case 0x08: // rrc b
-		cs.rrcOpReg(&cs.B)
-	case 0x09: // rrc c
-		cs.rrcOpReg(&cs.C)
-	case 0x0a: // rrc d
-		cs.rrcOpReg(&cs.D)
-	case 0x0b: // rrc e
-		cs.rrcOpReg(&cs.E)
-	case 0x0c: // rrc h
-		cs.rrcOpReg(&cs.H)
-	case 0x0d: // rrc l
-		cs.rrcOpReg(&cs.L)
-	case 0x0e: // rrc (hl)
-		cs.rrcOpHL()
-	case 0x0f: // rrc a
-		cs.rrcOpReg(&cs.A)
+	case 0x40: // bit 0, R_OR_(HL)
+		cs.bitOp(8, 16, 2, extOpcode, 0)
+	case 0x48: // bit 1, R_OR_(HL)
+		cs.bitOp(8, 16, 2, extOpcode, 1)
+	case 0x50: // bit 2, R_OR_(HL)
+		cs.bitOp(8, 16, 2, extOpcode, 2)
+	case 0x58: // bit 3, R_OR_(HL)
+		cs.bitOp(8, 16, 2, extOpcode, 3)
+	case 0x60: // bit 4, R_OR_(HL)
+		cs.bitOp(8, 16, 2, extOpcode, 4)
+	case 0x68: // bit 5, R_OR_(HL)
+		cs.bitOp(8, 16, 2, extOpcode, 5)
+	case 0x70: // bit 6, R_OR_(HL)
+		cs.bitOp(8, 16, 2, extOpcode, 6)
+	case 0x78: // bit 7, R_OR_(HL)
+		cs.bitOp(8, 16, 2, extOpcode, 7)
 
-	case 0x10: // rl b
-		cs.rlOpReg(&cs.B)
-	case 0x11: // rl c
-		cs.rlOpReg(&cs.C)
-	case 0x12: // rl d
-		cs.rlOpReg(&cs.D)
-	case 0x13: // rl e
-		cs.rlOpReg(&cs.E)
-	case 0x14: // rl h
-		cs.rlOpReg(&cs.H)
-	case 0x15: // rl l
-		cs.rlOpReg(&cs.L)
-	case 0x16: // rl (hl)
-		cs.rlOpHL()
-	case 0x17: // rl a
-		cs.rlOpReg(&cs.A)
+	case 0x80: // res 0, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getResOp(0))
+	case 0x88: // res 1, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getResOp(1))
+	case 0x90: // res 2, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getResOp(2))
+	case 0x98: // res 3, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getResOp(3))
+	case 0xa0: // res 4, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getResOp(4))
+	case 0xa8: // res 5, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getResOp(5))
+	case 0xb0: // res 6, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getResOp(6))
+	case 0xb8: // res 6, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getResOp(7))
 
-	case 0x18: // rr b
-		cs.rrOpReg(&cs.B)
-	case 0x19: // rr c
-		cs.rrOpReg(&cs.C)
-	case 0x1a: // rr d
-		cs.rrOpReg(&cs.D)
-	case 0x1b: // rr e
-		cs.rrOpReg(&cs.E)
-	case 0x1c: // rr h
-		cs.rrOpReg(&cs.H)
-	case 0x1d: // rr l
-		cs.rrOpReg(&cs.L)
-	case 0x1e: // rr (hl)
-		cs.rrOpHL()
-	case 0x1f: // rr a
-		cs.rrOpReg(&cs.A)
-
-	case 0x20: // sla b
-		cs.slaOpReg(&cs.B)
-	case 0x21: // sla c
-		cs.slaOpReg(&cs.C)
-	case 0x22: // sla d
-		cs.slaOpReg(&cs.D)
-	case 0x23: // sla e
-		cs.slaOpReg(&cs.E)
-	case 0x24: // sla h
-		cs.slaOpReg(&cs.H)
-	case 0x25: // sla l
-		cs.slaOpReg(&cs.L)
-	case 0x26: // sla (hl)
-		cs.slaOpHL()
-	case 0x27: // sla a
-		cs.slaOpReg(&cs.A)
-
-	case 0x28: // sra b
-		cs.sraOpReg(&cs.B)
-	case 0x29: // sra c
-		cs.sraOpReg(&cs.C)
-	case 0x2a: // sra d
-		cs.sraOpReg(&cs.D)
-	case 0x2b: // sra e
-		cs.sraOpReg(&cs.E)
-	case 0x2c: // sra h
-		cs.sraOpReg(&cs.H)
-	case 0x2d: // sra l
-		cs.sraOpReg(&cs.L)
-	case 0x2e: // sra (hl)
-		cs.sraOpHL()
-	case 0x2f: // sra a
-		cs.sraOpReg(&cs.A)
-
-	case 0x30: // swap b
-		cs.swapOpReg(&cs.B)
-	case 0x31: // swap c
-		cs.swapOpReg(&cs.C)
-	case 0x32: // swap d
-		cs.swapOpReg(&cs.D)
-	case 0x33: // swap e
-		cs.swapOpReg(&cs.E)
-	case 0x34: // swap h
-		cs.swapOpReg(&cs.H)
-	case 0x35: // swap l
-		cs.swapOpReg(&cs.L)
-	case 0x36: // swap (hl)
-		cs.swapOpHL()
-	case 0x37: // swap a
-		cs.swapOpReg(&cs.A)
-
-	case 0x38: // srl b
-		cs.srlOpReg(&cs.B)
-	case 0x39: // srl c
-		cs.srlOpReg(&cs.C)
-	case 0x3a: // srl d
-		cs.srlOpReg(&cs.D)
-	case 0x3b: // srl e
-		cs.srlOpReg(&cs.E)
-	case 0x3c: // srl h
-		cs.srlOpReg(&cs.H)
-	case 0x3d: // srl l
-		cs.srlOpReg(&cs.L)
-	case 0x3e: // srl (hl)
-		cs.srlOpHL()
-	case 0x3f: // srl a
-		cs.srlOpReg(&cs.A)
-
-	case 0x40: // bit 0, b
-		cs.bitOpReg(0, cs.B)
-	case 0x41: // bit 0, c
-		cs.bitOpReg(0, cs.C)
-	case 0x42: // bit 0, d
-		cs.bitOpReg(0, cs.D)
-	case 0x43: // bit 0, e
-		cs.bitOpReg(0, cs.E)
-	case 0x44: // bit 0, h
-		cs.bitOpReg(0, cs.H)
-	case 0x45: // bit 0, l
-		cs.bitOpReg(0, cs.L)
-	case 0x46: // bit 0, (hl)
-		cs.bitOpHL(0)
-	case 0x47: // bit 0, a
-		cs.bitOpReg(0, cs.A)
-
-	case 0x48: // bit 1, b
-		cs.bitOpReg(1, cs.B)
-	case 0x49: // bit 1, c
-		cs.bitOpReg(1, cs.C)
-	case 0x4a: // bit 1, d
-		cs.bitOpReg(1, cs.D)
-	case 0x4b: // bit 1, e
-		cs.bitOpReg(1, cs.E)
-	case 0x4c: // bit 1, h
-		cs.bitOpReg(1, cs.H)
-	case 0x4d: // bit 1, l
-		cs.bitOpReg(1, cs.L)
-	case 0x4e: // bit 1, (hl)
-		cs.bitOpHL(1)
-	case 0x4f: // bit 1, a
-		cs.bitOpReg(1, cs.A)
-
-	case 0x50: // bit 2, b
-		cs.bitOpReg(2, cs.B)
-	case 0x51: // bit 2, c
-		cs.bitOpReg(2, cs.C)
-	case 0x52: // bit 2, d
-		cs.bitOpReg(2, cs.D)
-	case 0x53: // bit 2, e
-		cs.bitOpReg(2, cs.E)
-	case 0x54: // bit 2, h
-		cs.bitOpReg(2, cs.H)
-	case 0x55: // bit 2, l
-		cs.bitOpReg(2, cs.L)
-	case 0x56: // bit 2, (hl)
-		cs.bitOpHL(2)
-	case 0x57: // bit 2, a
-		cs.bitOpReg(2, cs.A)
-
-	case 0x58: // bit 3, b
-		cs.bitOpReg(3, cs.B)
-	case 0x59: // bit 3, c
-		cs.bitOpReg(3, cs.C)
-	case 0x5a: // bit 3, d
-		cs.bitOpReg(3, cs.D)
-	case 0x5b: // bit 3, e
-		cs.bitOpReg(3, cs.E)
-	case 0x5c: // bit 3, h
-		cs.bitOpReg(3, cs.H)
-	case 0x5d: // bit 3, l
-		cs.bitOpReg(3, cs.L)
-	case 0x5e: // bit 3, (hl)
-		cs.bitOpHL(3)
-	case 0x5f: // bit 3, a
-		cs.bitOpReg(3, cs.A)
-
-	case 0x60: // bit 4, b
-		cs.bitOpReg(4, cs.B)
-	case 0x61: // bit 4, c
-		cs.bitOpReg(4, cs.C)
-	case 0x62: // bit 4, d
-		cs.bitOpReg(4, cs.D)
-	case 0x63: // bit 4, e
-		cs.bitOpReg(4, cs.E)
-	case 0x64: // bit 4, h
-		cs.bitOpReg(4, cs.H)
-	case 0x65: // bit 4, l
-		cs.bitOpReg(4, cs.L)
-	case 0x66: // bit 4, (hl)
-		cs.bitOpHL(4)
-	case 0x67: // bit 4, a
-		cs.bitOpReg(4, cs.A)
-
-	case 0x68: // bit 5, b
-		cs.bitOpReg(5, cs.B)
-	case 0x69: // bit 5, c
-		cs.bitOpReg(5, cs.C)
-	case 0x6a: // bit 5, d
-		cs.bitOpReg(5, cs.D)
-	case 0x6b: // bit 5, e
-		cs.bitOpReg(5, cs.E)
-	case 0x6c: // bit 5, h
-		cs.bitOpReg(5, cs.H)
-	case 0x6d: // bit 5, l
-		cs.bitOpReg(5, cs.L)
-	case 0x6e: // bit 5, (hl)
-		cs.bitOpHL(5)
-	case 0x6f: // bit 5, a
-		cs.bitOpReg(5, cs.A)
-
-	case 0x70: // bit 6, b
-		cs.bitOpReg(6, cs.B)
-	case 0x71: // bit 6, c
-		cs.bitOpReg(6, cs.C)
-	case 0x72: // bit 6, d
-		cs.bitOpReg(6, cs.D)
-	case 0x73: // bit 6, e
-		cs.bitOpReg(6, cs.E)
-	case 0x74: // bit 6, h
-		cs.bitOpReg(6, cs.H)
-	case 0x75: // bit 6, l
-		cs.bitOpReg(6, cs.L)
-	case 0x76: // bit 6, (hl)
-		cs.bitOpHL(6)
-	case 0x77: // bit 6, a
-		cs.bitOpReg(6, cs.A)
-
-	case 0x78: // bit 7, b
-		cs.bitOpReg(7, cs.B)
-	case 0x79: // bit 7, c
-		cs.bitOpReg(7, cs.C)
-	case 0x7a: // bit 7, d
-		cs.bitOpReg(7, cs.D)
-	case 0x7b: // bit 7, e
-		cs.bitOpReg(7, cs.E)
-	case 0x7c: // bit 7, h
-		cs.bitOpReg(7, cs.H)
-	case 0x7d: // bit 7, l
-		cs.bitOpReg(7, cs.L)
-	case 0x7e: // bit 7, (hl)
-		cs.bitOpHL(7)
-	case 0x7f: // bit 7, a
-		cs.bitOpReg(7, cs.A)
-
-	case 0x80: // res 0, b
-		cs.resOpReg(0, &cs.B)
-	case 0x81: // res 0, c
-		cs.resOpReg(0, &cs.C)
-	case 0x82: // res 0, d
-		cs.resOpReg(0, &cs.D)
-	case 0x83: // res 0, e
-		cs.resOpReg(0, &cs.E)
-	case 0x84: // res 0, h
-		cs.resOpReg(0, &cs.H)
-	case 0x85: // res 0, l
-		cs.resOpReg(0, &cs.L)
-	case 0x86: // res 0, (hl)
-		cs.resOpHL(0)
-	case 0x87: // res 0, a
-		cs.resOpReg(0, &cs.A)
-
-	case 0x88: // res 1, b
-		cs.resOpReg(1, &cs.B)
-	case 0x89: // res 1, c
-		cs.resOpReg(1, &cs.C)
-	case 0x8a: // res 1, d
-		cs.resOpReg(1, &cs.D)
-	case 0x8b: // res 1, e
-		cs.resOpReg(1, &cs.E)
-	case 0x8c: // res 1, h
-		cs.resOpReg(1, &cs.H)
-	case 0x8d: // res 1, l
-		cs.resOpReg(1, &cs.L)
-	case 0x8e: // res 1, (hl)
-		cs.resOpHL(1)
-	case 0x8f: // res 1, a
-		cs.resOpReg(1, &cs.A)
-
-	case 0x90: // res 2, b
-		cs.resOpReg(2, &cs.B)
-	case 0x91: // res 2, c
-		cs.resOpReg(2, &cs.C)
-	case 0x92: // res 2, d
-		cs.resOpReg(2, &cs.D)
-	case 0x93: // res 2, e
-		cs.resOpReg(2, &cs.E)
-	case 0x94: // res 2, h
-		cs.resOpReg(2, &cs.H)
-	case 0x95: // res 2, l
-		cs.resOpReg(2, &cs.L)
-	case 0x96: // res 2, (hl)
-		cs.resOpHL(2)
-	case 0x97: // res 2, a
-		cs.resOpReg(2, &cs.A)
-
-	case 0x98: // res 3, b
-		cs.resOpReg(3, &cs.B)
-	case 0x99: // res 3, c
-		cs.resOpReg(3, &cs.C)
-	case 0x9a: // res 3, d
-		cs.resOpReg(3, &cs.D)
-	case 0x9b: // res 3, e
-		cs.resOpReg(3, &cs.E)
-	case 0x9c: // res 3, h
-		cs.resOpReg(3, &cs.H)
-	case 0x9d: // res 3, l
-		cs.resOpReg(3, &cs.L)
-	case 0x9e: // res 3, (hl)
-		cs.resOpHL(3)
-	case 0x9f: // res 3, a
-		cs.resOpReg(3, &cs.A)
-
-	case 0xa0: // res 4, b
-		cs.resOpReg(4, &cs.B)
-	case 0xa1: // res 4, c
-		cs.resOpReg(4, &cs.C)
-	case 0xa2: // res 4, d
-		cs.resOpReg(4, &cs.D)
-	case 0xa3: // res 4, e
-		cs.resOpReg(4, &cs.E)
-	case 0xa4: // res 4, h
-		cs.resOpReg(4, &cs.H)
-	case 0xa5: // res 4, l
-		cs.resOpReg(4, &cs.L)
-	case 0xa6: // res 4, (hl)
-		cs.resOpHL(4)
-	case 0xa7: // res 4, a
-		cs.resOpReg(4, &cs.A)
-
-	case 0xa8: // res 5, b
-		cs.resOpReg(5, &cs.B)
-	case 0xa9: // res 5, c
-		cs.resOpReg(5, &cs.C)
-	case 0xaa: // res 5, d
-		cs.resOpReg(5, &cs.D)
-	case 0xab: // res 5, e
-		cs.resOpReg(5, &cs.E)
-	case 0xac: // res 5, h
-		cs.resOpReg(5, &cs.H)
-	case 0xad: // res 5, l
-		cs.resOpReg(5, &cs.L)
-	case 0xae: // res 5, (hl)
-		cs.resOpHL(5)
-	case 0xaf: // res 5, a
-		cs.resOpReg(5, &cs.A)
-
-	case 0xb0: // res 6, b
-		cs.resOpReg(6, &cs.B)
-	case 0xb1: // res 6, c
-		cs.resOpReg(6, &cs.C)
-	case 0xb2: // res 6, d
-		cs.resOpReg(6, &cs.D)
-	case 0xb3: // res 6, e
-		cs.resOpReg(6, &cs.E)
-	case 0xb4: // res 6, h
-		cs.resOpReg(6, &cs.H)
-	case 0xb5: // res 6, l
-		cs.resOpReg(6, &cs.L)
-	case 0xb6: // res 6, (hl)
-		cs.resOpHL(6)
-	case 0xb7: // res 6, a
-		cs.resOpReg(6, &cs.A)
-
-	case 0xb8: // res 7, b
-		cs.resOpReg(7, &cs.B)
-	case 0xb9: // res 7, c
-		cs.resOpReg(7, &cs.C)
-	case 0xba: // res 7, d
-		cs.resOpReg(7, &cs.D)
-	case 0xbb: // res 7, e
-		cs.resOpReg(7, &cs.E)
-	case 0xbc: // res 7, h
-		cs.resOpReg(7, &cs.H)
-	case 0xbd: // res 7, l
-		cs.resOpReg(7, &cs.L)
-	case 0xbe: // res 7, (hl)
-		cs.resOpHL(7)
-	case 0xbf: // res 7, a
-		cs.resOpReg(7, &cs.A)
-
-	case 0xc0: // set 0, b
-		cs.bSetOpReg(0, &cs.B)
-	case 0xc1: // set 0, c
-		cs.bSetOpReg(0, &cs.C)
-	case 0xc2: // set 0, d
-		cs.bSetOpReg(0, &cs.D)
-	case 0xc3: // set 0, e
-		cs.bSetOpReg(0, &cs.E)
-	case 0xc4: // set 0, h
-		cs.bSetOpReg(0, &cs.H)
-	case 0xc5: // set 0, l
-		cs.bSetOpReg(0, &cs.L)
-	case 0xc6: // set 0, (hl)
-		cs.bSetOpHL(0)
-	case 0xc7: // set 0, a
-		cs.bSetOpReg(0, &cs.A)
-
-	case 0xc8: // set 1, b
-		cs.bSetOpReg(1, &cs.B)
-	case 0xc9: // set 1, c
-		cs.bSetOpReg(1, &cs.C)
-	case 0xca: // set 1, d
-		cs.bSetOpReg(1, &cs.D)
-	case 0xcb: // set 1, e
-		cs.bSetOpReg(1, &cs.E)
-	case 0xcc: // set 1, h
-		cs.bSetOpReg(1, &cs.H)
-	case 0xcd: // set 1, l
-		cs.bSetOpReg(1, &cs.L)
-	case 0xce: // set 1, (hl)
-		cs.bSetOpHL(1)
-	case 0xcf: // set 1, a
-		cs.bSetOpReg(1, &cs.A)
-
-	case 0xd0: // set 2, b
-		cs.bSetOpReg(2, &cs.B)
-	case 0xd1: // set 2, c
-		cs.bSetOpReg(2, &cs.C)
-	case 0xd2: // set 2, d
-		cs.bSetOpReg(2, &cs.D)
-	case 0xd3: // set 2, e
-		cs.bSetOpReg(2, &cs.E)
-	case 0xd4: // set 2, h
-		cs.bSetOpReg(2, &cs.H)
-	case 0xd5: // set 2, l
-		cs.bSetOpReg(2, &cs.L)
-	case 0xd6: // set 2, (hl)
-		cs.bSetOpHL(2)
-	case 0xd7: // set 2, a
-		cs.bSetOpReg(2, &cs.A)
-
-	case 0xd8: // set 3, b
-		cs.bSetOpReg(3, &cs.B)
-	case 0xd9: // set 3, c
-		cs.bSetOpReg(3, &cs.C)
-	case 0xda: // set 3, d
-		cs.bSetOpReg(3, &cs.D)
-	case 0xdb: // set 3, e
-		cs.bSetOpReg(3, &cs.E)
-	case 0xdc: // set 3, h
-		cs.bSetOpReg(3, &cs.H)
-	case 0xdd: // set 3, l
-		cs.bSetOpReg(3, &cs.L)
-	case 0xde: // set 3, (hl)
-		cs.bSetOpHL(3)
-	case 0xdf: // set 3, a
-		cs.bSetOpReg(3, &cs.A)
-
-	case 0xe0: // set 4, b
-		cs.bSetOpReg(4, &cs.B)
-	case 0xe1: // set 4, c
-		cs.bSetOpReg(4, &cs.C)
-	case 0xe2: // set 4, d
-		cs.bSetOpReg(4, &cs.D)
-	case 0xe3: // set 4, e
-		cs.bSetOpReg(4, &cs.E)
-	case 0xe4: // set 4, h
-		cs.bSetOpReg(4, &cs.H)
-	case 0xe5: // set 4, l
-		cs.bSetOpReg(4, &cs.L)
-	case 0xe6: // set 4, (hl)
-		cs.bSetOpHL(4)
-	case 0xe7: // set 4, a
-		cs.bSetOpReg(4, &cs.A)
-
-	case 0xe8: // set 5, b
-		cs.bSetOpReg(5, &cs.B)
-	case 0xe9: // set 5, c
-		cs.bSetOpReg(5, &cs.C)
-	case 0xea: // set 5, d
-		cs.bSetOpReg(5, &cs.D)
-	case 0xeb: // set 5, e
-		cs.bSetOpReg(5, &cs.E)
-	case 0xec: // set 5, h
-		cs.bSetOpReg(5, &cs.H)
-	case 0xed: // set 5, l
-		cs.bSetOpReg(5, &cs.L)
-	case 0xee: // set 5, (hl)
-		cs.bSetOpHL(5)
-	case 0xef: // set 5, a
-		cs.bSetOpReg(5, &cs.A)
-
-	case 0xf0: // set 6, b
-		cs.bSetOpReg(6, &cs.B)
-	case 0xf1: // set 6, c
-		cs.bSetOpReg(6, &cs.C)
-	case 0xf2: // set 6, d
-		cs.bSetOpReg(6, &cs.D)
-	case 0xf3: // set 6, e
-		cs.bSetOpReg(6, &cs.E)
-	case 0xf4: // set 6, h
-		cs.bSetOpReg(6, &cs.H)
-	case 0xf5: // set 6, l
-		cs.bSetOpReg(6, &cs.L)
-	case 0xf6: // set 6, (hl)
-		cs.bSetOpHL(6)
-	case 0xf7: // set 6, a
-		cs.bSetOpReg(6, &cs.A)
-
-	case 0xf8: // set 7, b
-		cs.bSetOpReg(7, &cs.B)
-	case 0xf9: // set 7, c
-		cs.bSetOpReg(7, &cs.C)
-	case 0xfa: // set 7, d
-		cs.bSetOpReg(7, &cs.D)
-	case 0xfb: // set 7, e
-		cs.bSetOpReg(7, &cs.E)
-	case 0xfc: // set 7, h
-		cs.bSetOpReg(7, &cs.H)
-	case 0xfd: // set 7, l
-		cs.bSetOpReg(7, &cs.L)
-	case 0xfe: // set 7, (hl)
-		cs.bSetOpHL(7)
-	case 0xff: // set 7, a
-		cs.bSetOpReg(7, &cs.A)
-
-	default:
-		cs.stepErr(fmt.Sprintf("Unknown Extended Opcode: 0x%02x\r\n", extOpcode))
+	case 0xc0: // set 0, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getBitSetOp(0))
+	case 0xc8: // set 1, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getBitSetOp(1))
+	case 0xd0: // set 2, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getBitSetOp(2))
+	case 0xd8: // set 3, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getBitSetOp(3))
+	case 0xe0: // set 4, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getBitSetOp(4))
+	case 0xe8: // set 5, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getBitSetOp(5))
+	case 0xf0: // set 6, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getBitSetOp(6))
+	case 0xf8: // set 7, R_OR_(HL)
+		cs.extSetOp(8, 16, 2, extOpcode, cs.getBitSetOp(7))
 	}
 }
 
-func (cs *cpuState) swapOpReg(reg *byte) {
-	val := *reg
-	result := val>>4 | (val&0x0f)<<4
-	cs.setOp8(8, 2, reg, result, zFlag(result))
+func (cs *cpuState) extSetOp(cyclesReg uint, cyclesHL uint, instLen uint16, opcode byte,
+	opFn func(val byte) (result byte, flags uint16)) {
+
+	if reg := cs.getRegFromOpBits(opcode & 0x07); reg != nil {
+		result, flags := opFn(*reg)
+		cs.setOp8(cyclesReg, instLen, reg, result, flags)
+	} else {
+		result, flags := opFn(cs.followHL())
+		cs.setOpMem8(cyclesHL, instLen, cs.getHL(), result, flags)
+	}
 }
-func (cs *cpuState) swapOpHL() {
-	val := cs.followHL()
+
+func (cs *cpuState) swapOp(val byte) (byte, uint16) {
 	result := val>>4 | (val&0x0f)<<4
-	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result))
+	return result, zFlag(result)
 }
 
 func (cs *cpuState) rlaOp() {
-	val := cs.A
-	result := (val << 1) | ((cs.F >> 4) & 0x01)
-	carry := val >> 7
-	cs.setOpA(4, 1, result, uint16(carry)) // rla is 000c, unlike other rl's
+	result, flags := cs.rlOp(cs.A)
+	cs.setOp8(4, 1, &cs.A, result, flags&^0x1000) // rla is 000c, unlike other rl's
 }
-func (cs *cpuState) rlOpReg(reg *byte) {
-	val := *reg
-	result := (val << 1) | ((cs.F >> 4) & 0x01)
-	carry := val >> 7
-	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
-}
-func (cs *cpuState) rlOpHL() {
-	val := cs.followHL()
-	result := (val << 1) | ((cs.F >> 4) & 0x01)
-	carry := val >> 7
-	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+func (cs *cpuState) rlOp(val byte) (byte, uint16) {
+	result, carry := (val<<1)|((cs.F>>4)&0x01), (val >> 7)
+	return result, (zFlag(result) | uint16(carry))
 }
 
 func (cs *cpuState) rraOp() {
-	val := cs.A
-	result := ((cs.F << 3) & 0x80) | (val >> 1)
-	carry := val & 0x01
-	cs.setOpA(4, 1, result, uint16(carry)) // rra is 000c, unlike other rr's
+	result, flags := cs.rrOp(cs.A)
+	cs.setOp8(4, 1, &cs.A, result, flags&^0x1000) // rra is 000c, unlike other rr's
 }
-func (cs *cpuState) rrOpReg(reg *byte) {
-	val := *reg
-	result := ((cs.F << 3) & 0x80) | (val >> 1)
-	carry := val & 0x01
-	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
-}
-func (cs *cpuState) rrOpHL() {
-	val := cs.followHL()
-	result := ((cs.F << 3) & 0x80) | (val >> 1)
-	carry := val & 0x01
-	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+func (cs *cpuState) rrOp(val byte) (byte, uint16) {
+	result, carry := ((cs.F<<3)&0x80)|(val>>1), (val & 0x01)
+	return result, (zFlag(result) | uint16(carry))
 }
 
 func (cs *cpuState) rlcaOp() {
-	val := cs.A
-	result := (val << 1) | (val >> 7)
-	carry := val >> 7
-	cs.setOpA(4, 1, result, uint16(carry)) // rlca is 000c, unlike other rlc's
+	result, flags := cs.rlcOp(cs.A)
+	cs.setOp8(4, 1, &cs.A, result, flags&^0x1000) // rlca is 000c, unlike other rlc's
 }
-func (cs *cpuState) rlcOpReg(reg *byte) {
-	val := *reg
-	result := (val << 1) | (val >> 7)
-	carry := val >> 7
-	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
-}
-func (cs *cpuState) rlcOpHL() {
-	val := cs.followHL()
-	result := (val << 1) | (val >> 7)
-	carry := val >> 7
-	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+func (cs *cpuState) rlcOp(val byte) (byte, uint16) {
+	result, carry := (val<<1)|(val>>7), val>>7
+	return result, (zFlag(result) | uint16(carry))
 }
 
 func (cs *cpuState) rrcaOp() {
-	val := cs.A
-	result := (val << 7) | (val >> 1)
-	carry := val & 0x01
-	cs.setOpA(4, 1, result, uint16(carry)) // rrca is 000c, unlike other rrc's
+	result, flags := cs.rrcOp(cs.A)
+	cs.setOp8(4, 1, &cs.A, result, flags&^0x1000) // rrca is 000c, unlike other rrc's
 }
-func (cs *cpuState) rrcOpReg(reg *byte) {
-	val := *reg
-	result := (val << 7) | (val >> 1)
-	carry := val & 0x01
-	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
-}
-func (cs *cpuState) rrcOpHL() {
-	val := cs.followHL()
-	result := (val << 7) | (val >> 1)
-	carry := val & 0x01
-	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+func (cs *cpuState) rrcOp(val byte) (byte, uint16) {
+	result, carry := (val<<7)|(val>>1), (val & 0x01)
+	return result, (zFlag(result) | uint16(carry))
 }
 
-func (cs *cpuState) srlOpReg(reg *byte) {
-	val := *reg
+func (cs *cpuState) srlOp(val byte) (byte, uint16) {
 	result, carry := val>>1, val&0x01
-	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
-}
-func (cs *cpuState) srlOpHL() {
-	val := cs.followHL()
-	result, carry := val>>1, val&0x01
-	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+	return result, (zFlag(result) | uint16(carry))
 }
 
-func (cs *cpuState) slaOpReg(reg *byte) {
-	val := *reg
+func (cs *cpuState) slaOp(val byte) (byte, uint16) {
 	result, carry := val<<1, val>>7
-	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
-}
-func (cs *cpuState) slaOpHL() {
-	val := cs.followHL()
-	result, carry := val<<1, val>>7
-	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+	return result, (zFlag(result) | uint16(carry))
 }
 
-func (cs *cpuState) sraOpReg(reg *byte) {
-	val := *reg
+func (cs *cpuState) sraOp(val byte) (byte, uint16) {
 	result, carry := (val&0x80)|(val>>1), val&0x01
-	cs.setOp8(8, 2, reg, result, zFlag(result)|uint16(carry))
-}
-func (cs *cpuState) sraOpHL() {
-	val := cs.followHL()
-	result, carry := (val&0x80)|(val>>1), val&0x01
-	cs.setOpMem8(16, 2, cs.getHL(), result, zFlag(result)|uint16(carry))
+	return result, (zFlag(result) | uint16(carry))
 }
 
-func (cs *cpuState) bitOp(cycles uint, instLen uint16, bitNum uint8, val uint8) {
+func (cs *cpuState) bitOp(cyclesReg uint, cyclesHL uint, instLen uint16, opcode byte, bitNum uint8) {
+	cycles, val := cs.getCyclesAndValFromOpBits(cyclesReg, cyclesHL, opcode)
 	cs.setOpFn(cycles, instLen, func() {}, zFlag(val&(1<<bitNum))|0x012)
 }
-func (cs *cpuState) bitOpReg(bitNum, val uint8) {
-	cs.bitOp(8, 2, bitNum, val)
-}
-func (cs *cpuState) bitOpHL(bitNum uint8) {
-	cs.bitOp(16, 2, bitNum, cs.followHL())
+
+func (cs *cpuState) getResOp(bitNum uint) func(byte) (byte, uint16) {
+	return func(val byte) (byte, uint16) {
+		result := val &^ (1 << bitNum)
+		return result, 0x2222
+	}
 }
 
-func (cs *cpuState) resOpReg(bitNum uint8, reg *byte) {
-	val := *reg
-	result := val &^ (1 << bitNum)
-	cs.setOp8(8, 2, reg, result, 0x2222)
-}
-func (cs *cpuState) resOpHL(bitNum uint8) {
-	val := cs.followHL()
-	result := val &^ (1 << bitNum)
-	cs.setOpMem8(16, 2, cs.getHL(), result, 0x2222)
-}
-
-func (cs *cpuState) bSetOpReg(bitNum uint8, reg *byte) {
-	val := *reg
-	result := val | (1 << bitNum)
-	cs.setOp8(8, 2, reg, result, 0x2222)
-}
-func (cs *cpuState) bSetOpHL(bitNum uint8) {
-	val := cs.followHL()
-	result := val | (1 << bitNum)
-	cs.setOpMem8(16, 2, cs.getHL(), result, 0x2222)
+func (cs *cpuState) getBitSetOp(bitNum uint8) func(byte) (byte, uint16) {
+	return func(val byte) (byte, uint16) {
+		result := val | (1 << bitNum)
+		return result, 0x2222
+	}
 }
 
 func (cs *cpuState) stepErr(msg string) {
