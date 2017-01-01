@@ -5,6 +5,8 @@ import (
 )
 
 type cpuState struct {
+	// everything here marshalled for snapshot
+
 	PC                     uint16
 	SP                     uint16
 	A, F, B, C, D, E, H, L byte
@@ -306,12 +308,12 @@ func newState(cart []byte) *cpuState {
 		HeaderChecksum: cartInfo.HeaderChecksum,
 		Mem: mem{
 			cart:        cart,
-			cartRAM:     make([]byte, cartInfo.GetRAMSize()),
-			internalRAM: make([]byte, 0x2000), // only DMG size for now
+			CartRAM:     make([]byte, cartInfo.GetRAMSize()),
+			InternalRAM: make([]byte, 0x2000), // only DMG size for now
 			mbc:         makeMBC(cartInfo),
 		},
 		LCD: lcd{
-			videoRAM: make([]byte, 0x2000), // only DMG size for now
+			VideoRAM: make([]byte, 0x2000), // only DMG size for now
 		},
 	}
 	state.init()
@@ -357,10 +359,10 @@ func (cs *cpuState) init() {
 	cs.write(0xff48, 0xff)
 	cs.write(0xff49, 0xff)
 
-	cs.APU.sounds[0].restartRequested = false
-	cs.APU.sounds[1].restartRequested = false
-	cs.APU.sounds[2].restartRequested = false
-	cs.APU.sounds[3].restartRequested = false
+	cs.APU.Sounds[0].RestartRequested = false
+	cs.APU.Sounds[1].RestartRequested = false
+	cs.APU.Sounds[2].RestartRequested = false
+	cs.APU.Sounds[3].RestartRequested = false
 
 	cs.initVRAM()
 }
@@ -438,13 +440,13 @@ func (cs *cpuState) ReadSoundBuffer(toFill []byte) []byte {
 
 // GetCartRAM returns the current state of external RAM
 func (cs *cpuState) GetCartRAM() []byte {
-	return cs.Mem.cartRAM
+	return cs.Mem.CartRAM
 }
 
 // SetCartRAM attempts to set the RAM, returning error if size not correct
 func (cs *cpuState) SetCartRAM(ram []byte) error {
-	if len(cs.Mem.cartRAM) == len(ram) {
-		copy(cs.Mem.cartRAM, ram)
+	if len(cs.Mem.CartRAM) == len(ram) {
+		copy(cs.Mem.CartRAM, ram)
 		return nil
 	}
 	// TODO: better checks if possible (e.g. real format, cart title/checksum, etc.)
@@ -463,8 +465,8 @@ func (cs *cpuState) Framebuffer() []byte {
 // FlipRequested indicates if a draw request is pending
 // and clears it before returning
 func (cs *cpuState) FlipRequested() bool {
-	val := cs.LCD.flipRequested
-	cs.LCD.flipRequested = false
+	val := cs.LCD.FlipRequested
+	cs.LCD.FlipRequested = false
 	return val
 }
 

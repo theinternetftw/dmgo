@@ -3,11 +3,14 @@ package dmgo
 import "fmt"
 
 type mem struct {
-	cart    []byte
-	cartRAM []byte
+	// not marshalled in snapshot
+	cart []byte
 
-	internalRAM     []byte
-	highInternalRAM [0x7f]byte
+	// everything else marshalled
+
+	CartRAM         []byte
+	InternalRAM     []byte
+	HighInternalRAM [0x7f]byte
 	mbc             mbc
 }
 
@@ -43,7 +46,7 @@ func (cs *cpuState) read(addr uint16) byte {
 
 	case addr >= 0xc000 && addr < 0xfe00:
 		ramAddr := (addr - 0xc000) & 0x1fff // 8kb with wraparound
-		val = cs.Mem.internalRAM[ramAddr]
+		val = cs.Mem.InternalRAM[ramAddr]
 
 	case addr >= 0xfe00 && addr < 0xfea0:
 		val = cs.LCD.readOAM(addr - 0xfe00)
@@ -77,48 +80,48 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = cs.readInterruptFlagReg()
 
 	case addr == 0xff10:
-		val = cs.APU.sounds[0].readSweepReg()
+		val = cs.APU.Sounds[0].readSweepReg()
 	case addr == 0xff11:
-		val = cs.APU.sounds[0].readLenDutyReg()
+		val = cs.APU.Sounds[0].readLenDutyReg()
 	case addr == 0xff12:
-		val = cs.APU.sounds[0].readSoundEnvReg()
+		val = cs.APU.Sounds[0].readSoundEnvReg()
 	case addr == 0xff13:
-		val = cs.APU.sounds[0].readFreqLowReg()
+		val = cs.APU.Sounds[0].readFreqLowReg()
 	case addr == 0xff14:
-		val = cs.APU.sounds[0].readFreqHighReg()
+		val = cs.APU.Sounds[0].readFreqHighReg()
 
 	case addr == 0xff15:
 		val = 0xff // unmapped bytes
 	case addr == 0xff16:
-		val = cs.APU.sounds[1].readLenDutyReg()
+		val = cs.APU.Sounds[1].readLenDutyReg()
 	case addr == 0xff17:
-		val = cs.APU.sounds[1].readSoundEnvReg()
+		val = cs.APU.Sounds[1].readSoundEnvReg()
 	case addr == 0xff18:
-		val = cs.APU.sounds[1].readFreqLowReg()
+		val = cs.APU.Sounds[1].readFreqLowReg()
 	case addr == 0xff19:
-		val = cs.APU.sounds[1].readFreqHighReg()
+		val = cs.APU.Sounds[1].readFreqHighReg()
 
 	case addr == 0xff1a:
-		val = boolBit(cs.APU.sounds[2].on, 7) | 0x7f
+		val = boolBit(cs.APU.Sounds[2].On, 7) | 0x7f
 	case addr == 0xff1b:
-		val = cs.APU.sounds[2].readLengthDataReg()
+		val = cs.APU.Sounds[2].readLengthDataReg()
 	case addr == 0xff1c:
-		val = cs.APU.sounds[2].readWaveOutLvlReg()
+		val = cs.APU.Sounds[2].readWaveOutLvlReg()
 	case addr == 0xff1d:
-		val = cs.APU.sounds[2].readFreqLowReg()
+		val = cs.APU.Sounds[2].readFreqLowReg()
 	case addr == 0xff1e:
-		val = cs.APU.sounds[2].readFreqHighReg()
+		val = cs.APU.Sounds[2].readFreqHighReg()
 
 	case addr == 0xff1f:
 		val = 0xff // unmapped bytes
 	case addr == 0xff20:
-		val = cs.APU.sounds[3].readLengthDataReg()
+		val = cs.APU.Sounds[3].readLengthDataReg()
 	case addr == 0xff21:
-		val = cs.APU.sounds[3].readSoundEnvReg()
+		val = cs.APU.Sounds[3].readSoundEnvReg()
 	case addr == 0xff22:
-		val = cs.APU.sounds[3].readPolyCounterReg()
+		val = cs.APU.Sounds[3].readPolyCounterReg()
 	case addr == 0xff23:
-		val = cs.APU.sounds[3].readFreqHighReg()
+		val = cs.APU.Sounds[3].readFreqHighReg()
 
 	case addr == 0xff24:
 		val = cs.APU.readVolumeReg()
@@ -131,40 +134,40 @@ func (cs *cpuState) read(addr uint16) byte {
 		val = 0xff // unmapped bytes
 
 	case addr >= 0xff30 && addr < 0xff40:
-		val = cs.APU.sounds[2].wavePatternRAM[addr-0xff30]
+		val = cs.APU.Sounds[2].WavePatternRAM[addr-0xff30]
 
 	case addr == 0xff40:
 		val = cs.LCD.readControlReg()
 	case addr == 0xff41:
 		val = cs.LCD.readStatusReg()
 	case addr == 0xff42:
-		val = cs.LCD.scrollY
+		val = cs.LCD.ScrollY
 	case addr == 0xff43:
-		val = cs.LCD.scrollX
+		val = cs.LCD.ScrollX
 	case addr == 0xff44:
-		val = cs.LCD.lyReg
+		val = cs.LCD.LYReg
 	case addr == 0xff45:
-		val = cs.LCD.lycReg
+		val = cs.LCD.LYCReg
 
 	case addr == 0xff46:
 		val = 0xff // oam DMA reg, write-only
 
 	case addr == 0xff47:
-		val = cs.LCD.backgroundPaletteReg
+		val = cs.LCD.BackgroundPaletteReg
 	case addr == 0xff48:
-		val = cs.LCD.objectPalette0Reg
+		val = cs.LCD.ObjectPalette0Reg
 	case addr == 0xff49:
-		val = cs.LCD.objectPalette1Reg
+		val = cs.LCD.ObjectPalette1Reg
 	case addr == 0xff4a:
-		val = cs.LCD.windowY
+		val = cs.LCD.WindowY
 	case addr == 0xff4b:
-		val = cs.LCD.windowX
+		val = cs.LCD.WindowX
 
 	case addr >= 0xff4c && addr < 0xff80:
 		val = 0xff // unmapped bytes
 
 	case addr >= 0xff80 && addr < 0xffff:
-		val = cs.Mem.highInternalRAM[addr-0xff80]
+		val = cs.Mem.HighInternalRAM[addr-0xff80]
 	case addr == 0xffff:
 		val = cs.readInterruptEnableReg()
 
@@ -193,7 +196,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.Mem.mbcWrite(addr, val)
 
 	case addr >= 0xc000 && addr < 0xfe00:
-		cs.Mem.internalRAM[((addr - 0xc000) & 0x1fff)] = val // 8kb with wraparound
+		cs.Mem.InternalRAM[((addr - 0xc000) & 0x1fff)] = val // 8kb with wraparound
 	case addr >= 0xfe00 && addr < 0xfea0:
 		cs.LCD.writeOAM(addr-0xfe00, val)
 	case addr >= 0xfea0 && addr < 0xff00:
@@ -225,50 +228,50 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.writeInterruptFlagReg(val)
 
 	case addr == 0xff10:
-		cs.APU.sounds[0].writeSweepReg(val)
+		cs.APU.Sounds[0].writeSweepReg(val)
 	case addr == 0xff11:
-		cs.APU.sounds[0].writeLenDutyReg(val)
+		cs.APU.Sounds[0].writeLenDutyReg(val)
 	case addr == 0xff12:
-		cs.APU.sounds[0].writeSoundEnvReg(val)
+		cs.APU.Sounds[0].writeSoundEnvReg(val)
 	case addr == 0xff13:
-		cs.APU.sounds[0].writeFreqLowReg(val)
+		cs.APU.Sounds[0].writeFreqLowReg(val)
 	case addr == 0xff14:
-		cs.APU.sounds[0].writeFreqHighReg(val)
+		cs.APU.Sounds[0].writeFreqHighReg(val)
 
 	case addr == 0xff15:
 		// nop (unmapped bytes)
 
 	case addr == 0xff16:
-		cs.APU.sounds[1].writeLenDutyReg(val)
+		cs.APU.Sounds[1].writeLenDutyReg(val)
 	case addr == 0xff17:
-		cs.APU.sounds[1].writeSoundEnvReg(val)
+		cs.APU.Sounds[1].writeSoundEnvReg(val)
 	case addr == 0xff18:
-		cs.APU.sounds[1].writeFreqLowReg(val)
+		cs.APU.Sounds[1].writeFreqLowReg(val)
 	case addr == 0xff19:
-		cs.APU.sounds[1].writeFreqHighReg(val)
+		cs.APU.Sounds[1].writeFreqHighReg(val)
 
 	case addr == 0xff1a:
-		cs.APU.sounds[2].writeWaveOnOffReg(val)
+		cs.APU.Sounds[2].writeWaveOnOffReg(val)
 	case addr == 0xff1b:
-		cs.APU.sounds[2].writeLengthDataReg(val)
+		cs.APU.Sounds[2].writeLengthDataReg(val)
 	case addr == 0xff1c:
-		cs.APU.sounds[2].writeWaveOutLvlReg(val)
+		cs.APU.Sounds[2].writeWaveOutLvlReg(val)
 	case addr == 0xff1d:
-		cs.APU.sounds[2].writeFreqLowReg(val)
+		cs.APU.Sounds[2].writeFreqLowReg(val)
 	case addr == 0xff1e:
-		cs.APU.sounds[2].writeFreqHighReg(val)
+		cs.APU.Sounds[2].writeFreqHighReg(val)
 
 	case addr == 0xff1f:
 		// nop (unmapped bytes)
 
 	case addr == 0xff20:
-		cs.APU.sounds[3].writeLengthDataReg(val)
+		cs.APU.Sounds[3].writeLengthDataReg(val)
 	case addr == 0xff21:
-		cs.APU.sounds[3].writeSoundEnvReg(val)
+		cs.APU.Sounds[3].writeSoundEnvReg(val)
 	case addr == 0xff22:
-		cs.APU.sounds[3].writePolyCounterReg(val)
+		cs.APU.Sounds[3].writePolyCounterReg(val)
 	case addr == 0xff23:
-		cs.APU.sounds[3].writeFreqHighReg(val) // noise channel uses control bits, freq ignored
+		cs.APU.Sounds[3].writeFreqHighReg(val) // noise channel uses control bits, freq ignored
 
 	case addr == 0xff24:
 		cs.APU.writeVolumeReg(val)
@@ -281,7 +284,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		// nop (unmapped bytes)
 
 	case addr >= 0xff30 && addr < 0xff40:
-		cs.APU.sounds[2].writeWavePatternValue(addr-0xff30, val)
+		cs.APU.Sounds[2].writeWavePatternValue(addr-0xff30, val)
 
 	case addr == 0xff40:
 		cs.LCD.writeControlReg(val)
@@ -295,7 +298,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		// nop? pandocs says something
 		// about "resetting the counter",
 		// bgb seems to do nothing. doesn't
-		// reset lyReg, doesn't change any
+		// reset LYReg, doesn't change any
 		// counter I see...
 	case addr == 0xff45:
 		cs.LCD.writeLycReg(val)
@@ -315,7 +318,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr >= 0xff4c && addr < 0xff80:
 		// empty, nop (can be more complicated, see TCAGBD)
 	case addr >= 0xff80 && addr < 0xffff:
-		cs.Mem.highInternalRAM[addr-0xff80] = val
+		cs.Mem.HighInternalRAM[addr-0xff80] = val
 	case addr == 0xffff:
 		cs.writeInterruptEnableReg(val)
 	default:

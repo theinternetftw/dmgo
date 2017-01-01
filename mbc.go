@@ -79,7 +79,7 @@ func (bn *bankNumbers) setRAMBankNumber(bankNum uint16) {
 }
 func (bn *bankNumbers) init(mem *mem) {
 	bn.maxROMBank = uint16(len(mem.cart)/0x4000 - 1)
-	bn.maxRAMBank = uint16(len(mem.cartRAM)/0x2000 - 1)
+	bn.maxRAMBank = uint16(len(mem.CartRAM)/0x2000 - 1)
 }
 func (bn *bankNumbers) romBankOffset() uint {
 	return uint(bn.romBankNumber) * 0x4000
@@ -102,8 +102,8 @@ func (mbc *nullMBC) Read(mem *mem, addr uint16) byte {
 		return mem.cart[addr]
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr - 0xa000)
-		if int(localAddr) < len(mem.cartRAM) {
-			return mem.cartRAM[localAddr]
+		if int(localAddr) < len(mem.CartRAM) {
+			return mem.CartRAM[localAddr]
 		}
 		return 0xff
 	default:
@@ -112,8 +112,8 @@ func (mbc *nullMBC) Read(mem *mem, addr uint16) byte {
 }
 func (mbc *nullMBC) Write(mem *mem, addr uint16, val byte) {
 	localAddr := uint(addr - 0xa000)
-	if int(localAddr) < len(mem.cartRAM) {
-		mem.cartRAM[localAddr] = val
+	if int(localAddr) < len(mem.CartRAM) {
+		mem.CartRAM[localAddr] = val
 	}
 }
 
@@ -146,8 +146,8 @@ func (mbc *mbc1) Read(mem *mem, addr uint16) byte {
 		return mem.cart[localAddr]
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
-		if mbc.ramEnabled && int(localAddr) < len(mem.cartRAM) {
-			return mem.cartRAM[localAddr]
+		if mbc.ramEnabled && int(localAddr) < len(mem.CartRAM) {
+			return mem.CartRAM[localAddr]
 		}
 		return 0xff
 	default:
@@ -192,8 +192,8 @@ func (mbc *mbc1) Write(mem *mem, addr uint16, val byte) {
 		}
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
-		if mbc.ramEnabled && int(localAddr) < len(mem.cartRAM) {
-			mem.cartRAM[localAddr] = val
+		if mbc.ramEnabled && int(localAddr) < len(mem.CartRAM) {
+			mem.CartRAM[localAddr] = val
 		}
 	default:
 		panic(fmt.Sprintf("mbc1: not implemented: write at %x\n", addr))
@@ -223,9 +223,9 @@ func (mbc *mbc2) Read(mem *mem, addr uint16) byte {
 		return mem.cart[localAddr]
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr - 0xa000)
-		if mbc.ramEnabled && int(localAddr) < len(mem.cartRAM) {
+		if mbc.ramEnabled && int(localAddr) < len(mem.CartRAM) {
 			// 4-bit ram (FIXME: pull high nibble down or up?)
-			return mem.cartRAM[localAddr] & 0x0f
+			return mem.CartRAM[localAddr] & 0x0f
 		}
 		return 0xff
 	default:
@@ -257,9 +257,9 @@ func (mbc *mbc2) Write(mem *mem, addr uint16, val byte) {
 		// nop
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr - 0xa000)
-		if mbc.ramEnabled && int(localAddr) < len(mem.cartRAM) {
+		if mbc.ramEnabled && int(localAddr) < len(mem.CartRAM) {
 			// 4-bit RAM
-			mem.cartRAM[localAddr] = val & 0x0f
+			mem.CartRAM[localAddr] = val & 0x0f
 		}
 	default:
 		panic(fmt.Sprintf("mbc2: not implemented: write at %x\n", addr))
@@ -350,8 +350,8 @@ func (mbc *mbc3) Read(mem *mem, addr uint16) byte {
 		switch mbc.ramBankNumber {
 		case 0, 1, 2, 3:
 			localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
-			if mbc.ramEnabled && int(localAddr) < len(mem.cartRAM) {
-				return mem.cartRAM[localAddr]
+			if mbc.ramEnabled && int(localAddr) < len(mem.CartRAM) {
+				return mem.CartRAM[localAddr]
 			}
 			return 0xff
 		case 8:
@@ -401,8 +401,8 @@ func (mbc *mbc3) Write(mem *mem, addr uint16, val byte) {
 		switch mbc.ramBankNumber {
 		case 0, 1, 2, 3:
 			localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
-			if mbc.ramEnabled && int(localAddr) < len(mem.cartRAM) {
-				mem.cartRAM[localAddr] = val
+			if mbc.ramEnabled && int(localAddr) < len(mem.CartRAM) {
+				mem.CartRAM[localAddr] = val
 			}
 		case 8:
 			mbc.updateTimer()
@@ -455,8 +455,8 @@ func (mbc *mbc5) Read(mem *mem, addr uint16) byte {
 		return mem.cart[localAddr]
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
-		if mbc.ramEnabled && int(localAddr) < len(mem.cartRAM) {
-			return mem.cartRAM[localAddr]
+		if mbc.ramEnabled && int(localAddr) < len(mem.CartRAM) {
+			return mem.CartRAM[localAddr]
 		}
 		return 0xff
 	default:
@@ -481,8 +481,8 @@ func (mbc *mbc5) Write(mem *mem, addr uint16, val byte) {
 		// nop?
 	case addr >= 0xa000 && addr < 0xc000:
 		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
-		if mbc.ramEnabled && int(localAddr) < len(mem.cartRAM) {
-			mem.cartRAM[localAddr] = val
+		if mbc.ramEnabled && int(localAddr) < len(mem.CartRAM) {
+			mem.CartRAM[localAddr] = val
 		}
 	default:
 		panic(fmt.Sprintf("mbc5: not implemented: write at %x\n", addr))

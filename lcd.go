@@ -6,161 +6,160 @@ import (
 )
 
 type lcd struct {
+	// not marshalled in snapshot
 	framebuffer [160 * 144 * 4]byte
 
-	flipRequested bool // for whatever really draws the fb
+	// everything else marshalled
 
-	pastFirstFrame bool
+	FlipRequested bool // for whatever really draws the fb
 
-	videoRAM []byte
+	PastFirstFrame bool
 
-	oam            [160]byte
-	oamForScanline []oamEntry
+	VideoRAM []byte
+
+	OAM            [160]byte
+	OAMForScanline []oamEntry
 
 	// for oam sprite priority
-	bgMask     [160]bool
-	spriteMask [160]bool
+	BGMask     [160]bool
+	SpriteMask [160]bool
 
-	scrollY byte
-	scrollX byte
-	windowY byte
-	windowX byte
+	ScrollY byte
+	ScrollX byte
+	WindowY byte
+	WindowX byte
 
-	backgroundPaletteReg byte
-	objectPalette0Reg    byte
-	objectPalette1Reg    byte
+	BackgroundPaletteReg byte
+	ObjectPalette0Reg    byte
+	ObjectPalette1Reg    byte
 
-	hBlankInterrupt bool
-	vBlankInterrupt bool
-	oamInterrupt    bool
-	lycInterrupt    bool
+	HBlankInterrupt bool
+	VBlankInterrupt bool
+	OAMInterrupt    bool
+	LYCInterrupt    bool
 
-	lyReg  byte
-	lycReg byte
+	LYReg  byte
+	LYCReg byte
 
-	inVBlank     bool
-	inHBlank     bool
-	accessingOAM bool
-	readingData  bool
-
-	// needs to be here for buf, see runCycles
-	// (everything except displayOn)
-	pendingControlBits byte
+	InVBlank     bool
+	InHBlank     bool
+	AccessingOAM bool
+	ReadingData  bool
 
 	// control bits
-	displayOn                   bool
-	useUpperWindowTileMap       bool
-	displayWindow               bool
-	useLowerBGAndWindowTileData bool
-	useUpperBGTileMap           bool
-	bigSprites                  bool
-	displaySprites              bool
-	displayBG                   bool
+	DisplayOn                   bool
+	UseUpperWindowTileMap       bool
+	DisplayWindow               bool
+	UseLowerBGAndWindowTileData bool
+	UseUpperBGTileMap           bool
+	BigSprites                  bool
+	DisplaySprites              bool
+	DisplayBG                   bool
 
-	cyclesSinceLYInc       uint
-	cyclesSinceVBlankStart uint
+	CyclesSinceLYInc       uint
+	CyclesSinceVBlankStart uint
 
-	statIRQSignal bool
+	StatIRQSignal bool
 }
 
 var lastOAMWarningCycles uint
 var lastOAMWarningLine byte
 
 func (lcd *lcd) writeOAM(addr uint16, val byte) {
-	if !lcd.accessingOAM && !lcd.readingData {
-		lcd.oam[addr] = val
+	if !lcd.AccessingOAM && !lcd.ReadingData {
+		lcd.OAM[addr] = val
 	} else {
-		if lcd.cyclesSinceLYInc != lastOAMWarningCycles || lcd.lyReg != lastOAMWarningLine {
-			lastOAMWarningCycles = lcd.cyclesSinceLYInc
-			lastOAMWarningLine = lcd.lyReg
-			fmt.Println("TOUCHED OAM DURING USE: cyclesSinceLYInc", lcd.cyclesSinceLYInc, "lyReg", lcd.lyReg)
+		if lcd.CyclesSinceLYInc != lastOAMWarningCycles || lcd.LYReg != lastOAMWarningLine {
+			lastOAMWarningCycles = lcd.CyclesSinceLYInc
+			lastOAMWarningLine = lcd.LYReg
+			fmt.Println("TOUCHED OAM DURING USE: CyclesSinceLYInc", lcd.CyclesSinceLYInc, "LYReg", lcd.LYReg)
 		}
 	}
 }
 func (lcd *lcd) readOAM(addr uint16) byte {
-	if !lcd.accessingOAM && !lcd.readingData {
-		return lcd.oam[addr]
+	if !lcd.AccessingOAM && !lcd.ReadingData {
+		return lcd.OAM[addr]
 	}
 	return 0xff
 }
 
 func (lcd *lcd) init() {
-	lcd.accessingOAM = true // at start of line
+	lcd.AccessingOAM = true // at start of line
 }
 
 func (lcd *lcd) writeVideoRAM(addr uint16, val byte) {
-	if !lcd.readingData {
-		lcd.videoRAM[addr] = val
+	if !lcd.ReadingData {
+		lcd.VideoRAM[addr] = val
 	}
 }
 func (lcd *lcd) readVideoRAM(addr uint16) byte {
-	if !lcd.readingData {
-		return lcd.videoRAM[addr]
+	if !lcd.ReadingData {
+		return lcd.VideoRAM[addr]
 	}
 	return 0xff
 }
 
 func (lcd *lcd) shouldStatIRQ() bool {
-	lastSignal := lcd.statIRQSignal
+	lastSignal := lcd.StatIRQSignal
 	// NOTE: TCAGBD claims an oam check is or'd with the vblank check
-	lcd.statIRQSignal = ((lcd.lycReg == lcd.lyReg && lcd.lycInterrupt) ||
-		(lcd.inHBlank && lcd.hBlankInterrupt) ||
-		(lcd.accessingOAM && lcd.oamInterrupt) ||
-		(lcd.inVBlank && (lcd.vBlankInterrupt || lcd.oamInterrupt)))
-	return !lastSignal && lcd.statIRQSignal // rising edge only
+	lcd.StatIRQSignal = ((lcd.LYCReg == lcd.LYReg && lcd.LYCInterrupt) ||
+		(lcd.InHBlank && lcd.HBlankInterrupt) ||
+		(lcd.AccessingOAM && lcd.OAMInterrupt) ||
+		(lcd.InVBlank && (lcd.VBlankInterrupt || lcd.OAMInterrupt)))
+	return !lastSignal && lcd.StatIRQSignal // rising edge only
 }
 
 // FIXME: timings will have to change for double-speed mode
 // (maybe instead of counting cycles I'll count actual instruction time?)
 // (or maybe it'll always be dmg cycles and gbc will just produce half as many of them?
 func (lcd *lcd) runCycles(cs *cpuState, numCycles uint) {
-	if !lcd.displayOn {
+	if !lcd.DisplayOn {
 		return
 	}
 
-	lcd.cyclesSinceLYInc += numCycles
+	lcd.CyclesSinceLYInc += numCycles
 
-	if lcd.accessingOAM && lcd.cyclesSinceLYInc >= 80 {
-		lcd.parseOAMForScanline(lcd.lyReg)
-		lcd.accessingOAM = false
-		lcd.readingData = true
+	if lcd.AccessingOAM && lcd.CyclesSinceLYInc >= 80 {
+		lcd.parseOAMForScanline(lcd.LYReg)
+		lcd.AccessingOAM = false
+		lcd.ReadingData = true
 	}
 
-	if lcd.readingData && lcd.cyclesSinceLYInc >= 252 {
-		lcd.readingData = false
-		lcd.inHBlank = true
+	if lcd.ReadingData && lcd.CyclesSinceLYInc >= 252 {
+		lcd.ReadingData = false
+		lcd.InHBlank = true
 		lcd.renderScanline()
 	}
 
-	if lcd.cyclesSinceLYInc >= 456 {
-		lcd.inHBlank = false
-		lcd.lyReg++
+	if lcd.CyclesSinceLYInc >= 456 {
+		lcd.InHBlank = false
+		lcd.LYReg++
 
-		if lcd.lyReg >= 144 && !lcd.inVBlank {
-			lcd.inVBlank = true
+		if lcd.LYReg >= 144 && !lcd.InVBlank {
+			lcd.InVBlank = true
 			cs.VBlankIRQ = true
 
-			if lcd.pastFirstFrame {
-				lcd.flipRequested = true
+			if lcd.PastFirstFrame {
+				lcd.FlipRequested = true
 			} else {
-				lcd.pastFirstFrame = true
+				lcd.PastFirstFrame = true
 			}
 		}
 
-		lcd.cyclesSinceLYInc = lcd.cyclesSinceLYInc - 456
-		if !lcd.inVBlank {
-			lcd.accessingOAM = true
+		lcd.CyclesSinceLYInc = lcd.CyclesSinceLYInc - 456
+		if !lcd.InVBlank {
+			lcd.AccessingOAM = true
 		}
 	}
 
-	if lcd.inVBlank {
-		lcd.cyclesSinceVBlankStart += numCycles
-		if lcd.cyclesSinceVBlankStart >= 456*10 {
-			lcd.lyReg = 0
-			lcd.cyclesSinceLYInc = lcd.cyclesSinceVBlankStart - 456*10
-			lcd.inVBlank = false
-			lcd.accessingOAM = true
-			lcd.cyclesSinceVBlankStart = 0
+	if lcd.InVBlank {
+		lcd.CyclesSinceVBlankStart += numCycles
+		if lcd.CyclesSinceVBlankStart >= 456*10 {
+			lcd.LYReg = 0
+			lcd.CyclesSinceLYInc = lcd.CyclesSinceVBlankStart - 456*10
+			lcd.InVBlank = false
+			lcd.AccessingOAM = true
+			lcd.CyclesSinceVBlankStart = 0
 		}
 	}
 
@@ -174,15 +173,15 @@ func (lcd *lcd) getTilePixel(tdataAddr uint16, tileNum, x, y byte) byte {
 		tileNum = byte(int(int8(tileNum)) + 128)
 	}
 	mapBitY, mapBitX := y&0x07, x&0x07
-	dataByteL := lcd.videoRAM[tdataAddr+(uint16(tileNum)<<4)+(uint16(mapBitY)<<1)]
-	dataByteH := lcd.videoRAM[tdataAddr+(uint16(tileNum)<<4)+(uint16(mapBitY)<<1)+1]
+	dataByteL := lcd.VideoRAM[tdataAddr+(uint16(tileNum)<<4)+(uint16(mapBitY)<<1)]
+	dataByteH := lcd.VideoRAM[tdataAddr+(uint16(tileNum)<<4)+(uint16(mapBitY)<<1)+1]
 	dataBitL := (dataByteL >> (7 - mapBitX)) & 0x1
 	dataBitH := (dataByteH >> (7 - mapBitX)) & 0x1
 	return (dataBitH << 1) | dataBitL
 }
 func (lcd *lcd) getTileNum(tmapAddr uint16, x, y byte) byte {
 	tileNumY, tileNumX := uint16(y>>3), uint16(x>>3)
-	tileNum := lcd.videoRAM[tmapAddr+tileNumY*32+tileNumX]
+	tileNum := lcd.VideoRAM[tmapAddr+tileNumY*32+tileNumX]
 	return tileNum
 }
 
@@ -220,9 +219,9 @@ func (lcd *lcd) getSpritePixel(e *oamEntry, x, y byte) (byte, byte, byte, bool) 
 	if rawPixel == 0 {
 		return 0, 0, 0, false // transparent
 	}
-	palReg := lcd.objectPalette0Reg
+	palReg := lcd.ObjectPalette0Reg
 	if e.palSelector() {
-		palReg = lcd.objectPalette1Reg
+		palReg = lcd.ObjectPalette1Reg
 	}
 	palettedPixel := (palReg >> (rawPixel * 2)) & 0x03
 	r, g, b := lcd.applyCustomPalette(palettedPixel)
@@ -244,7 +243,7 @@ func (lcd *lcd) applyCustomPalette(val byte) (byte, byte, byte) {
 
 // 0x8000 relative
 func (lcd *lcd) getBGTileMapAddr() uint16 {
-	if lcd.useUpperBGTileMap {
+	if lcd.UseUpperBGTileMap {
 		return 0x1c00
 	}
 	return 0x1800
@@ -252,7 +251,7 @@ func (lcd *lcd) getBGTileMapAddr() uint16 {
 
 // 0x8000 relative
 func (lcd *lcd) getWindowTileMapAddr() uint16 {
-	if lcd.useUpperWindowTileMap {
+	if lcd.UseUpperWindowTileMap {
 		return 0x1c00
 	}
 	return 0x1800
@@ -260,7 +259,7 @@ func (lcd *lcd) getWindowTileMapAddr() uint16 {
 
 // 0x8000 relative
 func (lcd *lcd) getBGAndWindowTileDataAddr() uint16 {
-	if lcd.useLowerBGAndWindowTileData {
+	if lcd.UseLowerBGAndWindowTileData {
 		return 0x0000
 	}
 	return 0x0800
@@ -284,24 +283,24 @@ func yInSprite(y byte, spriteY int16, height int) bool {
 }
 func (lcd *lcd) parseOAMForScanline(scanline byte) {
 	height := 8
-	if lcd.bigSprites {
+	if lcd.BigSprites {
 		height = 16
 	}
 
 	// reslice so we don't realloc
-	lcd.oamForScanline = lcd.oamForScanline[:0]
+	lcd.OAMForScanline = lcd.OAMForScanline[:0]
 
 	// search all sprites, limit total found to 10 per scanline
-	for i := 0; len(lcd.oamForScanline) < 10 && i < 40; i++ {
+	for i := 0; len(lcd.OAMForScanline) < 10 && i < 40; i++ {
 		addr := i * 4
-		spriteY := int16(lcd.oam[addr]) - 16
+		spriteY := int16(lcd.OAM[addr]) - 16
 		if yInSprite(scanline, spriteY, height) {
-			lcd.oamForScanline = append(lcd.oamForScanline, oamEntry{
+			lcd.OAMForScanline = append(lcd.OAMForScanline, oamEntry{
 				y:         spriteY,
-				x:         int16(lcd.oam[addr+1]) - 8,
+				x:         int16(lcd.OAM[addr+1]) - 8,
 				height:    byte(height),
-				tileNum:   lcd.oam[addr+2],
-				flagsByte: lcd.oam[addr+3],
+				tileNum:   lcd.OAM[addr+2],
+				flagsByte: lcd.OAM[addr+3],
 			})
 		}
 	}
@@ -323,7 +322,7 @@ func (lcd *lcd) parseOAMForScanline(scanline byte) {
 	// zero in disabled dkland sprites make more sense, though)
 
 	// resort to x-coord order (DMG only, CGB stops with the above)
-	sort.Stable(sortableOAM(lcd.oamForScanline))
+	sort.Stable(sortableOAM(lcd.OAMForScanline))
 }
 
 type sortableOAM []oamEntry
@@ -333,56 +332,56 @@ func (s sortableOAM) Len() int           { return len(s) }
 func (s sortableOAM) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 func (lcd *lcd) renderScanline() {
-	if lcd.lyReg >= 144 {
+	if lcd.LYReg >= 144 {
 		return
 	}
 	lcd.fillScanline(0)
 
-	y := lcd.lyReg
+	y := lcd.LYReg
 
 	for i := 0; i < 160; i++ {
-		lcd.bgMask[i] = false
-		lcd.spriteMask[i] = false
+		lcd.BGMask[i] = false
+		lcd.SpriteMask[i] = false
 	}
 
-	if lcd.displayBG {
-		bgY := y + lcd.scrollY
+	if lcd.DisplayBG {
+		bgY := y + lcd.ScrollY
 		for x := byte(0); x < 160; x++ {
-			bgX := x + lcd.scrollX
+			bgX := x + lcd.ScrollX
 			pixel := lcd.getBGPixel(bgX, bgY)
 			if pixel == 0 {
-				lcd.bgMask[x] = true
+				lcd.BGMask[x] = true
 			}
 			r, g, b := lcd.applyPalettes(pixel)
 			lcd.setFramebufferPixel(x, y, r, g, b)
 		}
 	}
-	if lcd.displayWindow && y >= lcd.windowY {
-		winY := y - lcd.windowY
-		winStartX := int(lcd.windowX) - 7
+	if lcd.DisplayWindow && y >= lcd.WindowY {
+		winY := y - lcd.WindowY
+		winStartX := int(lcd.WindowX) - 7
 		for x := winStartX; x < 160; x++ {
 			if x < 0 {
 				continue
 			}
 			pixel := lcd.getWindowPixel(byte(x-winStartX), winY)
 			if pixel == 0 {
-				lcd.bgMask[x] = true
+				lcd.BGMask[x] = true
 			}
 			r, g, b := lcd.applyPalettes(pixel)
 			lcd.setFramebufferPixel(byte(x), y, r, g, b)
 		}
 	}
 
-	if lcd.displaySprites {
-		for i := range lcd.oamForScanline {
-			e := &lcd.oamForScanline[i]
+	if lcd.DisplaySprites {
+		for i := range lcd.OAMForScanline {
+			e := &lcd.OAMForScanline[i]
 			lcd.renderSpriteAtScanline(e, y)
 		}
 	}
 }
 
 func (lcd *lcd) applyPalettes(rawPixel byte) (byte, byte, byte) {
-	palettedPixel := (lcd.backgroundPaletteReg >> (rawPixel * 2)) & 0x03
+	palettedPixel := (lcd.BackgroundPaletteReg >> (rawPixel * 2)) & 0x03
 	return lcd.applyCustomPalette(palettedPixel)
 }
 
@@ -393,10 +392,10 @@ func (lcd *lcd) renderSpriteAtScanline(e *oamEntry, y byte) {
 	}
 	endX := byte(e.x + 8)
 	for x := startX; x < endX && x < 160; x++ {
-		if (!e.behindBG() || lcd.bgMask[x]) && !lcd.spriteMask[x] {
+		if (!e.behindBG() || lcd.BGMask[x]) && !lcd.SpriteMask[x] {
 			if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
 				lcd.setFramebufferPixel(x, y, r, g, b)
-				lcd.spriteMask[x] = true
+				lcd.SpriteMask[x] = true
 			}
 		}
 	}
@@ -419,7 +418,7 @@ func (lcd *lcd) setFramebufferPixel(xByte, yByte, r, g, b byte) {
 	lcd.framebuffer[yIdx+x*4+3] = 0xff
 }
 func (lcd *lcd) fillScanline(val byte) {
-	yIdx := int(lcd.lyReg) * 160 * 4
+	yIdx := int(lcd.LYReg) * 160 * 4
 	for x := 0; x < 160; x++ {
 		lcd.framebuffer[yIdx+x*4+0] = val
 		lcd.framebuffer[yIdx+x*4+1] = val
@@ -429,69 +428,69 @@ func (lcd *lcd) fillScanline(val byte) {
 }
 
 func (lcd *lcd) writeScrollY(val byte) {
-	lcd.scrollY = val
+	lcd.ScrollY = val
 }
 func (lcd *lcd) writeScrollX(val byte) {
-	lcd.scrollX = val
+	lcd.ScrollX = val
 }
 func (lcd *lcd) writeLycReg(val byte) {
-	lcd.lycReg = val
+	lcd.LYCReg = val
 }
 func (lcd *lcd) writeLyReg(val byte) {
-	lcd.lyReg = val
+	lcd.LYReg = val
 }
 func (lcd *lcd) writeBackgroundPaletteReg(val byte) {
-	lcd.backgroundPaletteReg = val
+	lcd.BackgroundPaletteReg = val
 }
 func (lcd *lcd) writeObjectPalette0Reg(val byte) {
-	lcd.objectPalette0Reg = val
+	lcd.ObjectPalette0Reg = val
 }
 func (lcd *lcd) writeObjectPalette1Reg(val byte) {
-	lcd.objectPalette1Reg = val
+	lcd.ObjectPalette1Reg = val
 }
 func (lcd *lcd) writeWindowY(val byte) {
-	lcd.windowY = val
+	lcd.WindowY = val
 }
 func (lcd *lcd) writeWindowX(val byte) {
-	lcd.windowX = val
+	lcd.WindowX = val
 }
 
 func (lcd *lcd) writeControlReg(val byte) {
 	boolsFromByte(val,
-		&lcd.displayOn,
-		&lcd.useUpperWindowTileMap,
-		&lcd.displayWindow,
-		&lcd.useLowerBGAndWindowTileData,
-		&lcd.useUpperBGTileMap,
-		&lcd.bigSprites,
-		&lcd.displaySprites,
-		&lcd.displayBG,
+		&lcd.DisplayOn,
+		&lcd.UseUpperWindowTileMap,
+		&lcd.DisplayWindow,
+		&lcd.UseLowerBGAndWindowTileData,
+		&lcd.UseUpperBGTileMap,
+		&lcd.BigSprites,
+		&lcd.DisplaySprites,
+		&lcd.DisplayBG,
 	)
 
-	if !lcd.displayOn {
-		lcd.lyReg = 0
+	if !lcd.DisplayOn {
+		lcd.LYReg = 0
 	}
 }
 func (lcd *lcd) readControlReg() byte {
 	return byteFromBools(
-		lcd.displayOn,
-		lcd.useUpperWindowTileMap,
-		lcd.displayWindow,
-		lcd.useLowerBGAndWindowTileData,
-		lcd.useUpperBGTileMap,
-		lcd.bigSprites,
-		lcd.displaySprites,
-		lcd.displayBG,
+		lcd.DisplayOn,
+		lcd.UseUpperWindowTileMap,
+		lcd.DisplayWindow,
+		lcd.UseLowerBGAndWindowTileData,
+		lcd.UseUpperBGTileMap,
+		lcd.BigSprites,
+		lcd.DisplaySprites,
+		lcd.DisplayBG,
 	)
 }
 
 func (lcd *lcd) writeStatusReg(val byte) {
 	boolsFromByte(val,
 		nil,
-		&lcd.lycInterrupt,
-		&lcd.oamInterrupt,
-		&lcd.vBlankInterrupt,
-		&lcd.hBlankInterrupt,
+		&lcd.LYCInterrupt,
+		&lcd.OAMInterrupt,
+		&lcd.VBlankInterrupt,
+		&lcd.HBlankInterrupt,
 		nil,
 		nil,
 		nil,
@@ -500,12 +499,12 @@ func (lcd *lcd) writeStatusReg(val byte) {
 func (lcd *lcd) readStatusReg() byte {
 	return byteFromBools(
 		true, // bit 7 always set
-		lcd.lycInterrupt,
-		lcd.oamInterrupt,
-		lcd.vBlankInterrupt,
-		lcd.hBlankInterrupt,
-		lcd.displayOn && (lcd.lyReg == lcd.lycReg),
-		lcd.displayOn && (lcd.accessingOAM || lcd.readingData),
-		lcd.displayOn && (lcd.inVBlank || lcd.readingData),
+		lcd.LYCInterrupt,
+		lcd.OAMInterrupt,
+		lcd.VBlankInterrupt,
+		lcd.HBlankInterrupt,
+		lcd.DisplayOn && (lcd.LYReg == lcd.LYCReg),
+		lcd.DisplayOn && (lcd.AccessingOAM || lcd.ReadingData),
+		lcd.DisplayOn && (lcd.InVBlank || lcd.ReadingData),
 	)
 }

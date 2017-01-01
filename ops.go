@@ -318,22 +318,22 @@ func (cs *cpuState) imeToString() string {
 }
 func (cs *cpuState) debugStatusLine() string {
 
-	return fmt.Sprintf("step:%08d, ", cs.Steps) +
+	return fmt.Sprintf("Step:%08d, ", cs.Steps) +
 		fmt.Sprintf("(*PC)[0:2]:%02x%02x%02x, ", cs.read(cs.PC), cs.read(cs.PC+1), cs.read(cs.PC+2)) +
 		fmt.Sprintf("(*SP):%04x, ", cs.read16(cs.SP)) +
 		fmt.Sprintf("[PC:%04x ", cs.PC) +
 		fmt.Sprintf("SP:%04x ", cs.SP) +
-		fmt.Sprintf("af:%04x ", cs.getAF()) +
-		fmt.Sprintf("bc:%04x ", cs.getBC()) +
-		fmt.Sprintf("de:%04x ", cs.getDE()) +
-		fmt.Sprintf("hl:%04x ", cs.getHL()) +
-		fmt.Sprintf("ime:%v ", cs.imeToString()) +
-		fmt.Sprintf("ie:%v ", cs.ieToString()) +
-		fmt.Sprintf("if:%v ", cs.ifToString()) +
-		fmt.Sprintf("Ly:%02x ", cs.LCD.lyReg) +
-		fmt.Sprintf("Lyc:%02x ", cs.LCD.lycReg) +
-		fmt.Sprintf("Lc:%02x ", cs.LCD.readControlReg()) +
-		fmt.Sprintf("Ls:%02x ", cs.LCD.readStatusReg()) +
+		fmt.Sprintf("AF:%04x ", cs.getAF()) +
+		fmt.Sprintf("BC:%04x ", cs.getBC()) +
+		fmt.Sprintf("DE:%04x ", cs.getDE()) +
+		fmt.Sprintf("HL:%04x ", cs.getHL()) +
+		fmt.Sprintf("IME:%v ", cs.imeToString()) +
+		fmt.Sprintf("IE:%v ", cs.ieToString()) +
+		fmt.Sprintf("IF:%v ", cs.ifToString()) +
+		fmt.Sprintf("LY:%02x ", cs.LCD.LYReg) +
+		fmt.Sprintf("LYC:%02x ", cs.LCD.LYCReg) +
+		fmt.Sprintf("LC:%02x ", cs.LCD.readControlReg()) +
+		fmt.Sprintf("LS:%02x ", cs.LCD.readStatusReg()) +
 		fmt.Sprintf("ROM:%d]", cs.Mem.mbc.GetROMBankNumber())
 }
 

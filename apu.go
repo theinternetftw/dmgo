@@ -1,32 +1,35 @@
 package dmgo
 
 type apu struct {
-	allSoundsOn bool
-
+	// not marshalled in snapshot
 	buffer apuCircleBuf
 
-	sampleTimeCounter float64
-	lastSweepCycle    float64
-	lastEnvCycle      float64
-	lastLengthCycle   float64
+	// everything else marshalled
 
-	sounds [4]sound
+	AllSoundsOn bool
+
+	SampleTimeCounter float64
+	LastSweepCycle    float64
+	LastEnvCycle      float64
+	LastLengthCycle   float64
+
+	Sounds [4]sound
 
 	// cart chip sounds. never used by any game?
-	vInToLeftSpeaker  bool
-	vInToRightSpeaker bool
+	VInToLeftSpeaker  bool
+	VInToRightSpeaker bool
 
-	rightSpeakerVolume byte // right=S01 in docs
-	leftSpeakerVolume  byte // left=S02 in docs
+	RightSpeakerVolume byte // right=S01 in docs
+	LeftSpeakerVolume  byte // left=S02 in docs
 }
 
 func (apu *apu) init() {
-	apu.sounds[0].soundType = squareSoundType
-	apu.sounds[1].soundType = squareSoundType
-	apu.sounds[2].soundType = waveSoundType
-	apu.sounds[3].soundType = noiseSoundType
+	apu.Sounds[0].SoundType = squareSoundType
+	apu.Sounds[1].SoundType = squareSoundType
+	apu.Sounds[2].SoundType = waveSoundType
+	apu.Sounds[3].SoundType = noiseSoundType
 
-	apu.sounds[3].polyFeedbackReg = 0x01
+	apu.Sounds[3].PolyFeedbackReg = 0x01
 }
 
 const (
@@ -75,29 +78,29 @@ const timePerCycle = 1.0 / (4 * 1024 * 1024)
 
 func (apu *apu) runCycle(cs *cpuState) {
 
-	if apu.sampleTimeCounter-apu.lastLengthCycle >= 1.0/256.0 {
+	if apu.SampleTimeCounter-apu.LastLengthCycle >= 1.0/256.0 {
 		apu.runLengthCycle()
-		apu.lastLengthCycle = apu.sampleTimeCounter
+		apu.LastLengthCycle = apu.SampleTimeCounter
 	}
-	if apu.sampleTimeCounter-apu.lastEnvCycle >= 1.0/64.0 {
+	if apu.SampleTimeCounter-apu.LastEnvCycle >= 1.0/64.0 {
 		apu.runEnvCycle()
-		apu.lastEnvCycle = apu.sampleTimeCounter
+		apu.LastEnvCycle = apu.SampleTimeCounter
 	}
 
 	if !apu.buffer.full() {
 
 		left, right := 0.0, 0.0
-		if apu.allSoundsOn {
+		if apu.AllSoundsOn {
 			apu.runFreqCycle()
 
-			left0, right0 := apu.sounds[0].getSample()
-			left1, right1 := apu.sounds[1].getSample()
-			left2, right2 := apu.sounds[2].getSample()
-			left3, right3 := apu.sounds[3].getSample()
+			left0, right0 := apu.Sounds[0].getSample()
+			left1, right1 := apu.Sounds[1].getSample()
+			left2, right2 := apu.Sounds[2].getSample()
+			left3, right3 := apu.Sounds[3].getSample()
 			left = (left0 + left1 + left2 + left3) * 0.25
 			right = (right0 + right1 + right2 + right3) * 0.25
-			left = left * 0.125 * float64(apu.leftSpeakerVolume+1)
-			right = right * 0.125 * float64(apu.rightSpeakerVolume+1)
+			left = left * 0.125 * float64(apu.LeftSpeakerVolume+1)
+			right = right * 0.125 * float64(apu.RightSpeakerVolume+1)
 		}
 
 		sampleL, sampleR := int16(left*32767.0), int16(right*32767.0)
@@ -109,31 +112,31 @@ func (apu *apu) runCycle(cs *cpuState) {
 		})
 	}
 
-	if apu.sampleTimeCounter-apu.lastSweepCycle >= 1.0/128.0 {
-		apu.sounds[0].runSweepCycle()
-		apu.lastSweepCycle = apu.sampleTimeCounter
+	if apu.SampleTimeCounter-apu.LastSweepCycle >= 1.0/128.0 {
+		apu.Sounds[0].runSweepCycle()
+		apu.LastSweepCycle = apu.SampleTimeCounter
 	}
 
-	apu.sampleTimeCounter += timePerCycle
+	apu.SampleTimeCounter += timePerCycle
 }
 
 func (apu *apu) runFreqCycle() {
-	apu.sounds[0].runFreqCycle()
-	apu.sounds[1].runFreqCycle()
-	apu.sounds[2].runFreqCycle()
-	apu.sounds[3].runFreqCycle()
+	apu.Sounds[0].runFreqCycle()
+	apu.Sounds[1].runFreqCycle()
+	apu.Sounds[2].runFreqCycle()
+	apu.Sounds[3].runFreqCycle()
 }
 func (apu *apu) runLengthCycle() {
-	apu.sounds[0].runLengthCycle()
-	apu.sounds[1].runLengthCycle()
-	apu.sounds[2].runLengthCycle()
-	apu.sounds[3].runLengthCycle()
+	apu.Sounds[0].runLengthCycle()
+	apu.Sounds[1].runLengthCycle()
+	apu.Sounds[2].runLengthCycle()
+	apu.Sounds[3].runLengthCycle()
 }
 func (apu *apu) runEnvCycle() {
-	apu.sounds[0].runEnvCycle()
-	apu.sounds[1].runEnvCycle()
-	apu.sounds[2].runEnvCycle()
-	apu.sounds[3].runEnvCycle()
+	apu.Sounds[0].runEnvCycle()
+	apu.Sounds[1].runEnvCycle()
+	apu.Sounds[2].runEnvCycle()
+	apu.Sounds[3].runEnvCycle()
 }
 
 type envDir bool
@@ -157,128 +160,128 @@ const (
 )
 
 type sound struct {
-	soundType uint8
+	SoundType uint8
 
-	on             bool
-	rightSpeakerOn bool // S01 in docs
-	leftSpeakerOn  bool // S02 in docs
+	On             bool
+	RightSpeakerOn bool // S01 in docs
+	LeftSpeakerOn  bool // S02 in docs
 
-	envelopeDirection envDir
-	envelopeStartVal  byte
-	envelopeSweepVal  byte
-	currentEnvelope   byte
-	envelopeCounter   byte
+	EnvelopeDirection envDir
+	EnvelopeStartVal  byte
+	EnvelopeSweepVal  byte
+	CurrentEnvelope   byte
+	EnvelopeCounter   byte
 
-	t            float64
-	freq         float64
-	freqReg      uint16
-	sweepCounter byte
+	T       float64
+	Freq    float64
+	FreqReg uint16
 
-	sweepDirection sweepDir
-	sweepTime      byte
-	sweepShift     byte
+	SweepCounter   byte
+	SweepDirection sweepDir
+	SweepTime      byte
+	SweepShift     byte
 
-	lengthData    uint16
-	currentLength uint16
-	waveDuty      byte
+	LengthData    uint16
+	CurrentLength uint16
+	WaveDuty      byte
 
-	waveOutLvl        byte // sound[2] only
-	wavePatternRAM    [16]byte
-	wavePatternCursor byte
-	wavePatternBias   float64
+	WaveOutLvl        byte // sound[2] only
+	WavePatternRAM    [16]byte
+	WavePatternCursor byte
+	WavePatternBias   float64
 
-	polyFeedbackReg  uint16 // sound[3] only
-	polyDivisorShift byte
-	polyDivisorBase  byte
-	poly7BitMode     bool
-	polySample       float64
+	PolyFeedbackReg  uint16 // sound[3] only
+	PolyDivisorShift byte
+	PolyDivisorBase  byte
+	Poly7BitMode     bool
+	PolySample       float64
 
-	playsContinuously bool
-	restartRequested  bool
+	PlaysContinuously bool
+	RestartRequested  bool
 }
 
 func (sound *sound) runFreqCycle() {
 
-	sound.t += sound.freq * timePerSample
+	sound.T += sound.Freq * timePerSample
 
-	for sound.t > 1.0 {
-		sound.t -= 1.0
-		if sound.soundType == waveSoundType {
-			sound.wavePatternCursor = (sound.wavePatternCursor + 1) & 31
+	for sound.T > 1.0 {
+		sound.T -= 1.0
+		if sound.SoundType == waveSoundType {
+			sound.WavePatternCursor = (sound.WavePatternCursor + 1) & 31
 		}
-		if sound.soundType == noiseSoundType {
+		if sound.SoundType == noiseSoundType {
 			sound.updatePolyCounter()
 		}
 	}
 }
 
 func (sound *sound) updatePolyCounter() {
-	newHigh := (sound.polyFeedbackReg & 0x01) ^ ((sound.polyFeedbackReg >> 1) & 0x01)
-	sound.polyFeedbackReg >>= 1
-	sound.polyFeedbackReg &^= 1 << 14
-	sound.polyFeedbackReg |= newHigh << 14
-	if sound.poly7BitMode {
-		sound.polyFeedbackReg &^= 1 << 6
-		sound.polyFeedbackReg |= newHigh << 6
+	newHigh := (sound.PolyFeedbackReg & 0x01) ^ ((sound.PolyFeedbackReg >> 1) & 0x01)
+	sound.PolyFeedbackReg >>= 1
+	sound.PolyFeedbackReg &^= 1 << 14
+	sound.PolyFeedbackReg |= newHigh << 14
+	if sound.Poly7BitMode {
+		sound.PolyFeedbackReg &^= 1 << 6
+		sound.PolyFeedbackReg |= newHigh << 6
 	}
 	var newSample float64
-	if sound.polyFeedbackReg&0x01 == 0 {
+	if sound.PolyFeedbackReg&0x01 == 0 {
 		newSample = 1
 	} else {
 		newSample = -1
 	}
-	if sound.poly7BitMode && sound.freq > 22050 {
+	if sound.Poly7BitMode && sound.Freq > 22050 {
 		// HACK: high freq 7bit doesn't sound right without one hell
 		// of a low-pass filter. Even this is a bit wrong (freq sounds
 		// low). Doing this for now/until I do something more drastic, e.g.
 		// switching from per-sample sound generation to per-clock
 		// generation with some final interpolation step for everything.
-		newSample = sound.polySample + 0.2*(newSample-sound.polySample)
+		newSample = sound.PolySample + 0.2*(newSample-sound.PolySample)
 	}
-	sound.polySample = newSample
+	sound.PolySample = newSample
 }
 
 func (sound *sound) runLengthCycle() {
-	if sound.currentLength > 0 && !sound.playsContinuously {
-		sound.currentLength--
-		if sound.currentLength == 0 {
-			sound.on = false
+	if sound.CurrentLength > 0 && !sound.PlaysContinuously {
+		sound.CurrentLength--
+		if sound.CurrentLength == 0 {
+			sound.On = false
 		}
 	}
-	if sound.restartRequested {
-		sound.on = true
-		sound.restartRequested = false
-		if sound.lengthData == 0 {
-			if sound.soundType == waveSoundType {
-				sound.lengthData = 256
+	if sound.RestartRequested {
+		sound.On = true
+		sound.RestartRequested = false
+		if sound.LengthData == 0 {
+			if sound.SoundType == waveSoundType {
+				sound.LengthData = 256
 			} else {
-				sound.lengthData = 64
+				sound.LengthData = 64
 			}
 		}
-		sound.currentLength = sound.lengthData
-		sound.currentEnvelope = sound.envelopeStartVal
-		sound.sweepCounter = 0
-		sound.wavePatternCursor = 0
-		sound.polyFeedbackReg = 0xffff
+		sound.CurrentLength = sound.LengthData
+		sound.CurrentEnvelope = sound.EnvelopeStartVal
+		sound.SweepCounter = 0
+		sound.WavePatternCursor = 0
+		sound.PolyFeedbackReg = 0xffff
 	}
 }
 
 func (sound *sound) runSweepCycle() {
-	if sound.sweepTime != 0 {
-		if sound.sweepCounter < sound.sweepTime {
-			sound.sweepCounter++
+	if sound.SweepTime != 0 {
+		if sound.SweepCounter < sound.SweepTime {
+			sound.SweepCounter++
 		} else {
-			sound.sweepCounter = 0
+			sound.SweepCounter = 0
 			var nextFreq uint16
-			if sound.sweepDirection == sweepUp {
-				nextFreq = sound.freqReg + (sound.freqReg >> uint16(sound.sweepShift))
+			if sound.SweepDirection == sweepUp {
+				nextFreq = sound.FreqReg + (sound.FreqReg >> uint16(sound.SweepShift))
 			} else {
-				nextFreq = sound.freqReg - (sound.freqReg >> uint16(sound.sweepShift))
+				nextFreq = sound.FreqReg - (sound.FreqReg >> uint16(sound.SweepShift))
 			}
 			if nextFreq > 2047 {
-				sound.on = false
+				sound.On = false
 			} else {
-				sound.freqReg = nextFreq
+				sound.FreqReg = nextFreq
 				sound.updateFreq()
 			}
 		}
@@ -287,18 +290,18 @@ func (sound *sound) runSweepCycle() {
 
 func (sound *sound) runEnvCycle() {
 	// more complicated, see GBSOUND
-	if sound.envelopeSweepVal != 0 {
-		if sound.envelopeCounter < sound.envelopeSweepVal {
-			sound.envelopeCounter++
+	if sound.EnvelopeSweepVal != 0 {
+		if sound.EnvelopeCounter < sound.EnvelopeSweepVal {
+			sound.EnvelopeCounter++
 		} else {
-			sound.envelopeCounter = 0
-			if sound.envelopeDirection == envUp {
-				if sound.currentEnvelope < 0x0f {
-					sound.currentEnvelope++
+			sound.EnvelopeCounter = 0
+			if sound.EnvelopeDirection == envUp {
+				if sound.CurrentEnvelope < 0x0f {
+					sound.CurrentEnvelope++
 				}
 			} else {
-				if sound.currentEnvelope > 0x00 {
-					sound.currentEnvelope--
+				if sound.CurrentEnvelope > 0x00 {
+					sound.CurrentEnvelope--
 				}
 			}
 		}
@@ -306,15 +309,15 @@ func (sound *sound) runEnvCycle() {
 }
 
 func (sound *sound) inDutyCycle() bool {
-	switch sound.waveDuty {
+	switch sound.WaveDuty {
 	case 0:
-		return sound.t > 0.875
+		return sound.T > 0.875
 	case 1:
-		return sound.t < 0.125 || sound.t > 0.875
+		return sound.T < 0.125 || sound.T > 0.875
 	case 2:
-		return sound.t < 0.125 || sound.t > 0.625
+		return sound.T < 0.125 || sound.T > 0.625
 	case 3:
-		return sound.t > 0.125 && sound.t < 0.875
+		return sound.T > 0.125 && sound.T < 0.875
 	default:
 		panic("unknown wave duty")
 	}
@@ -322,69 +325,69 @@ func (sound *sound) inDutyCycle() bool {
 
 func (sound *sound) getSample() (float64, float64) {
 	sample := 0.0
-	if sound.on {
-		switch sound.soundType {
+	if sound.On {
+		switch sound.SoundType {
 		case squareSoundType:
-			vol := float64(sound.currentEnvelope) / 15.0
+			vol := float64(sound.CurrentEnvelope) / 15.0
 			if sound.inDutyCycle() {
 				sample = vol
 			} else {
 				sample = -vol
 			}
 		case waveSoundType:
-			if sound.waveOutLvl > 0 {
-				sampleByte := sound.wavePatternRAM[sound.wavePatternCursor/2]
+			if sound.WaveOutLvl > 0 {
+				sampleByte := sound.WavePatternRAM[sound.WavePatternCursor/2]
 				var sampleBits byte
-				if sound.wavePatternCursor&1 == 0 {
+				if sound.WavePatternCursor&1 == 0 {
 					sampleBits = sampleByte >> 4
 				} else {
 					sampleBits = sampleByte & 0x0f
 				}
-				unbiasedSample := float64(sampleBits) - sound.wavePatternBias
+				unbiasedSample := float64(sampleBits) - sound.WavePatternBias
 				sample = (2.0 * unbiasedSample / 15.0) - 1.0
-				if sound.waveOutLvl > 1 {
-					sample /= float64(2 * (sound.waveOutLvl - 1))
+				if sound.WaveOutLvl > 1 {
+					sample /= float64(2 * (sound.WaveOutLvl - 1))
 				}
 			}
 		case noiseSoundType:
-			vol := float64(sound.currentEnvelope) / 15.0
-			sample = vol * sound.polySample
+			vol := float64(sound.CurrentEnvelope) / 15.0
+			sample = vol * sound.PolySample
 		}
 	}
 
 	left, right := 0.0, 0.0
-	if sound.leftSpeakerOn {
+	if sound.LeftSpeakerOn {
 		left = sample
 	}
-	if sound.rightSpeakerOn {
+	if sound.RightSpeakerOn {
 		right = sample
 	}
 	return left, right
 }
 
 func (sound *sound) updateFreq() {
-	switch sound.soundType {
+	switch sound.SoundType {
 	case waveSoundType:
-		sound.freq = 32 * 65536.0 / float64(2048-sound.freqReg)
+		sound.Freq = 32 * 65536.0 / float64(2048-sound.FreqReg)
 	case noiseSoundType:
 		divisor := 8.0
-		if sound.polyDivisorBase > 0 {
-			if sound.polyDivisorShift >= 14 {
-				sound.freq = 0.0 // clock stops on invalid shift value
+		if sound.PolyDivisorBase > 0 {
+			if sound.PolyDivisorShift >= 14 {
+				sound.Freq = 0.0 // clock stops on invalid shift value
 			}
-			divisor = float64(uint(sound.polyDivisorBase) << uint(sound.polyDivisorShift+4))
+			divisor = float64(uint(sound.PolyDivisorBase) << uint(sound.PolyDivisorShift+4))
 		}
-		sound.freq = 4194304.0 / divisor
+		sound.Freq = 4194304.0 / divisor
 	case squareSoundType:
-		sound.freq = 131072.0 / float64(2048-sound.freqReg)
+		sound.Freq = 131072.0 / float64(2048-sound.FreqReg)
 	default:
 		panic("unexpected sound type")
 	}
 }
 
 func (sound *sound) writeWaveOnOffReg(val byte) {
-	sound.on = val&0x80 != 0
-	if sound.on {
+	sound.On = val&0x80 != 0
+	if sound.On {
 		sound.updateWavePatternBias()
 	}
 }
@@ -399,108 +402,108 @@ func (sound *sound) updateWavePatternBias() {
 			max = nib
 		}
 	}
-	for _, b := range sound.wavePatternRAM {
+	for _, b := range sound.WavePatternRAM {
 		update(b >> 4)
 		update(b & 0x0f)
 	}
-	sound.wavePatternBias = float64(max-min)/2.0 - 7.5
+	sound.WavePatternBias = float64(max-min)/2.0 - 7.5
 }
 
 func (sound *sound) writeWavePatternValue(addr uint16, val byte) {
-	sound.wavePatternRAM[addr] = val
+	sound.WavePatternRAM[addr] = val
 }
 
 func (sound *sound) writePolyCounterReg(val byte) {
-	sound.poly7BitMode = val&0x08 != 0
-	sound.polyDivisorShift = val >> 4
-	sound.polyDivisorBase = val & 0x07
+	sound.Poly7BitMode = val&0x08 != 0
+	sound.PolyDivisorShift = val >> 4
+	sound.PolyDivisorBase = val & 0x07
 }
 func (sound *sound) readPolyCounterReg() byte {
 	val := byte(0)
-	if sound.poly7BitMode {
+	if sound.Poly7BitMode {
 		val |= 0x08
 	}
-	val |= sound.polyDivisorShift << 4
-	val |= sound.polyDivisorBase
+	val |= sound.PolyDivisorShift << 4
+	val |= sound.PolyDivisorBase
 	return val
 }
 
 func (sound *sound) writeWaveOutLvlReg(val byte) {
-	sound.waveOutLvl = (val >> 5) & 0x03
+	sound.WaveOutLvl = (val >> 5) & 0x03
 }
 func (sound *sound) readWaveOutLvlReg() byte {
-	return (sound.waveOutLvl << 5) | 0x9f
+	return (sound.WaveOutLvl << 5) | 0x9f
 }
 
 func (sound *sound) writeLengthDataReg(val byte) {
-	switch sound.soundType {
+	switch sound.SoundType {
 	case waveSoundType:
-		sound.lengthData = 256 - uint16(val)
+		sound.LengthData = 256 - uint16(val)
 	case noiseSoundType:
-		sound.lengthData = 64 - uint16(val&0x3f)
+		sound.LengthData = 64 - uint16(val&0x3f)
 	default:
 		panic("writeLengthData: unexpected sound type")
 	}
 }
 func (sound *sound) readLengthDataReg() byte {
-	switch sound.soundType {
+	switch sound.SoundType {
 	case waveSoundType:
-		return byte(256 - sound.lengthData)
+		return byte(256 - sound.LengthData)
 	case noiseSoundType:
-		return byte(64 - sound.lengthData)
+		return byte(64 - sound.LengthData)
 	default:
 		panic("writeLengthData: unexpected sound type")
 	}
 }
 func (sound *sound) writeLenDutyReg(val byte) {
-	sound.lengthData = 64 - uint16(val&0x3f)
-	sound.waveDuty = val >> 6
+	sound.LengthData = 64 - uint16(val&0x3f)
+	sound.WaveDuty = val >> 6
 }
 func (sound *sound) readLenDutyReg() byte {
-	return (sound.waveDuty << 6) & 0x3f
+	return (sound.WaveDuty << 6) & 0x3f
 }
 
 func (sound *sound) writeSweepReg(val byte) {
-	sound.sweepTime = (val >> 4) & 0x07
-	sound.sweepShift = val & 0x07
+	sound.SweepTime = (val >> 4) & 0x07
+	sound.SweepShift = val & 0x07
 	if val&0x08 != 0 {
-		sound.sweepDirection = sweepDown
+		sound.SweepDirection = sweepDown
 	} else {
-		sound.sweepDirection = sweepUp
+		sound.SweepDirection = sweepUp
 	}
 }
 func (sound *sound) readSweepReg() byte {
-	val := sound.sweepTime << 4
-	val |= sound.sweepShift
-	if sound.sweepDirection == sweepDown {
+	val := sound.SweepTime << 4
+	val |= sound.SweepShift
+	if sound.SweepDirection == sweepDown {
 		val |= 0x08
 	}
 	return val
 }
 
 func (sound *sound) writeSoundEnvReg(val byte) {
-	sound.envelopeStartVal = val >> 4
-	if sound.envelopeStartVal == 0 {
-		sound.on = false
+	sound.EnvelopeStartVal = val >> 4
+	if sound.EnvelopeStartVal == 0 {
+		sound.On = false
 	}
 	if val&0x08 != 0 {
-		sound.envelopeDirection = envUp
+		sound.EnvelopeDirection = envUp
 	} else {
-		sound.envelopeDirection = envDown
+		sound.EnvelopeDirection = envDown
 	}
-	sound.envelopeSweepVal = val & 0x07
+	sound.EnvelopeSweepVal = val & 0x07
 }
 func (sound *sound) readSoundEnvReg() byte {
-	val := sound.envelopeStartVal<<4 | sound.envelopeSweepVal
-	if sound.envelopeDirection == envUp {
+	val := sound.EnvelopeStartVal<<4 | sound.EnvelopeSweepVal
+	if sound.EnvelopeDirection == envUp {
 		val |= 0x08
 	}
 	return val
 }
 
 func (sound *sound) writeFreqLowReg(val byte) {
-	sound.freqReg &^= 0x00ff
-	sound.freqReg |= uint16(val)
+	sound.FreqReg &^= 0x00ff
+	sound.FreqReg |= uint16(val)
 	sound.updateFreq()
 }
 func (sound *sound) readFreqLowReg() byte {
@@ -509,33 +512,33 @@ func (sound *sound) readFreqLowReg() byte {
 
 func (sound *sound) writeFreqHighReg(val byte) {
 	if val&0x80 != 0 {
-		sound.restartRequested = true
+		sound.RestartRequested = true
 	}
-	sound.playsContinuously = val&0x40 == 0
-	sound.freqReg &^= 0xff00
-	sound.freqReg |= uint16(val&0x07) << 8
+	sound.PlaysContinuously = val&0x40 == 0
+	sound.FreqReg &^= 0xff00
+	sound.FreqReg |= uint16(val&0x07) << 8
 	sound.updateFreq()
 }
 func (sound *sound) readFreqHighReg() byte {
 	val := byte(0xff)
-	if sound.playsContinuously {
+	if sound.PlaysContinuously {
 		val &^= 0x40 // continuous == 0, uses length == 1
 	}
 	return val
 }
 
 func (apu *apu) writeVolumeReg(val byte) {
-	apu.vInToLeftSpeaker = val&0x80 != 0
-	apu.vInToRightSpeaker = val&0x08 != 0
-	apu.rightSpeakerVolume = (val >> 4) & 0x07
-	apu.leftSpeakerVolume = val & 0x07
+	apu.VInToLeftSpeaker = val&0x80 != 0
+	apu.VInToRightSpeaker = val&0x08 != 0
+	apu.RightSpeakerVolume = (val >> 4) & 0x07
+	apu.LeftSpeakerVolume = val & 0x07
 }
 func (apu *apu) readVolumeReg() byte {
-	val := apu.rightSpeakerVolume<<4 | apu.leftSpeakerVolume
-	if apu.vInToLeftSpeaker {
+	val := apu.RightSpeakerVolume<<4 | apu.LeftSpeakerVolume
+	if apu.VInToLeftSpeaker {
 		val |= 0x80
 	}
-	if apu.vInToRightSpeaker {
+	if apu.VInToRightSpeaker {
 		val |= 0x08
 	}
 	return val
@@ -543,26 +546,26 @@ func (apu *apu) readVolumeReg() byte {
 
 func (apu *apu) writeSpeakerSelectReg(val byte) {
 	boolsFromByte(val,
-		&apu.sounds[3].leftSpeakerOn,
-		&apu.sounds[2].leftSpeakerOn,
-		&apu.sounds[1].leftSpeakerOn,
-		&apu.sounds[0].leftSpeakerOn,
-		&apu.sounds[3].rightSpeakerOn,
-		&apu.sounds[2].rightSpeakerOn,
-		&apu.sounds[1].rightSpeakerOn,
-		&apu.sounds[0].rightSpeakerOn,
+		&apu.Sounds[3].LeftSpeakerOn,
+		&apu.Sounds[2].LeftSpeakerOn,
+		&apu.Sounds[1].LeftSpeakerOn,
+		&apu.Sounds[0].LeftSpeakerOn,
+		&apu.Sounds[3].RightSpeakerOn,
+		&apu.Sounds[2].RightSpeakerOn,
+		&apu.Sounds[1].RightSpeakerOn,
+		&apu.Sounds[0].RightSpeakerOn,
 	)
 }
 func (apu *apu) readSpeakerSelectReg() byte {
 	return byteFromBools(
-		apu.sounds[3].leftSpeakerOn,
-		apu.sounds[2].leftSpeakerOn,
-		apu.sounds[1].leftSpeakerOn,
-		apu.sounds[0].leftSpeakerOn,
-		apu.sounds[3].rightSpeakerOn,
-		apu.sounds[2].rightSpeakerOn,
-		apu.sounds[1].rightSpeakerOn,
-		apu.sounds[0].rightSpeakerOn,
+		apu.Sounds[3].LeftSpeakerOn,
+		apu.Sounds[2].LeftSpeakerOn,
+		apu.Sounds[1].LeftSpeakerOn,
+		apu.Sounds[0].LeftSpeakerOn,
+		apu.Sounds[3].RightSpeakerOn,
+		apu.Sounds[2].RightSpeakerOn,
+		apu.Sounds[1].RightSpeakerOn,
+		apu.Sounds[0].RightSpeakerOn,
 	)
 }
 
@@ -571,17 +574,17 @@ func (apu *apu) writeSoundOnOffReg(val byte) {
 	// lower bits, but writing does not
 	// change them.
 	boolsFromByte(val,
-		&apu.allSoundsOn,
+		&apu.AllSoundsOn,
 		nil, nil, nil, nil, nil, nil, nil,
 	)
 }
 func (apu *apu) readSoundOnOffReg() byte {
 	return byteFromBools(
-		apu.allSoundsOn,
+		apu.AllSoundsOn,
 		true, true, true,
-		apu.sounds[3].on,
-		apu.sounds[2].on,
-		apu.sounds[1].on,
-		apu.sounds[0].on,
+		apu.Sounds[3].On,
+		apu.Sounds[2].On,
+		apu.Sounds[1].On,
+		apu.Sounds[0].On,
 	)
 }
