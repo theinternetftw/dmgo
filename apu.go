@@ -460,7 +460,7 @@ func (sound *sound) writeLenDutyReg(val byte) {
 	sound.WaveDuty = val >> 6
 }
 func (sound *sound) readLenDutyReg() byte {
-	return (sound.WaveDuty << 6) & 0x3f
+	return (sound.WaveDuty << 6) | 0x3f
 }
 
 func (sound *sound) writeSweepReg(val byte) {
@@ -478,7 +478,7 @@ func (sound *sound) readSweepReg() byte {
 	if sound.SweepDirection == sweepDown {
 		val |= 0x08
 	}
-	return val
+	return val | 0x80
 }
 
 func (sound *sound) writeSoundEnvReg(val byte) {

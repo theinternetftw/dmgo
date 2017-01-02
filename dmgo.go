@@ -111,7 +111,7 @@ func (cs *cpuState) writeTimerControlReg(val byte) {
 }
 
 func (cs *cpuState) readSerialControlReg() byte {
-	return boolBit(cs.SerialTransferStartFlag, 7) | boolBit(cs.SerialTransferClockIsInternal, 0)
+	return 0x7e | boolBit(cs.SerialTransferStartFlag, 7) | boolBit(cs.SerialTransferClockIsInternal, 0)
 }
 func (cs *cpuState) writeSerialControlReg(val byte) {
 	cs.SerialTransferStartFlag = val&0x80 != 0
@@ -365,6 +365,7 @@ func (cs *cpuState) init() {
 	cs.APU.Sounds[3].RestartRequested = false
 
 	cs.initVRAM()
+	cs.VBlankIRQ = true
 }
 
 func (cs *cpuState) initVRAM() {
