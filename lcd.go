@@ -112,30 +112,36 @@ func (lcd *lcd) shouldStatIRQ() bool {
 // FIXME: timings will have to change for double-speed mode
 // (maybe instead of counting cycles I'll count actual instruction time?)
 // (or maybe it'll always be dmg cycles and gbc will just produce half as many of them?
-func (lcd *lcd) runCycles(cs *cpuState, numCycles uint) {
+func (lcd *lcd) runCycle(cs *cpuState) {
 	if !lcd.DisplayOn {
 		return
 	}
 
-	lcd.CyclesSinceLYInc += numCycles
+	lcd.CyclesSinceLYInc++
 
-	if lcd.AccessingOAM && lcd.CyclesSinceLYInc >= 80 {
+	if !lcd.InVBlank && lcd.CyclesSinceLYInc == 4 {
+		lcd.AccessingOAM = true
+	}
+
+	if lcd.AccessingOAM && lcd.CyclesSinceLYInc == 80 {
 		lcd.parseOAMForScanline(lcd.LYReg)
 		lcd.AccessingOAM = false
 		lcd.ReadingData = true
 	}
 
-	if lcd.ReadingData && lcd.CyclesSinceLYInc >= 252 {
+	if lcd.ReadingData && lcd.CyclesSinceLYInc == 252 {
 		lcd.ReadingData = false
 		lcd.InHBlank = true
 		lcd.renderScanline()
 	}
 
-	if lcd.CyclesSinceLYInc >= 456 {
+	if lcd.CyclesSinceLYInc == 456 {
+
+		lcd.CyclesSinceLYInc = 0
 		lcd.InHBlank = false
 		lcd.LYReg++
 
-		if lcd.LYReg >= 144 && !lcd.InVBlank {
+		if lcd.LYReg == 144 && !lcd.InVBlank {
 			lcd.InVBlank = true
 			cs.VBlankIRQ = true
 
@@ -145,20 +151,14 @@ func (lcd *lcd) runCycles(cs *cpuState, numCycles uint) {
 				lcd.PastFirstFrame = true
 			}
 		}
-
-		lcd.CyclesSinceLYInc = lcd.CyclesSinceLYInc - 456
-		if !lcd.InVBlank {
-			lcd.AccessingOAM = true
-		}
 	}
 
 	if lcd.InVBlank {
-		lcd.CyclesSinceVBlankStart += numCycles
-		if lcd.CyclesSinceVBlankStart >= 456*10 {
+		lcd.CyclesSinceVBlankStart++
+		if lcd.CyclesSinceVBlankStart == 456*10 {
 			lcd.LYReg = 0
-			lcd.CyclesSinceLYInc = lcd.CyclesSinceVBlankStart - 456*10
 			lcd.InVBlank = false
-			lcd.AccessingOAM = true
+			lcd.CyclesSinceLYInc = 0
 			lcd.CyclesSinceVBlankStart = 0
 		}
 	}

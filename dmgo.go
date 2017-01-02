@@ -406,8 +406,8 @@ func (cs *cpuState) runCycles(numCycles uint) {
 		cs.runTimerCycle()
 		cs.runSerialCycle()
 		cs.APU.runCycle(cs)
+		cs.LCD.runCycle(cs)
 	}
-	cs.LCD.runCycles(cs, numCycles)
 }
 
 // Emulator exposes the public facing fns for an emulation session
