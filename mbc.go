@@ -44,8 +44,12 @@ type mbc interface {
 	// Write writes via the MBC
 	Write(mem *mem, addr uint16, val byte)
 
-	// Gets the ROM map number (for debug)
+	// for debug
 	GetROMBankNumber() int
+	GetRAMBankNumber() int
+
+	ROMBankOffset() uint
+	RAMBankOffset() uint
 
 	Marshal() marshalledMBC
 }
@@ -98,6 +102,9 @@ type bankNumbers struct {
 func (bn *bankNumbers) GetROMBankNumber() int {
 	return int(bn.ROMBankNumber)
 }
+func (bn *bankNumbers) GetRAMBankNumber() int {
+	return int(bn.RAMBankNumber)
+}
 func (bn *bankNumbers) setROMBankNumber(bankNum uint16) {
 	// ran into this in dkland2, which will write trash
 	// past the amount of rom they have. I figure they
@@ -122,10 +129,10 @@ func (bn *bankNumbers) init(mem *mem) {
 	bn.MaxROMBank = uint16(len(mem.cart)/0x4000 - 1)
 	bn.MaxRAMBank = uint16(len(mem.CartRAM)/0x2000 - 1)
 }
-func (bn *bankNumbers) romBankOffset() uint {
+func (bn *bankNumbers) ROMBankOffset() uint {
 	return uint(bn.ROMBankNumber) * 0x4000
 }
-func (bn *bankNumbers) ramBankOffset() uint {
+func (bn *bankNumbers) RAMBankOffset() uint {
 	return uint(bn.RAMBankNumber) * 0x2000
 }
 
@@ -183,13 +190,13 @@ func (mbc *mbc1) Read(mem *mem, addr uint16) byte {
 	case addr < 0x4000:
 		return mem.cart[addr]
 	case addr >= 0x4000 && addr < 0x8000:
-		localAddr := uint(addr-0x4000) + mbc.romBankOffset()
+		localAddr := uint(addr-0x4000) + mbc.ROMBankOffset()
 		if localAddr >= uint(len(mem.cart)) {
 			panic(fmt.Sprintf("mbc1: bad rom local addr: 0x%06x, bank number: %d\r\n", localAddr, mbc.ROMBankNumber))
 		}
 		return mem.cart[localAddr]
 	case addr >= 0xa000 && addr < 0xc000:
-		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
+		localAddr := uint(addr-0xa000) + mbc.RAMBankOffset()
 		if mbc.RAMEnabled && int(localAddr) < len(mem.CartRAM) {
 			return mem.CartRAM[localAddr]
 		}
@@ -235,7 +242,7 @@ func (mbc *mbc1) Write(mem *mem, addr uint16, val byte) {
 			mbc.setRAMBankNumber(0)
 		}
 	case addr >= 0xa000 && addr < 0xc000:
-		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
+		localAddr := uint(addr-0xa000) + mbc.RAMBankOffset()
 		if mbc.RAMEnabled && int(localAddr) < len(mem.CartRAM) {
 			mem.CartRAM[localAddr] = val
 		}
@@ -271,7 +278,7 @@ func (mbc *mbc2) Read(mem *mem, addr uint16) byte {
 	case addr < 0x4000:
 		return mem.cart[addr]
 	case addr >= 0x4000 && addr < 0x8000:
-		localAddr := uint(addr-0x4000) + mbc.romBankOffset()
+		localAddr := uint(addr-0x4000) + mbc.ROMBankOffset()
 		if localAddr >= uint(len(mem.cart)) {
 			panic(fmt.Sprintf("mbc2: bad rom local addr: 0x%06x, bank number: %d\r\n", localAddr, mbc.ROMBankNumber))
 		}
@@ -407,7 +414,7 @@ func (mbc *mbc3) Read(mem *mem, addr uint16) byte {
 	case addr < 0x4000:
 		return mem.cart[addr]
 	case addr >= 0x4000 && addr < 0x8000:
-		localAddr := uint(addr-0x4000) + mbc.romBankOffset()
+		localAddr := uint(addr-0x4000) + mbc.ROMBankOffset()
 		if localAddr >= uint(len(mem.cart)) {
 			panic(fmt.Sprintf("mbc3: bad rom local addr: 0x%06x, bank number: %d\r\n", localAddr, mbc.ROMBankNumber))
 		}
@@ -415,7 +422,7 @@ func (mbc *mbc3) Read(mem *mem, addr uint16) byte {
 	case addr >= 0xa000 && addr < 0xc000:
 		switch mbc.RAMBankNumber {
 		case 0, 1, 2, 3:
-			localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
+			localAddr := uint(addr-0xa000) + mbc.RAMBankOffset()
 			if mbc.RAMEnabled && int(localAddr) < len(mem.CartRAM) {
 				return mem.CartRAM[localAddr]
 			}
@@ -469,7 +476,7 @@ func (mbc *mbc3) Write(mem *mem, addr uint16, val byte) {
 	case addr >= 0xa000 && addr < 0xc000:
 		switch mbc.RAMBankNumber {
 		case 0, 1, 2, 3:
-			localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
+			localAddr := uint(addr-0xa000) + mbc.RAMBankOffset()
 			if mbc.RAMEnabled && int(localAddr) < len(mem.CartRAM) {
 				mem.CartRAM[localAddr] = val
 			}
@@ -528,13 +535,13 @@ func (mbc *mbc5) Read(mem *mem, addr uint16) byte {
 	case addr < 0x4000:
 		return mem.cart[addr]
 	case addr >= 0x4000 && addr < 0x8000:
-		localAddr := uint(addr-0x4000) + mbc.romBankOffset()
+		localAddr := uint(addr-0x4000) + mbc.ROMBankOffset()
 		if localAddr >= uint(len(mem.cart)) {
 			panic(fmt.Sprintf("mbc5: bad rom local addr: 0x%06x, bank number: %d\r\n", localAddr, mbc.ROMBankNumber))
 		}
 		return mem.cart[localAddr]
 	case addr >= 0xa000 && addr < 0xc000:
-		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
+		localAddr := uint(addr-0xa000) + mbc.RAMBankOffset()
 		if mbc.RAMEnabled && int(localAddr) < len(mem.CartRAM) {
 			return mem.CartRAM[localAddr]
 		}
@@ -560,7 +567,7 @@ func (mbc *mbc5) Write(mem *mem, addr uint16, val byte) {
 	case addr >= 0x6000 && addr < 0x8000:
 		// nop?
 	case addr >= 0xa000 && addr < 0xc000:
-		localAddr := uint(addr-0xa000) + mbc.ramBankOffset()
+		localAddr := uint(addr-0xa000) + mbc.RAMBankOffset()
 		if mbc.RAMEnabled && int(localAddr) < len(mem.CartRAM) {
 			mem.CartRAM[localAddr] = val
 		}
