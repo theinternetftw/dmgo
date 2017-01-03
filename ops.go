@@ -682,7 +682,7 @@ func (cs *cpuState) stepOpcode() {
 		cs.jmpRet(20, 8, 1, cs.getCarryFlag())
 	case 0xd9: // reti
 		cs.popOp16(16, 1, cs.setPC)
-		cs.InterruptMasterEnable = true
+		cs.MasterEnableRequested = true
 	case 0xda: // jp c, a16
 		cs.jmpAbs16(16, 12, 3, cs.getCarryFlag(), cs.read16(cs.PC+1))
 	case 0xdb: // illegal
@@ -760,7 +760,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xfa: // ld a, (a16)
 		cs.setOpA(16, 3, cs.read(cs.read16(cs.PC+1)), 0x2222)
 	case 0xfb: // ei
-		cs.setOpFn(4, 1, func() { cs.InterruptMasterEnable = true }, 0x2222)
+		cs.setOpFn(4, 1, func() { cs.MasterEnableRequested = true }, 0x2222)
 	case 0xfc: // illegal
 		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 	case 0xfd: // illegal

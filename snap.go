@@ -55,12 +55,13 @@ func (cs *cpuState) convertLatestSnapshot(snap *snapshot) (*cpuState, error) {
 }
 
 var snapshotConverters = map[int]func([]byte) []byte{
-// example converter
-// 0: func(stateBytes []byte) {
+// If new field can be zero, no need for converter.
+// Converters should look like this (including comment):
+// added 2017-XX-XX
+// 1: func(stateBytes []byte) []byte {
 // 	stateBytes = stateBytes[:len(stateBytes)-1]
-// 	stateBytes = append(stateBytes, []byte(",\"ExampleNewField\":0}")...)
-// 	return stateBytes
-// }
+// 	return append(stateBytes, []byte(",\"ExampleNewField\":0}")...)
+// },
 }
 
 func (cs *cpuState) convertOldSnapshot(snap *snapshot) (*cpuState, error) {
@@ -75,11 +76,13 @@ func (cs *cpuState) convertOldSnapshot(snap *snapshot) (*cpuState, error) {
 	// otherwise :/
 	stateBytes := []byte(snap.State)
 
-	converterFn, ok := snapshotConverters[snap.Version]
-	if !ok {
-		return nil, fmt.Errorf("unknown snapshot version: %v", snap.Version)
+	for i := snap.Version; i < currentSnapshotVersion; i++ {
+		converterFn, ok := snapshotConverters[snap.Version]
+		if !ok {
+			return nil, fmt.Errorf("unknown snapshot version: %v", snap.Version)
+		}
+		stateBytes = converterFn(stateBytes)
 	}
-	stateBytes = converterFn(stateBytes)
 
 	if err = json.Unmarshal(stateBytes, &newState); err != nil {
 		return nil, fmt.Errorf("post-convert unpack err: %v", err)

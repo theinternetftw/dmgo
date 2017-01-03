@@ -22,6 +22,7 @@ type cpuState struct {
 	InStopMode bool
 
 	InterruptMasterEnable bool
+	MasterEnableRequested bool
 
 	VBlankInterruptEnabled  bool
 	LCDStatInterruptEnabled bool
@@ -528,6 +529,13 @@ func (cs *cpuState) Step() {
 	}
 	if cs.InStopMode {
 		cs.runCycles(4)
+	}
+
+	// this is here to lag behind the request by
+	// one instruction.
+	if cs.MasterEnableRequested {
+		cs.MasterEnableRequested = false
+		cs.InterruptMasterEnable = true
 	}
 
 	cs.Steps++
