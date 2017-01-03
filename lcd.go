@@ -99,14 +99,15 @@ func (lcd *lcd) readVideoRAM(addr uint16) byte {
 	return 0xff
 }
 
-func (lcd *lcd) shouldStatIRQ() bool {
-	lastSignal := lcd.StatIRQSignal
-	// NOTE: TCAGBD claims an oam check is or'd with the vblank check
-	lcd.StatIRQSignal = ((lcd.LYCReg == lcd.LYReg && lcd.LYCInterrupt) ||
-		(lcd.InHBlank && lcd.HBlankInterrupt) ||
-		(lcd.AccessingOAM && lcd.OAMInterrupt) ||
-		(lcd.InVBlank && (lcd.VBlankInterrupt || lcd.OAMInterrupt)))
-	return !lastSignal && lcd.StatIRQSignal // rising edge only
+func (cs *cpuState) updateStatIRQ() {
+	lastSignal := cs.LCD.StatIRQSignal
+	cs.LCD.StatIRQSignal = (cs.LCD.LYCInterrupt && cs.LCD.LYReg == cs.LCD.LYCReg) ||
+		(cs.LCD.HBlankInterrupt && cs.LCD.InHBlank) ||
+		(cs.LCD.OAMInterrupt && cs.LCD.AccessingOAM) ||
+		((cs.LCD.VBlankInterrupt || cs.LCD.OAMInterrupt) && cs.LCD.InVBlank)
+	if !lastSignal && cs.LCD.StatIRQSignal { // rising edge only
+		cs.LCDStatIRQ = true
+	}
 }
 
 // FIXME: timings will have to change for double-speed mode
@@ -124,6 +125,7 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 		if !lcd.InVBlank {
 			lcd.AccessingOAM = true
 		}
+		cs.updateStatIRQ()
 	case 80:
 		if lcd.AccessingOAM {
 			lcd.parseOAMForScanline(lcd.LYReg)
@@ -135,6 +137,7 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 			lcd.ReadingData = false
 			lcd.InHBlank = true
 			lcd.renderScanline()
+			cs.updateStatIRQ()
 		}
 	case 456:
 		lcd.CyclesSinceLYInc = 0
@@ -161,10 +164,8 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 			lcd.CyclesSinceLYInc = 0
 			lcd.CyclesSinceVBlankStart = 0
 		}
-	}
-
-	if lcd.shouldStatIRQ() {
-		cs.LCDStatIRQ = true
+		// NOTE: TCAGBD claims the oam flag triggers this as well
+		cs.updateStatIRQ()
 	}
 }
 
