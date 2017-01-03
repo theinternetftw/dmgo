@@ -119,24 +119,24 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 
 	lcd.CyclesSinceLYInc++
 
-	if !lcd.InVBlank && lcd.CyclesSinceLYInc == 4 {
-		lcd.AccessingOAM = true
-	}
-
-	if lcd.AccessingOAM && lcd.CyclesSinceLYInc == 80 {
-		lcd.parseOAMForScanline(lcd.LYReg)
-		lcd.AccessingOAM = false
-		lcd.ReadingData = true
-	}
-
-	if lcd.ReadingData && lcd.CyclesSinceLYInc == 252 {
-		lcd.ReadingData = false
-		lcd.InHBlank = true
-		lcd.renderScanline()
-	}
-
-	if lcd.CyclesSinceLYInc == 456 {
-
+	switch lcd.CyclesSinceLYInc {
+	case 4:
+		if !lcd.InVBlank {
+			lcd.AccessingOAM = true
+		}
+	case 80:
+		if lcd.AccessingOAM {
+			lcd.parseOAMForScanline(lcd.LYReg)
+			lcd.AccessingOAM = false
+			lcd.ReadingData = true
+		}
+	case 252:
+		if lcd.ReadingData {
+			lcd.ReadingData = false
+			lcd.InHBlank = true
+			lcd.renderScanline()
+		}
+	case 456:
 		lcd.CyclesSinceLYInc = 0
 		lcd.InHBlank = false
 		lcd.LYReg++
