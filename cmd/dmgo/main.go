@@ -76,7 +76,7 @@ func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
 				Sel:  window.CharIsDown('t'), Start: window.CharIsDown('y'),
 				Up:   window.CharIsDown('w'), Down:  window.CharIsDown('s'),
 				Left: window.CharIsDown('a'), Right: window.CharIsDown('d'),
-				A:    window.CharIsDown('j'), B:     window.CharIsDown('k'),
+				A:    window.CharIsDown('k'), B:     window.CharIsDown('j'),
 			},
 		}
 		numDown := 'x'
