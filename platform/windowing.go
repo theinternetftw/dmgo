@@ -27,74 +27,41 @@ type WindowState struct {
 	// Pix is the raw RGBA bytes of the framebuffer
 	Pix []byte
 
-	keycodeMap dumbMap
-	runeMap dumbMap
+	keyCodeArray [256]bool
+	keyCodeMap map[key.Code]bool
+	keyCharArray [256]bool
+	keyCharMap map[rune]bool
 
 	eventQueue screen.EventDeque
 	drawRequested bool
 }
 
-type dumbMap struct {
-	slots [256]dumbKeyVal
-}
-type dumbKeyVal struct {
-	next *dumbKeyVal
-	key int32
-	val bool
-}
-func (m *dumbMap) Set(k int32, v bool) {
-	hash := k & 0xff
-	slot := &m.slots[hash]
-	if slot.key == k {
-		slot.val = v
-		return
-	}
-	if slot.key == 0 {
-		slot.key = k
-		slot.val = v
-		return
-	}
-	for slot.next != nil {
-		slot = slot.next
-		if slot.key == k {
-			slot.val = v
-			return
-		}
-	}
-	slot.next = &dumbKeyVal{key: k, val: v}
-}
-func (m *dumbMap) Get(k int32) bool {
-	hash := k & 0xff
-	slotCopy := m.slots[hash]
-	if slotCopy.key == k {
-		return slotCopy.val
-	}
-	slot := slotCopy.next
-	for slot != nil {
-		if slot.key == k {
-			return slot.val
-		}
-		slot = slot.next
-	}
-	return false
-}
-
 // CharIsDown returns the key state for that char
 func (s *WindowState) CharIsDown(c rune) bool {
-	return s.runeMap.Get(int32(c))
+	if c < 256 {
+		return s.keyCharArray[byte(c)]
+	}
+	return s.keyCharMap[c]
 }
 // CodeIsDown returns the key state for that keyCode
 func (s *WindowState) CodeIsDown(c key.Code) bool {
-	return s.keycodeMap.Get(int32(c))
+	if c < 256 {
+		return s.keyCodeArray[byte(c)]
+	}
+	return s.keyCodeMap[c]
 }
 
 func (s *WindowState) updateKeyboardState(e key.Event) {
-	if e.Direction == key.DirRelease {
-		s.keycodeMap.Set(int32(e.Code), false)
-		s.runeMap.Set(int32(e.Rune), false)
-	} else if e.Direction == key.DirPress {
-		s.keycodeMap.Set(int32(e.Code), true)
-		s.runeMap.Set(int32(e.Rune), true)
+	setVal := e.Direction == key.DirPress
+	if setVal || e.Direction == key.DirRelease {
+		if e.Code < 256 {
+			s.keyCodeArray[byte(e.Code)] = setVal
+		}
+		s.keyCodeMap[e.Code] = setVal
+		if e.Rune < 256 {
+			s.keyCharArray[byte(e.Rune)] = setVal
+		}
+		s.keyCharMap[e.Rune] = setVal
 	}
 }
 
@@ -133,8 +100,8 @@ func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, upd
 			Height: frameHeight,
 			Pix: make([]byte, 4*frameWidth*frameHeight),
 			eventQueue: w,
-			keycodeMap: dumbMap{},
-			runeMap: dumbMap{},
+			keyCodeMap: map[key.Code]bool{},
+			keyCharMap: map[rune]bool{},
 		}
 
 		go updateLoop(&windowState)
