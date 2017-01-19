@@ -21,19 +21,32 @@ func main() {
 	cartBytes, err := ioutil.ReadFile(cartFilename)
 	dieIf(err)
 
-	cartInfo := dmgo.ParseCartInfo(cartBytes)
-	fmt.Printf("%q\n", cartInfo.Title)
-	fmt.Printf("Cart type: %d\n", cartInfo.CartridgeType)
-	fmt.Printf("Cart RAM size: %d\n", cartInfo.GetRAMSize())
-	fmt.Printf("Cart ROM size: %d\n", cartInfo.GetROMSize())
+	assert(len(cartBytes) > 3, "cannot parse file, illegal header")
+
+	var emu dmgo.Emulator
+
+	fileMagic := string(cartBytes[:3])
+	if fileMagic == "GBS" {
+		// nsf(e) file
+		emu = dmgo.NewGbsPlayer(cartBytes)
+	} else {
+		// rom file
+
+		cartInfo := dmgo.ParseCartInfo(cartBytes)
+		fmt.Printf("%q\n", cartInfo.Title)
+		fmt.Printf("Cart type: %d\n", cartInfo.CartridgeType)
+		fmt.Printf("Cart RAM size: %d\n", cartInfo.GetRAMSize())
+		fmt.Printf("Cart ROM size: %d\n", cartInfo.GetROMSize())
+
+		emu = dmgo.NewEmulator(cartBytes)
+	}
 
 	platform.InitDisplayLoop(160*4, 144*4, 160, 144, func(sharedState *platform.WindowState) {
-		startEmu(cartFilename, sharedState, cartBytes)
+		startEmu(cartFilename, sharedState, emu)
 	})
 }
 
-func startHeadlessEmu(cartBytes []byte) {
-	emu := dmgo.NewEmulator(cartBytes)
+func startHeadlessEmu(emu dmgo.Emulator) {
 	// FIXME: settings are for debug right now
 	ticker := time.NewTicker(17*time.Millisecond)
 
@@ -45,8 +58,7 @@ func startHeadlessEmu(cartBytes []byte) {
 	}
 }
 
-func startEmu(filename string, window *platform.WindowState, cartBytes []byte) {
-	emu := dmgo.NewEmulator(cartBytes)
+func startEmu(filename string, window *platform.WindowState, emu dmgo.Emulator) {
 
 	// FIXME: settings are for debug right now
 	lastVBlankTime := time.Now()

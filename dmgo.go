@@ -339,6 +339,18 @@ func (cs *cpuState) init() {
 
 	cs.Mem.mbc.Init(&cs.Mem)
 
+	cs.initIORegs()
+
+	cs.APU.Sounds[0].RestartRequested = false
+	cs.APU.Sounds[1].RestartRequested = false
+	cs.APU.Sounds[2].RestartRequested = false
+	cs.APU.Sounds[3].RestartRequested = false
+
+	cs.initVRAM()
+	cs.VBlankIRQ = true
+}
+
+func (cs *cpuState) initIORegs() {
 	cs.write(0xff10, 0x80)
 	cs.write(0xff11, 0xbf)
 	cs.write(0xff12, 0xf3)
@@ -359,14 +371,6 @@ func (cs *cpuState) init() {
 	cs.write(0xff47, 0xfc)
 	cs.write(0xff48, 0xff)
 	cs.write(0xff49, 0xff)
-
-	cs.APU.Sounds[0].RestartRequested = false
-	cs.APU.Sounds[1].RestartRequested = false
-	cs.APU.Sounds[2].RestartRequested = false
-	cs.APU.Sounds[3].RestartRequested = false
-
-	cs.initVRAM()
-	cs.VBlankIRQ = true
 }
 
 func (cs *cpuState) initVRAM() {
@@ -495,11 +499,14 @@ func (cs *cpuState) debugLineOnStackChange() {
 	}
 }
 
-var hitTarget = false
-
 // Step steps the emulator one instruction
 func (cs *cpuState) Step() {
+	cs.step()
+}
 
+var hitTarget = false
+
+func (cs *cpuState) step() {
 	ieAndIfFlagMatch := cs.handleInterrupts()
 	if cs.InHaltMode {
 		if ieAndIfFlagMatch {

@@ -586,3 +586,58 @@ func (mbc *mbc5) Marshal() marshalledMBC {
 		Data: rawJSON,
 	}
 }
+
+type gbsMBC struct {
+	bankNumbers
+}
+
+func (mbc *gbsMBC) Init(mem *mem) {
+	mbc.bankNumbers.init(mem)
+	mbc.ROMBankNumber = 1 // can't go lower
+}
+
+func (mbc *gbsMBC) Read(mem *mem, addr uint16) byte {
+	switch {
+	case addr < 0x4000:
+		return mem.cart[addr]
+	case addr >= 0x4000 && addr < 0x8000:
+		localAddr := uint(addr-0x4000) + mbc.ROMBankOffset()
+		if localAddr >= uint(len(mem.cart)) {
+			panic(fmt.Sprintf("gbsMBC: bad rom local addr: 0x%06x, bank number: %d\r\n", localAddr, mbc.ROMBankNumber))
+		}
+		return mem.cart[localAddr]
+	case addr >= 0xa000 && addr < 0xc000:
+		return mem.CartRAM[addr-0xa000]
+	default:
+		panic(fmt.Sprintf("gbsMBC: not implemented: read at %x\n", addr))
+	}
+}
+
+func (mbc *gbsMBC) Write(mem *mem, addr uint16, val byte) {
+	switch {
+	case addr < 0x2000:
+		// nop
+	case addr >= 0x2000 && addr < 0x4000:
+		// 16 rom banks
+		bankNum := uint16(val & 0x0f)
+		mbc.setROMBankNumber(bankNum)
+	case addr >= 0x4000 && addr < 0x8000:
+		// nop
+	case addr >= 0xa000 && addr < 0xc000:
+		localAddr := uint(addr - 0xa000)
+		mem.CartRAM[localAddr] = val
+	default:
+		panic(fmt.Sprintf("gbsMBC: not implemented: write at %x\n", addr))
+	}
+}
+
+func (mbc *gbsMBC) Marshal() marshalledMBC {
+	rawJSON, err := json.Marshal(mbc)
+	if err != nil {
+		panic(err)
+	}
+	return marshalledMBC{
+		Name: "gbsMBC",
+		Data: rawJSON,
+	}
+}

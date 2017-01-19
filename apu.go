@@ -74,7 +74,7 @@ func (c *apuCircleBuf) mask(i uint) uint { return i & (uint(len(c.buf)) - 1) }
 func (c *apuCircleBuf) size() uint       { return c.writeIndex - c.readIndex }
 func (c *apuCircleBuf) full() bool       { return c.size() == uint(len(c.buf)) }
 
-const timePerCycle = 1.0 / (4 * 1024 * 1024)
+var timePerCycle = 1.0 / (4 * 1024 * 1024)
 
 func (apu *apu) runCycle(cs *cpuState) {
 
