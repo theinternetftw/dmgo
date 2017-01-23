@@ -8,10 +8,9 @@ type apu struct {
 
 	AllSoundsOn bool
 
-	SampleTimeCounter float64
-	LastSweepCycle    float64
-	LastEnvCycle      float64
-	LastLengthCycle   float64
+	SweepTimeCounter  float64
+	EnvTimeCounter    float64
+	LengthTimeCounter float64
 
 	Sounds [4]sound
 
@@ -78,20 +77,21 @@ var timePerCycle = 1.0 / (4 * 1024 * 1024)
 
 func (apu *apu) runCycle(cs *cpuState) {
 
-	if apu.SampleTimeCounter-apu.LastLengthCycle >= 1.0/256.0 {
+	if apu.LengthTimeCounter >= 1.0/256.0 {
 		apu.runLengthCycle()
-		apu.LastLengthCycle = apu.SampleTimeCounter
+		apu.LengthTimeCounter -= 1.0 / 256.0
 	}
-	if apu.SampleTimeCounter-apu.LastEnvCycle >= 1.0/64.0 {
+	if apu.EnvTimeCounter >= 1.0/64.0 {
 		apu.runEnvCycle()
-		apu.LastEnvCycle = apu.SampleTimeCounter
+		apu.EnvTimeCounter -= 1.0 / 64.0
 	}
 
 	if !apu.buffer.full() {
 
+		apu.runFreqCycle()
+
 		left, right := 0.0, 0.0
 		if apu.AllSoundsOn {
-			apu.runFreqCycle()
 
 			left0, right0 := apu.Sounds[0].getSample()
 			left1, right1 := apu.Sounds[1].getSample()
@@ -112,12 +112,14 @@ func (apu *apu) runCycle(cs *cpuState) {
 		})
 	}
 
-	if apu.SampleTimeCounter-apu.LastSweepCycle >= 1.0/128.0 {
+	if apu.SweepTimeCounter >= 1.0/128.0 {
 		apu.Sounds[0].runSweepCycle()
-		apu.LastSweepCycle = apu.SampleTimeCounter
+		apu.SweepTimeCounter -= 1.0 / 128.0
 	}
 
-	apu.SampleTimeCounter += timePerCycle
+	apu.SweepTimeCounter += timePerCycle
+	apu.EnvTimeCounter += timePerCycle
+	apu.LengthTimeCounter += timePerCycle
 }
 
 func (apu *apu) runFreqCycle() {
