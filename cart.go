@@ -70,7 +70,8 @@ func (ci *CartInfo) GetROMSize() uint {
 	panic(fmt.Sprintf("unknown ROM size code 0x%02x", ci.RAMSizeCode))
 }
 
-func (ci *CartInfo) cgbOnly() bool { return ci.CGBFlag == 0xc0 }
+func (ci *CartInfo) cgbOnly() bool     { return ci.CGBFlag == 0xc0 }
+func (ci *CartInfo) cgbOptional() bool { return ci.CGBFlag == 0x80 }
 
 // ParseCartInfo parses a dmg cart header
 func ParseCartInfo(cartBytes []byte) *CartInfo {

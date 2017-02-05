@@ -163,7 +163,71 @@ func (cs *cpuState) read(addr uint16) byte {
 	case addr == 0xff4b:
 		val = cs.LCD.WindowX
 
-	case addr >= 0xff4c && addr < 0xff80:
+	case addr == 0xff4c:
+		val = 0xff // unmapped bytes
+
+	case addr == 0xff4d:
+		if cs.CGBMode {
+			cs.stepErr("CGB fast mode: not implemented")
+		}
+
+	case addr >= 0xff4e && addr < 0xff51:
+		val = 0xff // unmapped bytes
+
+	case addr == 0xff51:
+		if cs.CGBMode {
+			cs.stepErr("CGB DMA: not implemented")
+		}
+	case addr == 0xff52:
+		if cs.CGBMode {
+			cs.stepErr("CGB DMA: not implemented")
+		}
+	case addr == 0xff53:
+		if cs.CGBMode {
+			cs.stepErr("CGB DMA: not implemented")
+		}
+	case addr == 0xff54:
+		if cs.CGBMode {
+			cs.stepErr("CGB DMA: not implemented")
+		}
+	case addr == 0xff55:
+		if cs.CGBMode {
+			cs.stepErr("CGB DMA: not implemented")
+		}
+	case addr == 0xff56:
+		if cs.CGBMode {
+			val = cs.readIRPortReg()
+		}
+
+	case addr >= 0xff57 && addr < 0xff68:
+		val = 0xff // unmapped bytes
+
+	case addr == 0xff68:
+		if cs.CGBMode {
+			cs.stepErr("CGB bg pal idx: not implemented")
+		}
+	case addr == 0xff69:
+		if cs.CGBMode {
+			cs.stepErr("CGB bg pal data: not implemented")
+		}
+	case addr == 0xff6a:
+		if cs.CGBMode {
+			cs.stepErr("CGB sprite pal idx: not implemented")
+		}
+	case addr == 0xff6b:
+		if cs.CGBMode {
+			cs.stepErr("CGB sprite pal data: not implemented")
+		}
+
+	case addr >= 0xff6c && addr < 0xff70:
+		val = 0xff // unmapped bytes
+
+	case addr == 0xff70:
+		if cs.CGBMode {
+			cs.stepErr("CGB ram bank: not implemented")
+		}
+
+	case addr >= 0xff71 && addr < 0xff80:
 		val = 0xff // unmapped bytes
 
 	case addr >= 0xff80 && addr < 0xffff:
@@ -315,8 +379,73 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr == 0xff4b:
 		cs.LCD.writeWindowX(val)
 
-	case addr >= 0xff4c && addr < 0xff80:
+	case addr == 0xff4c:
 		// empty, nop (can be more complicated, see TCAGBD)
+
+	case addr == 0xff4d:
+		if cs.CGBMode {
+			cs.stepErr("CGB fast mode: not implemented")
+		}
+
+	case addr >= 0xff4e && addr < 0xff51:
+		// empty, nop (can be more complicated, see TCAGBD)
+
+	case addr == 0xff51:
+		if cs.CGBMode {
+			cs.stepErr("CGB DMA: not implemented")
+		}
+	case addr == 0xff52:
+		if cs.CGBMode {
+			cs.stepErr("CGB DMA: not implemented")
+		}
+	case addr == 0xff53:
+		if cs.CGBMode {
+			cs.stepErr("CGB DMA: not implemented")
+		}
+	case addr == 0xff54:
+		if cs.CGBMode {
+			cs.stepErr("CGB DMA: not implemented")
+		}
+	case addr == 0xff55:
+		if cs.CGBMode {
+			cs.stepErr("CGB DMA: not implemented")
+		}
+	case addr == 0xff56:
+		if cs.CGBMode {
+			cs.writeIRPortReg(val)
+		}
+
+	case addr >= 0xff57 && addr < 0xff68:
+		// empty, nop (can be more complicated, see TCAGBD)
+
+	case addr == 0xff68:
+		if cs.CGBMode {
+			cs.stepErr("CGB bg pal idx: not implemented")
+		}
+	case addr == 0xff69:
+		if cs.CGBMode {
+			cs.stepErr("CGB bg pal data: not implemented")
+		}
+	case addr == 0xff6a:
+		if cs.CGBMode {
+			cs.stepErr("CGB sprite pal idx: not implemented")
+		}
+	case addr == 0xff6b:
+		if cs.CGBMode {
+			cs.stepErr("CGB sprite pal data: not implemented")
+		}
+
+	case addr >= 0xff6c && addr < 0xff70:
+		// empty, nop (can be more complicated, see TCAGBD)
+
+	case addr == 0xff70:
+		if cs.CGBMode {
+			cs.stepErr("CGB ram bank: not implemented")
+		}
+
+	case addr >= 0xff71 && addr < 0xff80:
+		// empty, nop (can be more complicated, see TCAGBD)
+
 	case addr >= 0xff80 && addr < 0xffff:
 		cs.Mem.HighInternalRAM[addr-0xff80] = val
 	case addr == 0xffff:

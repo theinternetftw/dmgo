@@ -21,6 +21,11 @@ type cpuState struct {
 	InHaltMode bool
 	InStopMode bool
 
+	CGBMode bool
+
+	IRDataReadEnable bool
+	IRSendDataEnable bool
+
 	InterruptMasterEnable bool
 	MasterEnableRequested bool
 
@@ -249,6 +254,21 @@ func (cs *cpuState) readInterruptFlagReg() byte {
 	)
 }
 
+func (cs *cpuState) writeIRPortReg(val byte) {
+	cs.IRDataReadEnable = val&0xc0 == 0xc0
+	cs.IRSendDataEnable = val&0x01 == 0x01
+}
+func (cs *cpuState) readIRPortReg() byte {
+	out := byte(0)
+	if cs.IRDataReadEnable {
+		out |= 0xc2 // no data received
+	}
+	if cs.IRSendDataEnable {
+		out |= 0x01
+	}
+	return out
+}
+
 func (cs *cpuState) getZeroFlag() bool      { return cs.F&0x80 > 0 }
 func (cs *cpuState) getSubFlag() bool       { return cs.F&0x40 > 0 }
 func (cs *cpuState) getHalfCarryFlag() bool { return cs.F&0x20 > 0 }
@@ -310,12 +330,13 @@ func newState(cart []byte) *cpuState {
 		Mem: mem{
 			cart:        cart,
 			CartRAM:     make([]byte, cartInfo.GetRAMSize()),
-			InternalRAM: make([]byte, 0x2000), // only DMG size for now
+			InternalRAM: make([]byte, 0x8000),
 			mbc:         makeMBC(cartInfo),
 		},
 		LCD: lcd{
 			VideoRAM: make([]byte, 0x2000), // only DMG size for now
 		},
+		CGBMode: cartInfo.cgbOptional() || cartInfo.cgbOnly(),
 	}
 	state.init()
 	return &state
@@ -325,7 +346,11 @@ func (cs *cpuState) init() {
 	// NOTE: these are DMG values,
 	// others are different, see
 	// TCAGBD
-	cs.setAF(0x01b0)
+	if cs.CGBMode {
+		cs.setAF(0x11b0)
+	} else {
+		cs.setAF(0x01b0)
+	}
 	cs.setBC(0x0013)
 	cs.setDE(0x00d8)
 	cs.setHL(0x014d)
