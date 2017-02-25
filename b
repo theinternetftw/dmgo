@@ -21,7 +21,6 @@ echo
 echo "running fmt, vet, lint..."
 echo
 
-go fmt
 goimports -w *.go
 go vet
 golint
