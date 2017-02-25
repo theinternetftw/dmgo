@@ -84,10 +84,10 @@ func NewGbsPlayer(gbs []byte) Emulator {
 				mbc:         &gbsMBC{},
 				cart:        cart,
 				CartRAM:     make([]byte, 8192),
-				InternalRAM: make([]byte, 0x2000), // only DMG size for now
+				InternalRAM: make([]byte, 0x2000), // only DMG size for now?
 			},
 			LCD: lcd{
-				VideoRAM: make([]byte, 0x2000), // only DMG size for now
+				VideoRAM: make([]byte, 0x2000), // only DMG size for now?
 			},
 		},
 		Hdr: hdr,

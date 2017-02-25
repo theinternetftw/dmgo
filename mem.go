@@ -8,10 +8,11 @@ type mem struct {
 
 	// everything else marshalled
 
-	CartRAM         []byte
-	InternalRAM     []byte
-	HighInternalRAM [0x7f]byte
-	mbc             mbc
+	CartRAM               []byte
+	InternalRAM           []byte
+	InternalRAMBankNumber uint16
+	HighInternalRAM       [0x7f]byte
+	mbc                   mbc
 }
 
 func (mem *mem) mbcRead(addr uint16) byte {
@@ -46,6 +47,9 @@ func (cs *cpuState) read(addr uint16) byte {
 
 	case addr >= 0xc000 && addr < 0xfe00:
 		ramAddr := (addr - 0xc000) & 0x1fff // 8kb with wraparound
+		if ramAddr >= 0x1000 {
+			ramAddr = (ramAddr - 0x1000) + 0x1000*cs.Mem.InternalRAMBankNumber
+		}
 		val = cs.Mem.InternalRAM[ramAddr]
 
 	case addr >= 0xfe00 && addr < 0xfea0:
@@ -224,7 +228,7 @@ func (cs *cpuState) read(addr uint16) byte {
 
 	case addr == 0xff70:
 		if cs.CGBMode {
-			cs.stepErr("CGB ram bank: not implemented")
+			val = byte(cs.Mem.InternalRAMBankNumber)
 		}
 
 	case addr >= 0xff71 && addr < 0xff80:
@@ -260,7 +264,11 @@ func (cs *cpuState) write(addr uint16, val byte) {
 		cs.Mem.mbcWrite(addr, val)
 
 	case addr >= 0xc000 && addr < 0xfe00:
-		cs.Mem.InternalRAM[((addr - 0xc000) & 0x1fff)] = val // 8kb with wraparound
+		ramAddr := (addr - 0xc000) & 0x1fff // 8kb with wraparound
+		if ramAddr >= 0x1000 {
+			ramAddr = (ramAddr - 0x1000) + 0x1000*cs.Mem.InternalRAMBankNumber
+		}
+		cs.Mem.InternalRAM[ramAddr] = val
 	case addr >= 0xfe00 && addr < 0xfea0:
 		cs.LCD.writeOAM(addr-0xfe00, val)
 	case addr >= 0xfea0 && addr < 0xff00:
@@ -440,7 +448,10 @@ func (cs *cpuState) write(addr uint16, val byte) {
 
 	case addr == 0xff70:
 		if cs.CGBMode {
-			cs.stepErr("CGB ram bank: not implemented")
+			if val&0x07 == 0 {
+				val = 1
+			}
+			cs.Mem.InternalRAMBankNumber = uint16(val) & 0x07
 		}
 
 	case addr >= 0xff71 && addr < 0xff80:

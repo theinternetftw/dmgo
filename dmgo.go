@@ -328,10 +328,11 @@ func newState(cart []byte) *cpuState {
 		Title:          cartInfo.Title,
 		HeaderChecksum: cartInfo.HeaderChecksum,
 		Mem: mem{
-			cart:        cart,
-			CartRAM:     make([]byte, cartInfo.GetRAMSize()),
-			InternalRAM: make([]byte, 0x8000),
-			mbc:         makeMBC(cartInfo),
+			cart:                  cart,
+			CartRAM:               make([]byte, cartInfo.GetRAMSize()),
+			InternalRAM:           make([]byte, 0x8000),
+			InternalRAMBankNumber: 1,
+			mbc: makeMBC(cartInfo),
 		},
 		LCD: lcd{
 			VideoRAM: make([]byte, 0x2000), // only DMG size for now
