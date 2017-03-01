@@ -335,13 +335,30 @@ func (lcd *lcd) getSpritePixel(e *oamEntry, x, y byte) (byte, byte, byte, bool) 
 	if rawPixel == 0 {
 		return 0, 0, 0, false // transparent
 	}
+	r, g, b := lcd.applySpritePalettes(e, rawPixel)
+	return r, g, b, true
+}
+
+func cgbToRGB(cgbColor uint16) (byte, byte, byte) {
+	r := byte(cgbColor&0x1f) << 3
+	g := byte(cgbColor>>5) << 3
+	b := byte(cgbColor>>10) << 3
+	// TODO: accurate CGB color mixing
+	return r, g, b
+}
+
+func (lcd *lcd) applySpritePalettes(e *oamEntry, rawPixel byte) (byte, byte, byte) {
+	if lcd.CGBMode {
+		palNum := e.cgbPalNumber()
+		cVal := uint16(lcd.SpritePaletteRAM[8*palNum+2*rawPixel])
+		cVal |= uint16(lcd.SpritePaletteRAM[8*palNum+2*rawPixel+1]) << 8
+		return cgbToRGB(cVal)
+	}
 	palReg := lcd.ObjectPalette0Reg
 	if e.palSelector() {
 		palReg = lcd.ObjectPalette1Reg
 	}
-	palettedPixel := (palReg >> (rawPixel * 2)) & 0x03
-	r, g, b := lcd.applyCustomPalette(palettedPixel)
-	return r, g, b, true
+	return lcd.applyCustomPalette((palReg >> (rawPixel * 2)) & 0x03)
 }
 
 var standardPalette = [][]byte{
@@ -437,11 +454,13 @@ func (lcd *lcd) parseOAMForScanline(scanline byte) {
 	// of the top ten, and the ten are decided on based on scanline test
 	// alone (well, Michael also suggests that an x != 0 test is made,
 	// but he's wrong about other things in the talk, so I'm holding out
-	// until I see evidence of this. it would make the setting of x to
-	// zero in disabled dkland sprites make more sense, though)
+	// until I see evidence of this. It would make the setting of x to
+	// zero in disabled dkland sprites make more sense, though).
 
-	// resort to x-coord order (DMG only, CGB stops with the above)
-	sort.Stable(sortableOAM(lcd.OAMForScanline))
+	// resort to x-coord order (DMG only)
+	if !lcd.CGBMode {
+		sort.Stable(sortableOAM(lcd.OAMForScanline))
+	}
 }
 
 type sortableOAM []oamEntry
@@ -511,11 +530,7 @@ func (lcd *lcd) applyBGPalettes(attrs tileAttrs, rawPixel byte) (byte, byte, byt
 	if lcd.CGBMode {
 		cVal := uint16(lcd.BGPaletteRAM[8*attrs.bgPaletteNum+2*rawPixel])
 		cVal |= uint16(lcd.BGPaletteRAM[8*attrs.bgPaletteNum+2*rawPixel+1]) << 8
-		r := byte(cVal&0x1f) << 3
-		g := byte(cVal>>5) << 3
-		b := byte(cVal>>10) << 3
-		// TODO: accurate CGB color mixing
-		return r, g, b
+		return cgbToRGB(cVal)
 	}
 	palettedPixel := (lcd.BackgroundPaletteReg >> (rawPixel * 2)) & 0x03
 	return lcd.applyCustomPalette(palettedPixel)
