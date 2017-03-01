@@ -21,7 +21,9 @@ type cpuState struct {
 	InHaltMode bool
 	InStopMode bool
 
-	CGBMode bool
+	CGBMode            bool
+	FastMode           bool
+	SpeedSwitchPrepped bool
 
 	IRDataReadEnable bool
 	IRSendDataEnable bool
@@ -45,6 +47,7 @@ type cpuState struct {
 	SerialTransferData            byte
 	SerialTransferStartFlag       bool
 	SerialTransferClockIsInternal bool
+	SerialFastMode                bool
 	SerialClock                   uint16
 	SerialBitsTransferred         byte
 
@@ -117,11 +120,23 @@ func (cs *cpuState) writeTimerControlReg(val byte) {
 }
 
 func (cs *cpuState) readSerialControlReg() byte {
-	return 0x7e | boolBit(cs.SerialTransferStartFlag, 7) | boolBit(cs.SerialTransferClockIsInternal, 0)
+	return byteFromBools(
+		cs.SerialTransferStartFlag,
+		true,
+		true,
+		true,
+		true,
+		true,
+		cs.SerialFastMode,
+		cs.SerialTransferClockIsInternal,
+	)
 }
 func (cs *cpuState) writeSerialControlReg(val byte) {
 	cs.SerialTransferStartFlag = val&0x80 != 0
 	cs.SerialTransferClockIsInternal = val&0x01 != 0
+	if cs.CGBMode {
+		cs.SerialFastMode = val&0x02 != 0
+	}
 }
 
 // Joypad represents the buttons on a gameboy
@@ -432,12 +447,37 @@ func (cs *cpuState) initVRAM() {
 }
 
 func (cs *cpuState) runCycles(numCycles uint) {
+	// Things that speed up to match fast mode
 	for i := uint(0); i < numCycles; i++ {
 		cs.Cycles++
 		cs.runTimerCycle()
 		cs.runSerialCycle()
+	}
+	if cs.FastMode {
+		numCycles >>= 1
+	}
+	// Things that don't speed up with fast mode
+	for i := uint(0); i < numCycles; i++ {
 		cs.APU.runCycle(cs)
 		cs.LCD.runCycle(cs)
+	}
+}
+
+func (cs *cpuState) readSpeedSwitchReg() byte {
+	return byteFromBools(cs.FastMode,
+		true, true, true,
+		true, true, true,
+		cs.SpeedSwitchPrepped,
+	)
+}
+func (cs *cpuState) writeSpeedSwitchReg(val byte) {
+	cs.SpeedSwitchPrepped = val&0x01 == 0x01
+}
+func (cs *cpuState) handleSpeedSwitching() {
+	// TODO: accurate timing
+	if cs.SpeedSwitchPrepped {
+		cs.SpeedSwitchPrepped = false
+		cs.FastMode = !cs.FastMode
 	}
 }
 
@@ -552,13 +592,14 @@ func (cs *cpuState) step() {
 	// if hitTarget {
 	// 	fmt.Println(cs.debugStatusLine())
 	// }
+	// fmt.Println(cs.debugStatusLine())
 
-	// TODO: correct behavior, e.g. check for
-	// button press only. but for now lets
-	// treat it like halt
-	if ieAndIfFlagMatch && cs.InStopMode {
+	// TODO: correct behavior, i.e. only resume on
+	// button press if not about to switch speeds.
+	if cs.InStopMode {
+		cs.handleSpeedSwitching()
 		cs.runCycles(4)
-		cs.InHaltMode = false
+		cs.InStopMode = false
 	}
 	if cs.InStopMode {
 		cs.runCycles(4)

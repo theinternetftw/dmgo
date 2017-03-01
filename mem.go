@@ -172,7 +172,7 @@ func (cs *cpuState) read(addr uint16) byte {
 
 	case addr == 0xff4d:
 		if cs.CGBMode {
-			cs.stepErr("CGB fast mode: not implemented")
+			val = cs.readSpeedSwitchReg()
 		}
 
 	case addr >= 0xff4e && addr < 0xff51:
@@ -392,7 +392,7 @@ func (cs *cpuState) write(addr uint16, val byte) {
 
 	case addr == 0xff4d:
 		if cs.CGBMode {
-			cs.stepErr("CGB fast mode: not implemented")
+			cs.writeSpeedSwitchReg(val)
 		}
 
 	case addr >= 0xff4e && addr < 0xff51:
