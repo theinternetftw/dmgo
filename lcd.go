@@ -15,16 +15,24 @@ type lcd struct {
 
 	PastFirstFrame bool
 
-	CGBMode bool
+	VideoRAM       [0x4000]byte
+	HighBankActive bool
 
-	VideoRAM []byte
+	CGBMode                       bool
+	BGPaletteRAM                  [64]byte
+	BGPaletteRAMIndex             byte
+	BGPaletteRAMAutoIncrement     bool
+	SpritePaletteRAM              [64]byte
+	SpritePaletteRAMIndex         byte
+	SpritePaletteRAMAutoIncrement bool
 
 	OAM            [160]byte
 	OAMForScanline []oamEntry
 
 	// for oam sprite priority
-	BGMask     [160]bool
-	SpriteMask [160]bool
+	BGMask         [160]bool
+	BGPriorityMask [160]bool
+	SpriteMask     [160]bool
 
 	ScrollY byte
 	ScrollX byte
@@ -57,12 +65,56 @@ type lcd struct {
 	BigSprites                  bool
 	DisplaySprites              bool
 	DisplayBG                   bool
-	BGWindowLosePriority        bool
+	BGWindowMasterPriority      bool
 
 	CyclesSinceLYInc       uint
 	CyclesSinceVBlankStart uint
 
 	StatIRQSignal bool
+}
+
+func (lcd *lcd) writeBGPaletteRAMIndexReg(val byte) {
+	lcd.BGPaletteRAMIndex = val & 0x3f
+	lcd.BGPaletteRAMAutoIncrement = val&0x80 != 0
+}
+func (lcd *lcd) readBGPaletteRAMIndexReg() byte {
+	out := lcd.BGPaletteRAMIndex
+	if lcd.BGPaletteRAMAutoIncrement {
+		out |= 0x80
+	}
+	return out
+}
+
+func (lcd *lcd) writeBGPaletteRAMDataReg(val byte) {
+	lcd.BGPaletteRAM[lcd.BGPaletteRAMIndex] = val
+	if lcd.BGPaletteRAMAutoIncrement {
+		lcd.BGPaletteRAMIndex = (lcd.BGPaletteRAMIndex + 1) & 0x3f
+	}
+}
+func (lcd *lcd) readBGPaletteRAMDataReg() byte {
+	return lcd.BGPaletteRAM[lcd.BGPaletteRAMIndex]
+}
+
+func (lcd *lcd) writeSpritePaletteRAMIndexReg(val byte) {
+	lcd.SpritePaletteRAMIndex = val & 0x3f
+	lcd.SpritePaletteRAMAutoIncrement = val&0x80 != 0
+}
+func (lcd *lcd) readSpritePaletteRAMIndexReg() byte {
+	out := lcd.SpritePaletteRAMIndex
+	if lcd.SpritePaletteRAMAutoIncrement {
+		out |= 0x80
+	}
+	return out
+}
+
+func (lcd *lcd) writeSpritePaletteRAMDataReg(val byte) {
+	lcd.SpritePaletteRAM[lcd.SpritePaletteRAMIndex] = val
+	if lcd.SpritePaletteRAMAutoIncrement {
+		lcd.SpritePaletteRAMIndex = (lcd.SpritePaletteRAMIndex + 1) & 0x3f
+	}
+}
+func (lcd *lcd) readSpritePaletteRAMDataReg() byte {
+	return lcd.SpritePaletteRAM[lcd.SpritePaletteRAMIndex]
 }
 
 var lastOAMWarningCycles uint
@@ -93,14 +145,30 @@ func (lcd *lcd) init(cs *cpuState) {
 
 func (lcd *lcd) writeVideoRAM(addr uint16, val byte) {
 	if !lcd.ReadingData {
+		if lcd.HighBankActive {
+			addr += 0x2000
+		}
 		lcd.VideoRAM[addr] = val
 	}
 }
 func (lcd *lcd) readVideoRAM(addr uint16) byte {
 	if !lcd.ReadingData {
+		if lcd.HighBankActive {
+			addr += 0x2000
+		}
 		return lcd.VideoRAM[addr]
 	}
 	return 0xff
+}
+
+func (lcd *lcd) writeBankReg(val byte) {
+	lcd.HighBankActive = val&0x01 != 0
+}
+func (lcd *lcd) readBankReg() byte {
+	if lcd.HighBankActive {
+		return 0x01
+	}
+	return 0x00
 }
 
 func (cs *cpuState) updateStatIRQ() {
@@ -173,11 +241,27 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 	}
 }
 
-func (lcd *lcd) getTilePixel(tdataAddr uint16, tileNum, x, y byte) byte {
+type tileAttrs struct {
+	palette      byte
+	xFlip, yFlip bool
+	useHighBank  bool
+	hasPriority  bool
+}
+
+func (lcd *lcd) getTilePixel(tdataAddr uint16, attr tileAttrs, tileNum, x, y byte) byte {
 	if tdataAddr == 0x0800 { // 0x8000 relative
 		tileNum = byte(int(int8(tileNum)) + 128)
 	}
 	mapBitY, mapBitX := y&0x07, x&0x07
+	if attr.xFlip {
+		mapBitX = 7 - mapBitX
+	}
+	if attr.yFlip {
+		mapBitY = 7 - mapBitY
+	}
+	if attr.useHighBank {
+		tdataAddr += 0x2000
+	}
 	dataByteL := lcd.VideoRAM[tdataAddr+(uint16(tileNum)<<4)+(uint16(mapBitY)<<1)]
 	dataByteH := lcd.VideoRAM[tdataAddr+(uint16(tileNum)<<4)+(uint16(mapBitY)<<1)+1]
 	dataBitL := (dataByteL >> (7 - mapBitX)) & 0x1
@@ -189,19 +273,41 @@ func (lcd *lcd) getTileNum(tmapAddr uint16, x, y byte) byte {
 	tileNum := lcd.VideoRAM[tmapAddr+tileNumY*32+tileNumX]
 	return tileNum
 }
+func (lcd *lcd) getTileAttrs(tmapAddr uint16, x, y byte) tileAttrs {
+	if !lcd.CGBMode {
+		return tileAttrs{}
+	}
+	attr := tileAttrs{}
+	tileNumY, tileNumX := uint16(y>>3), uint16(x>>3)
+	attrByte := lcd.VideoRAM[0x2000+tmapAddr+tileNumY*32+tileNumX]
+	attr.palette = attrByte & 0x03
+	boolsFromByte(attrByte,
+		&attr.hasPriority,
+		&attr.yFlip,
+		&attr.xFlip,
+		nil,
+		&attr.useHighBank,
+		nil,
+		nil,
+		nil,
+	)
+	return attr
+}
 
-func (lcd *lcd) getBGPixel(x, y byte) byte {
+func (lcd *lcd) getBGPixel(x, y byte) (byte, tileAttrs) {
 	mapAddr := lcd.getBGTileMapAddr()
 	dataAddr := lcd.getBGAndWindowTileDataAddr()
 	tileNum := lcd.getTileNum(mapAddr, x, y)
-	return lcd.getTilePixel(dataAddr, tileNum, x, y)
+	tileAttrs := lcd.getTileAttrs(mapAddr, x, y)
+	return lcd.getTilePixel(dataAddr, tileAttrs, tileNum, x, y), tileAttrs
 }
 
-func (lcd *lcd) getWindowPixel(x, y byte) byte {
+func (lcd *lcd) getWindowPixel(x, y byte) (byte, tileAttrs) {
 	mapAddr := lcd.getWindowTileMapAddr()
 	dataAddr := lcd.getBGAndWindowTileDataAddr()
 	tileNum := lcd.getTileNum(mapAddr, x, y)
-	return lcd.getTilePixel(dataAddr, tileNum, x, y)
+	tileAttrs := lcd.getTileAttrs(mapAddr, x, y)
+	return lcd.getTilePixel(dataAddr, tileAttrs, tileNum, x, y), tileAttrs
 }
 
 func (lcd *lcd) getSpritePixel(e *oamEntry, x, y byte) (byte, byte, byte, bool) {
@@ -220,7 +326,10 @@ func (lcd *lcd) getSpritePixel(e *oamEntry, x, y byte) (byte, byte, byte, bool) 
 			tileNum++
 		}
 	}
-	rawPixel := lcd.getTilePixel(0x0000, tileNum, tileX, tileY) // addr 8000 relative
+	tileAttrs := tileAttrs{
+		useHighBank: e.cgbUseHighBank(),
+	}
+	rawPixel := lcd.getTilePixel(0x0000, tileAttrs, tileNum, tileX, tileY) // addr 8000 relative
 	if rawPixel == 0 {
 		return 0, 0, 0, false // transparent
 	}
@@ -282,6 +391,9 @@ func (e *oamEntry) behindBG() bool    { return e.flagsByte&0x80 != 0 }
 func (e *oamEntry) yFlip() bool       { return e.flagsByte&0x40 != 0 }
 func (e *oamEntry) xFlip() bool       { return e.flagsByte&0x20 != 0 }
 func (e *oamEntry) palSelector() bool { return e.flagsByte&0x10 != 0 }
+
+func (e *oamEntry) cgbUseHighBank() bool { return e.flagsByte&0x08 != 0 }
+func (e *oamEntry) cgbPalNumber() byte   { return e.flagsByte & 0x07 }
 
 func yInSprite(y byte, spriteY int16, height int) bool {
 	return int16(y) >= spriteY && int16(y) < spriteY+int16(height)
@@ -346,6 +458,7 @@ func (lcd *lcd) renderScanline() {
 
 	for i := 0; i < 160; i++ {
 		lcd.BGMask[i] = false
+		lcd.BGPriorityMask[i] = false
 		lcd.SpriteMask[i] = false
 	}
 
@@ -353,9 +466,12 @@ func (lcd *lcd) renderScanline() {
 		bgY := y + lcd.ScrollY
 		for x := byte(0); x < 160; x++ {
 			bgX := x + lcd.ScrollX
-			pixel := lcd.getBGPixel(bgX, bgY)
+			pixel, attrs := lcd.getBGPixel(bgX, bgY)
 			if pixel == 0 {
 				lcd.BGMask[x] = true
+			}
+			if attrs.hasPriority {
+				lcd.BGPriorityMask[x] = true
 			}
 			r, g, b := lcd.applyPalettes(pixel)
 			lcd.setFramebufferPixel(x, y, r, g, b)
@@ -368,9 +484,13 @@ func (lcd *lcd) renderScanline() {
 			if x < 0 {
 				continue
 			}
-			pixel := lcd.getWindowPixel(byte(x-winStartX), winY)
+			pixel, attrs := lcd.getWindowPixel(byte(x-winStartX), winY)
+			lcd.BGPriorityMask[x] = true
 			if pixel == 0 {
 				lcd.BGMask[x] = true
+			}
+			if attrs.hasPriority {
+				lcd.BGPriorityMask[x] = true
 			}
 			r, g, b := lcd.applyPalettes(pixel)
 			lcd.setFramebufferPixel(byte(x), y, r, g, b)
@@ -397,10 +517,14 @@ func (lcd *lcd) renderSpriteAtScanline(e *oamEntry, y byte) {
 	}
 	endX := byte(e.x + 8)
 	for x := startX; x < endX && x < 160; x++ {
-		if (!e.behindBG() || lcd.BGMask[x] || lcd.BGWindowLosePriority) && !lcd.SpriteMask[x] {
-			if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
-				lcd.setFramebufferPixel(x, y, r, g, b)
-				lcd.SpriteMask[x] = true
+		hideSprite := lcd.BGWindowMasterPriority && lcd.BGPriorityMask[x]
+		showSprite := !lcd.BGWindowMasterPriority || !e.behindBG() || lcd.BGMask[x]
+		if !hideSprite {
+			if showSprite && !lcd.SpriteMask[x] {
+				if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
+					lcd.setFramebufferPixel(x, y, r, g, b)
+					lcd.SpriteMask[x] = true
+				}
 			}
 		}
 	}
@@ -463,7 +587,7 @@ func (lcd *lcd) writeWindowX(val byte) {
 func (lcd *lcd) writeControlReg(val byte) {
 	bgBit := &lcd.DisplayBG
 	if lcd.CGBMode {
-		bgBit = &lcd.BGWindowLosePriority
+		bgBit = &lcd.BGWindowMasterPriority
 	}
 	boolsFromByte(val,
 		&lcd.DisplayOn,

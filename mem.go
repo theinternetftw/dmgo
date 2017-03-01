@@ -9,7 +9,7 @@ type mem struct {
 	// everything else marshalled
 
 	CartRAM               []byte
-	InternalRAM           []byte
+	InternalRAM           [0x8000]byte
 	InternalRAMBankNumber uint16
 	HighInternalRAM       [0x7f]byte
 	mbc                   mbc
@@ -175,7 +175,17 @@ func (cs *cpuState) read(addr uint16) byte {
 			val = cs.readSpeedSwitchReg()
 		}
 
-	case addr >= 0xff4e && addr < 0xff51:
+	case addr == 0xff4e:
+		val = 0xff // unmapped bytes
+
+	case addr == 0xff4f:
+		if cs.CGBMode {
+			val = cs.LCD.readBankReg()
+		} else {
+			val = 0xff // unmapped bytes
+		}
+
+	case addr >= 0xff50 && addr < 0xff51:
 		val = 0xff // unmapped bytes
 
 	case addr == 0xff51:
@@ -208,19 +218,27 @@ func (cs *cpuState) read(addr uint16) byte {
 
 	case addr == 0xff68:
 		if cs.CGBMode {
-			cs.stepErr("CGB bg pal idx: not implemented")
+			val = cs.LCD.readBGPaletteRAMIndexReg()
+		} else {
+			val = 0xff
 		}
 	case addr == 0xff69:
 		if cs.CGBMode {
-			cs.stepErr("CGB bg pal data: not implemented")
+			val = cs.LCD.readBGPaletteRAMDataReg()
+		} else {
+			val = 0xff
 		}
 	case addr == 0xff6a:
 		if cs.CGBMode {
-			cs.stepErr("CGB sprite pal idx: not implemented")
+			val = cs.LCD.readSpritePaletteRAMIndexReg()
+		} else {
+			val = 0xff
 		}
 	case addr == 0xff6b:
 		if cs.CGBMode {
-			cs.stepErr("CGB sprite pal data: not implemented")
+			val = cs.LCD.readSpritePaletteRAMDataReg()
+		} else {
+			val = 0xff
 		}
 
 	case addr >= 0xff6c && addr < 0xff70:
@@ -395,7 +413,15 @@ func (cs *cpuState) write(addr uint16, val byte) {
 			cs.writeSpeedSwitchReg(val)
 		}
 
-	case addr >= 0xff4e && addr < 0xff51:
+	case addr == 0xff4e:
+		// empty, nop (can be more complicated, see TCAGBD)
+
+	case addr == 0xff4f:
+		if cs.CGBMode {
+			cs.LCD.writeBankReg(val)
+		}
+
+	case addr >= 0xff50 && addr < 0xff51:
 		// empty, nop (can be more complicated, see TCAGBD)
 
 	case addr == 0xff51:
@@ -428,19 +454,19 @@ func (cs *cpuState) write(addr uint16, val byte) {
 
 	case addr == 0xff68:
 		if cs.CGBMode {
-			cs.stepErr("CGB bg pal idx: not implemented")
+			cs.LCD.writeBGPaletteRAMIndexReg(val)
 		}
 	case addr == 0xff69:
 		if cs.CGBMode {
-			cs.stepErr("CGB bg pal data: not implemented")
+			cs.LCD.writeBGPaletteRAMDataReg(val)
 		}
 	case addr == 0xff6a:
 		if cs.CGBMode {
-			cs.stepErr("CGB sprite pal idx: not implemented")
+			cs.LCD.writeSpritePaletteRAMIndexReg(val)
 		}
 	case addr == 0xff6b:
 		if cs.CGBMode {
-			cs.stepErr("CGB sprite pal data: not implemented")
+			cs.LCD.writeSpritePaletteRAMDataReg(val)
 		}
 
 	case addr >= 0xff6c && addr < 0xff70:
