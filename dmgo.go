@@ -375,7 +375,7 @@ func (cs *cpuState) init() {
 
 	cs.TimerDivCycles = 0xabcc
 
-	cs.LCD.init()
+	cs.LCD.init(cs)
 	cs.APU.init()
 
 	cs.Mem.mbc.Init(&cs.Mem)
