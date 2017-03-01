@@ -244,7 +244,7 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 }
 
 type tileAttrs struct {
-	palette      byte
+	bgPaletteNum byte
 	xFlip, yFlip bool
 	useHighBank  bool
 	hasPriority  bool
@@ -282,7 +282,7 @@ func (lcd *lcd) getTileAttrs(tmapAddr uint16, x, y byte) tileAttrs {
 	attr := tileAttrs{}
 	tileNumY, tileNumX := uint16(y>>3), uint16(x>>3)
 	attrByte := lcd.VideoRAM[0x2000+tmapAddr+tileNumY*32+tileNumX]
-	attr.palette = attrByte & 0x03
+	attr.bgPaletteNum = attrByte & 0x03
 	boolsFromByte(attrByte,
 		&attr.hasPriority,
 		&attr.yFlip,
@@ -475,7 +475,7 @@ func (lcd *lcd) renderScanline() {
 			if attrs.hasPriority {
 				lcd.BGPriorityMask[x] = true
 			}
-			r, g, b := lcd.applyPalettes(pixel)
+			r, g, b := lcd.applyBGPalettes(attrs, pixel)
 			lcd.setFramebufferPixel(x, y, r, g, b)
 		}
 	}
@@ -494,7 +494,7 @@ func (lcd *lcd) renderScanline() {
 			if attrs.hasPriority {
 				lcd.BGPriorityMask[x] = true
 			}
-			r, g, b := lcd.applyPalettes(pixel)
+			r, g, b := lcd.applyBGPalettes(attrs, pixel)
 			lcd.setFramebufferPixel(byte(x), y, r, g, b)
 		}
 	}
@@ -507,7 +507,16 @@ func (lcd *lcd) renderScanline() {
 	}
 }
 
-func (lcd *lcd) applyPalettes(rawPixel byte) (byte, byte, byte) {
+func (lcd *lcd) applyBGPalettes(attrs tileAttrs, rawPixel byte) (byte, byte, byte) {
+	if lcd.CGBMode {
+		cVal := uint16(lcd.BGPaletteRAM[8*attrs.bgPaletteNum+2*rawPixel])
+		cVal |= uint16(lcd.BGPaletteRAM[8*attrs.bgPaletteNum+2*rawPixel+1]) << 8
+		r := byte(cVal&0x1f) << 3
+		g := byte(cVal>>5) << 3
+		b := byte(cVal>>10) << 3
+		// TODO: accurate CGB color mixing
+		return r, g, b
+	}
 	palettedPixel := (lcd.BackgroundPaletteReg >> (rawPixel * 2)) & 0x03
 	return lcd.applyCustomPalette(palettedPixel)
 }
