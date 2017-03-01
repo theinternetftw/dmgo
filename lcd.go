@@ -210,6 +210,8 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 			lcd.InHBlank = true
 			lcd.renderScanline()
 			cs.updateStatIRQ()
+
+			cs.runHblankDMA()
 		}
 	case 456:
 		lcd.CyclesSinceLYInc = 0

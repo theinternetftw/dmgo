@@ -13,6 +13,15 @@ type mem struct {
 	InternalRAMBankNumber uint16
 	HighInternalRAM       [0x7f]byte
 	mbc                   mbc
+
+	// cgb dma
+	DMASource     uint16
+	DMASourceInit uint16
+	DMADest       uint16
+	DMADestInit   uint16
+	DMALength     uint16
+	DMAHblankMode bool
+	DMAInProgress bool
 }
 
 func (mem *mem) mbcRead(addr uint16) byte {
@@ -29,6 +38,78 @@ func (mem *mem) mbcWrite(addr uint16, val byte) {
 func (cs *cpuState) oamDMA(addr uint16) {
 	for i := uint16(0); i < 0xa0; i++ {
 		cs.write(0xfe00+i, cs.read(addr+i))
+	}
+}
+
+func (cs *cpuState) writeDMASourceHigh(val byte) {
+	cs.Mem.DMASourceInit = (cs.Mem.DMASourceInit &^ 0xff00) | (uint16(val) << 8)
+}
+func (cs *cpuState) readDMASourceHigh() byte {
+	return byte(cs.Mem.DMASourceInit >> 8)
+}
+
+func (cs *cpuState) writeDMASourceLow(val byte) {
+	cs.Mem.DMASourceInit = (cs.Mem.DMASourceInit &^ 0xff) | uint16(val&0xf0)
+}
+func (cs *cpuState) readDMASourceLow() byte {
+	return byte(cs.Mem.DMASourceInit)
+}
+
+func (cs *cpuState) writeDMADestHigh(val byte) {
+	val = (val &^ 0xe0) | 0x80
+	cs.Mem.DMADestInit = (cs.Mem.DMADestInit &^ 0xff00) | (uint16(val) << 8)
+}
+func (cs *cpuState) readDMADestHigh() byte {
+	return byte(cs.Mem.DMADestInit >> 8)
+}
+
+func (cs *cpuState) writeDMADestLow(val byte) {
+	cs.Mem.DMADestInit = (cs.Mem.DMADestInit &^ 0xff) | uint16(val&0xf0)
+}
+func (cs *cpuState) readDMADestLow() byte {
+	return byte(cs.Mem.DMADestInit)
+}
+
+func (cs *cpuState) writeDMAControlReg(val byte) {
+	cs.Mem.DMALength = (uint16(val&0x7f) + 1) << 4
+	cs.Mem.DMAHblankMode = val&0x80 != 0
+	if cs.Mem.DMAInProgress && (val&0x80 == 0) {
+		cs.Mem.DMAInProgress = false
+	} else {
+		cs.Mem.DMAInProgress = true
+	}
+	cs.Mem.DMASource = cs.Mem.DMASourceInit
+	cs.Mem.DMADest = cs.Mem.DMADestInit
+	if !cs.Mem.DMAHblankMode {
+		for cs.Mem.DMAInProgress {
+			cs.runDMACycle()
+			cs.runCycles(2)
+		}
+	}
+}
+func (cs *cpuState) readDMAControlReg() byte {
+	out := byte((cs.Mem.DMALength>>4)-1) & 0x7f
+	if !cs.Mem.DMAInProgress {
+		out |= 0x80
+	}
+	return out
+}
+
+func (cs *cpuState) runDMACycle() {
+	cs.write(cs.Mem.DMADest, cs.read(cs.Mem.DMASource))
+	cs.write(cs.Mem.DMADest+1, cs.read(cs.Mem.DMASource+1))
+	cs.Mem.DMASource += 2
+	cs.Mem.DMADest += 2
+	cs.Mem.DMALength -= 2
+	if cs.Mem.DMALength == 0 {
+		cs.Mem.DMAInProgress = false
+	}
+}
+func (cs *cpuState) runHblankDMA() {
+	if cs.Mem.DMAInProgress && cs.Mem.DMAHblankMode {
+		for i := 0; cs.Mem.DMAInProgress && i < 8; i++ {
+			cs.runDMACycle()
+		}
 	}
 }
 
@@ -185,29 +266,30 @@ func (cs *cpuState) read(addr uint16) byte {
 			val = 0xff // unmapped bytes
 		}
 
-	case addr >= 0xff50 && addr < 0xff51:
+	case addr == 0xff50:
 		val = 0xff // unmapped bytes
 
 	case addr == 0xff51:
 		if cs.CGBMode {
-			cs.stepErr("CGB DMA: not implemented")
+			val = cs.readDMASourceHigh()
 		}
 	case addr == 0xff52:
 		if cs.CGBMode {
-			cs.stepErr("CGB DMA: not implemented")
+			val = cs.readDMASourceLow()
 		}
 	case addr == 0xff53:
 		if cs.CGBMode {
-			cs.stepErr("CGB DMA: not implemented")
+			val = cs.readDMADestHigh()
 		}
 	case addr == 0xff54:
 		if cs.CGBMode {
-			cs.stepErr("CGB DMA: not implemented")
+			val = cs.readDMADestLow()
 		}
 	case addr == 0xff55:
 		if cs.CGBMode {
-			cs.stepErr("CGB DMA: not implemented")
+			val = cs.readDMAControlReg()
 		}
+
 	case addr == 0xff56:
 		if cs.CGBMode {
 			val = cs.readIRPortReg()
@@ -421,29 +503,30 @@ func (cs *cpuState) write(addr uint16, val byte) {
 			cs.LCD.writeBankReg(val)
 		}
 
-	case addr >= 0xff50 && addr < 0xff51:
+	case addr == 0xff50:
 		// empty, nop (can be more complicated, see TCAGBD)
 
 	case addr == 0xff51:
 		if cs.CGBMode {
-			cs.stepErr("CGB DMA: not implemented")
+			cs.writeDMASourceHigh(val)
 		}
 	case addr == 0xff52:
 		if cs.CGBMode {
-			cs.stepErr("CGB DMA: not implemented")
+			cs.writeDMASourceLow(val)
 		}
 	case addr == 0xff53:
 		if cs.CGBMode {
-			cs.stepErr("CGB DMA: not implemented")
+			cs.writeDMADestHigh(val)
 		}
 	case addr == 0xff54:
 		if cs.CGBMode {
-			cs.stepErr("CGB DMA: not implemented")
+			cs.writeDMADestLow(val)
 		}
 	case addr == 0xff55:
 		if cs.CGBMode {
-			cs.stepErr("CGB DMA: not implemented")
+			cs.writeDMAControlReg(val)
 		}
+
 	case addr == 0xff56:
 		if cs.CGBMode {
 			cs.writeIRPortReg(val)
