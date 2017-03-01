@@ -282,7 +282,7 @@ func (lcd *lcd) getTileAttrs(tmapAddr uint16, x, y byte) tileAttrs {
 	attr := tileAttrs{}
 	tileNumY, tileNumX := uint16(y>>3), uint16(x>>3)
 	attrByte := lcd.VideoRAM[0x2000+tmapAddr+tileNumY*32+tileNumX]
-	attr.bgPaletteNum = attrByte & 0x03
+	attr.bgPaletteNum = attrByte & 0x07
 	boolsFromByte(attrByte,
 		&attr.hasPriority,
 		&attr.yFlip,
