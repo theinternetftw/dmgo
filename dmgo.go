@@ -355,17 +355,17 @@ func newState(cart []byte) *cpuState {
 }
 
 func (cs *cpuState) init() {
-	// NOTE: these are DMG values,
-	// others are different, see
-	// TCAGBD
 	if cs.CGBMode {
-		cs.setAF(0x11b0)
+		cs.setAF(0x1180)
+		cs.setBC(0x0000)
+		cs.setDE(0xff56)
+		cs.setHL(0x000d)
 	} else {
 		cs.setAF(0x01b0)
+		cs.setBC(0x0013)
+		cs.setDE(0x00d8)
+		cs.setHL(0x014d)
 	}
-	cs.setBC(0x0013)
-	cs.setDE(0x00d8)
-	cs.setHL(0x014d)
 	cs.setSP(0xfffe)
 	cs.setPC(0x0100)
 
