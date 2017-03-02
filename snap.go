@@ -9,7 +9,7 @@ import (
 	"io/ioutil"
 )
 
-const currentSnapshotVersion = 1
+const currentSnapshotVersion = 2
 
 const infoString = "dmgo snapshot"
 
@@ -54,14 +54,49 @@ func (cs *cpuState) convertLatestSnapshot(snap *snapshot) (*cpuState, error) {
 	return &newState, nil
 }
 
-var snapshotConverters = map[int]func([]byte) []byte{
-// If new field can be zero, no need for converter.
-// Converters should look like this (including comment):
-// added 2017-XX-XX
-// 1: func(stateBytes []byte) []byte {
-// 	stateBytes = stateBytes[:len(stateBytes)-1]
-// 	return append(stateBytes, []byte(",\"ExampleNewField\":0}")...)
-// },
+var snapshotConverters = map[int]func([]byte) ([]byte, error){
+	// If new field can be zero, no need for converter.
+
+	// added 2017-03-01
+	1: func(stateBytes []byte) ([]byte, error) {
+		newState := map[string]interface{}{}
+		if err := json.Unmarshal(stateBytes, &newState); err != nil {
+			return nil, fmt.Errorf("bad unmarshal during conversion from version one snapshot")
+		}
+
+		if vram, err := getByteSliceFromJSON(newState, "LCD", "VideoRAM"); err == nil {
+			var newVRAM [0x4000]byte
+			copy(newVRAM[:], vram)
+			if err := replaceNodeInJSON(newState, newVRAM, "LCD", "VideoRAM"); err != nil {
+				return nil, fmt.Errorf("could not convert version one snapshot: %v", err)
+			}
+		} else {
+			return nil, fmt.Errorf("could not convert version one snapshot: %v", err)
+		}
+
+		if ram, err := getByteSliceFromJSON(newState, "Mem", "InternalRAM"); err == nil {
+			var newRAM [0x8000]byte
+			copy(newRAM[:], ram)
+			if err := replaceNodeInJSON(newState, newRAM, "Mem", "InternalRAM"); err != nil {
+				return nil, fmt.Errorf("could not convert version one snapshot: %v", err)
+			}
+		} else {
+			return nil, fmt.Errorf("could not convert version one snapshot: %v", err)
+		}
+
+		if _, mem, err := followJSON(newState, "Mem", "InternalRAM"); err == nil {
+			mem["InternalRAMBankNumber"] = 1
+		} else {
+			return nil, fmt.Errorf("could not convert version one snapshot: %v", err)
+		}
+
+		convertedBytes, err := json.Marshal(newState)
+		if err != nil {
+			return nil, fmt.Errorf("bad marshal during conversion from version one snapshot")
+		}
+
+		return convertedBytes, nil
+	},
 }
 
 func (cs *cpuState) convertOldSnapshot(snap *snapshot) (*cpuState, error) {
@@ -81,7 +116,10 @@ func (cs *cpuState) convertOldSnapshot(snap *snapshot) (*cpuState, error) {
 		if !ok {
 			return nil, fmt.Errorf("unknown snapshot version: %v", snap.Version)
 		}
-		stateBytes = converterFn(stateBytes)
+		stateBytes, err = converterFn(stateBytes)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if err = json.Unmarshal(stateBytes, &newState); err != nil {
