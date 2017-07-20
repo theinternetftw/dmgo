@@ -55,7 +55,15 @@ func (cs *cpuState) convertLatestSnapshot(snap *snapshot) (*cpuState, error) {
 }
 
 var snapshotConverters = map[int]func([]byte) ([]byte, error){
-	// If new field can be zero, no need for converter.
+
+	// NOTE: Be careful with the json here. use/read the pack.go functions.
+	// golang's json marshalling can sometimes do the unexpected, e.g. byte
+	// slices must be packed as base64 strings.
+
+	// NOTE: If an MBC ever has incompatible changes, the marshalledMBC will have to
+	// be passed through all these conv fns as well.
+
+	// NOTE: If new field can be zero, no need for converter.
 
 	// added 2017-03-01
 	1: func(stateBytes []byte) ([]byte, error) {
@@ -104,11 +112,6 @@ func (cs *cpuState) convertOldSnapshot(snap *snapshot) (*cpuState, error) {
 	var err error
 	var newState cpuState
 
-	// unfortunately, can't use json, as go is crazy enough to make it so
-	// converting something in and out of json as a map[string]interface{}
-	// will kill the ability to import it back in as a struct. so we have
-	// to change it by hand to keep the go conventions that go will break
-	// otherwise :/
 	stateBytes := []byte(snap.State)
 
 	for i := snap.Version; i < currentSnapshotVersion; i++ {
