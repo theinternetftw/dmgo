@@ -336,9 +336,6 @@ func (cs *cpuState) setPC(val uint16) { cs.PC = val }
 
 func newState(cart []byte) *cpuState {
 	cartInfo := ParseCartInfo(cart)
-	// if cartInfo.cgbOnly() {
-	// 	fatalErr("CGB-only not supported yet")
-	// }
 	state := cpuState{
 		Title:          cartInfo.Title,
 		HeaderChecksum: cartInfo.HeaderChecksum,
@@ -596,9 +593,6 @@ func (cs *cpuState) step() {
 		cs.handleSpeedSwitching()
 		cs.runCycles(4)
 		cs.InStopMode = false
-	}
-	if cs.InStopMode {
-		cs.runCycles(4)
 	}
 
 	// this is here to lag behind the request by
