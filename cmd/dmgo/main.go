@@ -131,9 +131,12 @@ func startEmu(filename string, window *platform.WindowState, emu dmgo.Emulator) 
 		emu.Step()
 
 		bufferAvailable := audio.BufferAvailable()
-		if bufferAvailable == audio.BufferSize() {
-			fmt.Println("Platform AudioBuffer empty!")
-		}
+
+		// TODO: set this up so it's useful, but doesn't spam
+		// if bufferAvailable == audio.BufferSize() {
+			// fmt.Println("Platform AudioBuffer empty!")
+		// }
+
 		workingAudioBuffer = workingAudioBuffer[:bufferAvailable]
 		audio.Write(emu.ReadSoundBuffer(workingAudioBuffer))
 
