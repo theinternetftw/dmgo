@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -173,11 +174,20 @@ func (gp *gbsPlayer) updateScreen() {
 	gp.DbgTerminal.clearScreen()
 
 	gp.DbgTerminal.setPos(0, 1)
-	gp.DbgTerminal.writeString("GBS Player\n")
-	gp.DbgTerminal.newline()
+
+	gp.DbgTerminal.writeString("GBS Player\n\n")
 	gp.DbgTerminal.writeString(string(gp.Hdr.TitleString[:]) + "\n")
 	gp.DbgTerminal.writeString(string(gp.Hdr.AuthorString[:]) + "\n")
-	gp.DbgTerminal.writeString(string(gp.Hdr.CopyrightString[:]) + "\n")
+
+	copyStr := string(gp.Hdr.CopyrightString[:])
+	copyParts := strings.SplitN(copyStr, " ", 2)
+	if len(copyParts) > 1 {
+		// almost always improves presentation
+		gp.DbgTerminal.writeString(copyParts[0] + "\n")
+		gp.DbgTerminal.writeString(copyParts[1] + "\n")
+	} else {
+		gp.DbgTerminal.writeString(copyStr + "\n")
+	}
 
 	gp.DbgTerminal.newline()
 
