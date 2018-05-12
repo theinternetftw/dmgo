@@ -139,8 +139,8 @@ func startEmu(filename string, window *platform.WindowState, emu dmgo.Emulator) 
 			// fmt.Println("Platform AudioBuffer empty!")
 		// }
 
-		workingAudioBuffer = workingAudioBuffer[:bufferAvailable]
-		audio.Write(emu.ReadSoundBuffer(workingAudioBuffer))
+		audioBufSlice := workingAudioBuffer[:bufferAvailable]
+		audio.Write(emu.ReadSoundBuffer(audioBufSlice))
 
 		if emu.FlipRequested() {
 			window.Mutex.Lock()
