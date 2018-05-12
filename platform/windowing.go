@@ -77,10 +77,10 @@ func (s *WindowState) RequestDraw() {
 type drawRequest struct {}
 
 // InitDisplayLoop creates a window and starts event loop
-func InitDisplayLoop(windowWidth, windowHeight, frameWidth, frameHeight int, updateLoop func(*WindowState)) {
+func InitDisplayLoop(title string, windowWidth, windowHeight, frameWidth, frameHeight int, updateLoop func(*WindowState)) {
 	driver.Main(func (s screen.Screen) {
 
-		w, err := s.NewWindow(&screen.NewWindowOptions{windowWidth, windowHeight})
+		w, err := s.NewWindow(&screen.NewWindowOptions{windowWidth, windowHeight, title})
 		if err != nil {
 			panic(err)
 		}

@@ -1,12 +1,24 @@
 package: github.com/theinternetftw/dmgo
+
+# Note that x/exp/shiny and x/mobile
+# are locked to commits. They need to be
+# updated here relatively often and in
+# lockstep until a more stable alternative
+# for what I want is available.
+
 import:
+
 - package: github.com/pkg/profile
   version: ^1.2.0
+
 - package: golang.org/x/exp
+  version: 8460e604b9de9da5834c9f198cadf9dca4b05cac
   subpackages:
   - shiny/driver
   - shiny/screen
+
 - package: golang.org/x/mobile
+  version: 274da161099df258cb919e10e9fd0ae401e143a8
   subpackages:
   - event/lifecycle
   - event/paint

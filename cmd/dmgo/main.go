@@ -21,9 +21,10 @@ func main() {
 	cartBytes, err := ioutil.ReadFile(cartFilename)
 	dieIf(err)
 
-	assert(len(cartBytes) > 3, "cannot parse file, illegal header")
+	assert(len(cartBytes) > 3, "cannot parse, file is too small")
 
 	var emu dmgo.Emulator
+	windowTitle := "dmgo"
 
 	fileMagic := string(cartBytes[:3])
 	if fileMagic == "GBS" {
@@ -39,9 +40,10 @@ func main() {
 		fmt.Printf("Cart ROM size: %d\n", cartInfo.GetROMSize())
 
 		emu = dmgo.NewEmulator(cartBytes)
+		windowTitle = cartInfo.Title + " - dmgo"
 	}
 
-	platform.InitDisplayLoop(160*4, 144*4, 160, 144, func(sharedState *platform.WindowState) {
+	platform.InitDisplayLoop(windowTitle, 160*4, 144*4, 160, 144, func(sharedState *platform.WindowState) {
 		startEmu(cartFilename, sharedState, emu)
 	})
 }
