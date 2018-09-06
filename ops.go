@@ -241,9 +241,9 @@ func (cs *cpuState) decOpHL() {
 
 func (cs *cpuState) daaOp() {
 
-	diff := byte(0)
 	newCarryFlag := uint16(0)
 	if cs.getSubFlag() {
+		diff := byte(0)
 		if cs.getHalfCarryFlag() {
 			diff += 0x06
 		}
@@ -251,7 +251,9 @@ func (cs *cpuState) daaOp() {
 			newCarryFlag = 0x0001
 			diff += 0x60
 		}
+		cs.A -= diff
 	} else {
+		diff := byte(0)
 		if cs.A&0x0f > 0x09 || cs.getHalfCarryFlag() {
 			diff += 0x06
 		}
@@ -259,11 +261,6 @@ func (cs *cpuState) daaOp() {
 			newCarryFlag = 0x0001
 			diff += 0x60
 		}
-	}
-
-	if cs.getSubFlag() {
-		cs.A -= diff
-	} else {
 		cs.A += diff
 	}
 
