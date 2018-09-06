@@ -510,7 +510,7 @@ type Input struct {
 	Joypad Joypad
 }
 
-// GetSoundBuffer returns a 44100hz * 16bit * 2ch sound buffer.
+// ReadSoundBuffer returns a 44100hz * 16bit * 2ch sound buffer.
 // A pre-sized buffer must be provided, which is returned resized
 // if the buffer was less full than the length requested.
 func (cs *cpuState) ReadSoundBuffer(toFill []byte) []byte {
