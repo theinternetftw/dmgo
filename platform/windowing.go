@@ -36,9 +36,14 @@ type WindowState struct {
 	drawRequested bool
 }
 
+// CopyKeyCharArray writes the current ascii keystate to dest
+func (s *WindowState) CopyKeyCharArray(dest []bool) {
+	copy(dest, s.keyCharArray[:])
+}
+
 // CharIsDown returns the key state for that char
 func (s *WindowState) CharIsDown(c rune) bool {
-	if c < 256 {
+	if c >= 0 && c < 256 {
 		return s.keyCharArray[byte(c)]
 	}
 	return s.keyCharMap[c]
@@ -56,12 +61,14 @@ func (s *WindowState) updateKeyboardState(e key.Event) {
 	if setVal || e.Direction == key.DirRelease {
 		if e.Code < 256 {
 			s.keyCodeArray[byte(e.Code)] = setVal
+		} else {
+			s.keyCodeMap[e.Code] = setVal
 		}
-		s.keyCodeMap[e.Code] = setVal
-		if e.Rune < 256 {
+		if e.Rune >= 0 && e.Rune < 256 {
 			s.keyCharArray[byte(e.Rune)] = setVal
+		} else {
+			s.keyCharMap[e.Rune] = setVal
 		}
-		s.keyCharMap[e.Rune] = setVal
 	}
 }
 
