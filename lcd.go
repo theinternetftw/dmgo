@@ -182,6 +182,50 @@ func (cs *cpuState) updateStatIRQ() {
 	}
 }
 
+func (lcd *lcd) startHBlankAndDoRender(cs *cpuState) {
+	lcd.ReadingData = false
+	lcd.InHBlank = true
+	lcd.renderScanline()
+	cs.updateStatIRQ()
+
+	cs.runHblankDMA()
+}
+
+func (lcd *lcd) startReadData() {
+	lcd.parseOAMForScanline(lcd.LYReg)
+	lcd.AccessingOAM = false
+	lcd.ReadingData = true
+}
+
+func (lcd *lcd) handleHBlankEnd(cs *cpuState) {
+	lcd.CyclesSinceLYInc = 0
+	lcd.InHBlank = false
+	lcd.LYReg++
+
+	if lcd.LYReg == 144 && !lcd.InVBlank {
+		lcd.InVBlank = true
+		cs.VBlankIRQ = true
+
+		if lcd.PastFirstFrame {
+			lcd.FlipRequested = true
+		} else {
+			lcd.PastFirstFrame = true
+		}
+	}
+}
+
+func (lcd *lcd) handleVBlank(cs *cpuState) {
+	lcd.CyclesSinceVBlankStart++
+	if lcd.CyclesSinceVBlankStart == 456*10 {
+		lcd.LYReg = 0
+		lcd.InVBlank = false
+		lcd.CyclesSinceLYInc = 0
+		lcd.CyclesSinceVBlankStart = 0
+	}
+	// NOTE: TCAGBD claims the oam flag triggers this as well
+	cs.updateStatIRQ()
+}
+
 // FIXME: timings will have to change for double-speed mode
 // (maybe instead of counting cycles I'll count actual instruction time?)
 // (or maybe it'll always be dmg cycles and gbc will just produce half as many of them?
@@ -200,46 +244,18 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 		cs.updateStatIRQ()
 	case 80:
 		if lcd.AccessingOAM {
-			lcd.parseOAMForScanline(lcd.LYReg)
-			lcd.AccessingOAM = false
-			lcd.ReadingData = true
+			lcd.startReadData()
 		}
 	case 252:
 		if lcd.ReadingData {
-			lcd.ReadingData = false
-			lcd.InHBlank = true
-			lcd.renderScanline()
-			cs.updateStatIRQ()
-
-			cs.runHblankDMA()
+			lcd.startHBlankAndDoRender(cs)
 		}
 	case 456:
-		lcd.CyclesSinceLYInc = 0
-		lcd.InHBlank = false
-		lcd.LYReg++
-
-		if lcd.LYReg == 144 && !lcd.InVBlank {
-			lcd.InVBlank = true
-			cs.VBlankIRQ = true
-
-			if lcd.PastFirstFrame {
-				lcd.FlipRequested = true
-			} else {
-				lcd.PastFirstFrame = true
-			}
-		}
+		lcd.handleHBlankEnd(cs)
 	}
 
 	if lcd.InVBlank {
-		lcd.CyclesSinceVBlankStart++
-		if lcd.CyclesSinceVBlankStart == 456*10 {
-			lcd.LYReg = 0
-			lcd.InVBlank = false
-			lcd.CyclesSinceLYInc = 0
-			lcd.CyclesSinceVBlankStart = 0
-		}
-		// NOTE: TCAGBD claims the oam flag triggers this as well
-		cs.updateStatIRQ()
+		lcd.handleVBlank(cs)
 	}
 }
 
@@ -498,6 +514,7 @@ func (lcd *lcd) renderScanline() {
 			lcd.setFramebufferPixel(x, y, r, g, b)
 		}
 	}
+
 	if lcd.DisplayWindow && y >= lcd.WindowY {
 		winY := y - lcd.WindowY
 		winStartX := int(lcd.WindowX) - 7
