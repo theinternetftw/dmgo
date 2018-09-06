@@ -2,7 +2,7 @@ package platform
 
 import (
 	"fmt"
-	"time"
+
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -10,50 +10,12 @@ import (
 
 const (
 	whdrDone      = 0x01
-	whdrPrepared  = 0x02
-	whdrBeginloop = 0x04
-	whdrEndloop   = 0x08
-	whdrInqueue   = 0x10
-
 	mmSysErrNoErr = 0x00
 
 	waveFormatPCM = 0x0001
-
 	waveMapper = 0xffffffff
-
-	womOpen  = 0x3bb
-	womClose = 0x3bc
-	womDone  = 0x3bd
-	wimOpen  = 0x3be
-	wimClose = 0x3bf
-	wimDone  = 0x3c0
-
 	callbackNull = 0x00000
 )
-
-// AudioBuffer represents all you need to play sound.
-type AudioBuffer struct {
-	SamplesPerSecond uint32
-	BitsPerSample    uint32
-	ChannelCount     uint32
-	BlockSize        uint32
-	BlockCount       uint32
-
-	currentBlockIndex int
-
-	blocks       []soundBlock
-	hdrs         []wavehdr
-
-	hWaveOut     uintptr
-	closer chan bool
-	writer chan int
-}
-
-type soundBlock struct {
-	bytes []byte
-	used  int
-	busy bool
-}
 
 type wavehdr struct {
 	lpData          uintptr
@@ -76,6 +38,14 @@ type waveFormatEx struct {
 	cbSize          uint16
 }
 
+var (
+	waveOutPrepareHeader   *windows.Proc
+	waveOutUnprepareHeader *windows.Proc
+	waveOutWrite           *windows.Proc
+	waveOutOpen            *windows.Proc
+	waveOutClose           *windows.Proc
+)
+
 func init() {
 	winmm := windows.MustLoadDLL("Winmm.dll")
 	waveOutPrepareHeader = winmm.MustFindProc("waveOutPrepareHeader")
@@ -85,22 +55,28 @@ func init() {
 	waveOutUnprepareHeader = winmm.MustFindProc("waveOutUnprepareHeader")
 }
 
-// OpenAudioBuffer creates and returns a new playing buffer
-func OpenAudioBuffer(blockCount, blockSize, samplesPerSecond, bitsPerSample, channelCount uint32) (*AudioBuffer, error) {
-	ab := AudioBuffer{
-		SamplesPerSecond: samplesPerSecond,
-		BitsPerSample:    bitsPerSample,
-		ChannelCount:     channelCount,
-		BlockCount: blockCount,
-		BlockSize: blockSize,
-		writer: make(chan int, blockCount+1),
-		closer: make(chan bool),
-	}
-	ab.blocks = make([]soundBlock, blockCount)
-	ab.hdrs = make([]wavehdr, blockCount)
-	for i := range ab.blocks {
-		ab.blocks[i].bytes = make([]byte, blockSize)
-		ab.hdrs[i].dwFlags = whdrDone
+// NOTE: Right now this is pretty much designed around
+// the "submit blocks" style of audio api.
+//
+// Transition to circular buffer?
+//
+// For "submit blocks" underlying implementations
+// you'd just move the cursor forward however many
+// blocks are ready, copy that data and submit it.
+
+type audioOutput struct {
+	ab *AudioBuffer
+
+	hdrs []wavehdr
+	hWaveOut     uintptr
+}
+
+func (ao *audioOutput) init(ab *AudioBuffer) error {
+	ao.ab = ab
+
+	ao.hdrs = make([]wavehdr, len(ab.blocks))
+	for i := range ao.hdrs {
+		ao.hdrs[i].dwFlags = whdrDone
 	}
 
 	wfx := waveFormatEx{
@@ -113,145 +89,58 @@ func OpenAudioBuffer(blockCount, blockSize, samplesPerSecond, bitsPerSample, cha
 	}
 	wfx.nAvgBytesPerSec = uint32(wfx.nBlockAlign) * wfx.nSamplesPerSec
 
-	if r1, r2, lastErr := waveOutOpen.Call(
-		uintptr(unsafe.Pointer(&ab.hWaveOut)),
+	r1, r2, lastErr := waveOutOpen.Call(
+		uintptr(unsafe.Pointer(&ao.hWaveOut)),
 		waveMapper, uintptr(unsafe.Pointer(&wfx)),
-		uintptr(0), uintptr(0), callbackNull); r1 != mmSysErrNoErr {
-		return nil, fmt.Errorf("waveOutOpen error: %v, %v, %v", r1, r2, lastErr)
+		uintptr(0), uintptr(0), callbackNull)
+	if r1 != mmSysErrNoErr {
+		return fmt.Errorf("waveOutOpen error: %v, %v, %v", r1, r2, lastErr)
 	}
 
-	go ab.writerLoop()
-
-	return &ab, nil
+	return nil
 }
 
-// Close closes the buffer and releases all resourses.
-// It waits for all queued buffer writes to finish playing first.
-func (ab *AudioBuffer) Close() error {
-	for ab.BufferAvailable() / int(ab.BlockSize) < len(ab.blocks) {
-		time.Sleep(5)
-	}
-	for i := range ab.hdrs {
-		hdr := &ab.hdrs[i]
+func (ao *audioOutput) close() error {
+	for i := range ao.hdrs {
+		hdr := &ao.hdrs[i]
 		r1, r2, lastErr := waveOutUnprepareHeader.Call(
-			ab.hWaveOut, uintptr(unsafe.Pointer(hdr)), unsafe.Sizeof(*hdr))
+			ao.hWaveOut, uintptr(unsafe.Pointer(hdr)), unsafe.Sizeof(*hdr))
 		if r1 != 0 {
 			// NOTE: try to keep going instead?
 			return fmt.Errorf("waveOutUnprepareHeader error: %v, %v, %v", r1, r2, lastErr)
 		}
 	}
-	r1, r2, lastErr := waveOutClose.Call(ab.hWaveOut)
+	r1, r2, lastErr := waveOutClose.Call(ao.hWaveOut)
 	if r1 != 0 {
 		return fmt.Errorf("waveOutClose error: %v, %v, %v", r1, r2, lastErr)
 	}
-	ab.closer <- true
 	return nil
 }
 
-var (
-	waveOutPrepareHeader   *windows.Proc
-	waveOutUnprepareHeader *windows.Proc
-	waveOutWrite           *windows.Proc
-	waveOutOpen            *windows.Proc
-	waveOutClose           *windows.Proc
-)
-
-// TODO: timeout w/ err
-func (ab *AudioBuffer) waitOnFreeBlock() int {
-	for {
-		ab.updateFreeBlockInfo()
-		for i := range ab.blocks {
-			if !ab.blocks[i].busy {
-				return i
-			}
-		}
-		time.Sleep(1)
+func (ao *audioOutput) noLongerBusy(blockIndex int) bool {
+	hdr := &ao.hdrs[blockIndex]
+	if hdr.dwFlags&whdrDone != 0 {
+		hdr.dwFlags &^= whdrDone
+		return true
 	}
+	return false
 }
 
-func (ab *AudioBuffer) updateFreeBlockInfo() {
-	for i := range ab.blocks {
-		if ab.hdrs[i].dwFlags&whdrDone != 0 {
-			ab.blocks[i].busy = false
-			ab.hdrs[i].dwFlags &^= whdrDone
-		}
+func (ao *audioOutput) write(bytes []byte, i int) {
+	hdr := &ao.hdrs[i]
+
+	hdr.lpData = uintptr(unsafe.Pointer(&bytes[0]))
+	hdr.dwBufferLength = uint32(len(bytes))
+
+	r1, r2, lastErr := waveOutPrepareHeader.Call(
+		ao.hWaveOut, uintptr(unsafe.Pointer(hdr)), unsafe.Sizeof(*hdr))
+	if r1 != 0 {
+		fmt.Printf("waveOutPrepareHeader error: %v, %v, %v", r1, r2, lastErr)
 	}
-}
 
-// BufferAvailable returns the number of bytes available
-// to be filled in all the blocks not currently queued.
-func (ab *AudioBuffer) BufferAvailable() int {
-	available := 0
-	ab.updateFreeBlockInfo()
-	for i := range ab.hdrs {
-		if !ab.blocks[i].busy {
-			block := &ab.blocks[i]
-			if i == ab.currentBlockIndex {
-				available += int(ab.BlockSize) - block.used
-			} else {
-				available += int(ab.BlockSize)
-			}
-		}
-	}
-	return available
-}
-
-func (ab *AudioBuffer) BufferSize() int {
-	return int(ab.BlockCount * ab.BlockSize)
-}
-
-func (ab *AudioBuffer) writerLoop() {
-	for {
-		select {
-		case i := <-ab.writer:
-
-			block := &ab.blocks[i]
-			hdr := &ab.hdrs[i]
-
-			hdr.lpData = uintptr(unsafe.Pointer(&block.bytes[0]))
-			hdr.dwBufferLength = uint32(len(block.bytes))
-
-			r1, r2, lastErr := waveOutPrepareHeader.Call(
-				ab.hWaveOut, uintptr(unsafe.Pointer(hdr)), unsafe.Sizeof(*hdr))
-			if r1 != 0 {
-				fmt.Printf("waveOutPrepareHeader error: %v, %v, %v", r1, r2, lastErr)
-			}
-
-			r1, r2, lastErr = waveOutWrite.Call(
-				ab.hWaveOut, uintptr(unsafe.Pointer(hdr)), unsafe.Sizeof(*hdr))
-			if r1 != 0 {
-				fmt.Printf("waveOutWrite error: %v, %v, %v", r1, r2, lastErr)
-			}
-		case <-ab.closer:
-			return
-		}
-	}
-}
-
-func (ab *AudioBuffer) Write(data []byte) {
-	ab.updateFreeBlockInfo()
-	for len(data) > 0 {
-
-		if ab.blocks[ab.currentBlockIndex].busy {
-			ab.currentBlockIndex = ab.waitOnFreeBlock()
-			ab.blocks[ab.currentBlockIndex].used = 0
-		}
-
-		block := &ab.blocks[ab.currentBlockIndex]
-
-		spaceLeft := len(block.bytes) - block.used
-
-		if len(data) < spaceLeft {
-			copy(block.bytes[block.used:], data)
-			block.used += len(data)
-			break
-		}
-		copy(block.bytes[block.used:], data[:spaceLeft])
-		data = data[spaceLeft:]
-
-		block.busy = true
-
-		// the api calls sometimes takes a few ms, so let's not wait on them
-		ab.writer <- ab.currentBlockIndex
+	r1, r2, lastErr = waveOutWrite.Call(
+		ao.hWaveOut, uintptr(unsafe.Pointer(hdr)), unsafe.Sizeof(*hdr))
+	if r1 != 0 {
+		fmt.Printf("waveOutWrite error: %v, %v, %v", r1, r2, lastErr)
 	}
 }
