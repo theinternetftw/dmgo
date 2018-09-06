@@ -173,7 +173,7 @@ func startEmu(filename string, window *platform.WindowState, emu dmgo.Emulator) 
 			// hack to get better accuracy, could do
 			// a two stage wait with spin at the end,
 			// but that really adds to the cycles
-			fudge := 2000000*time.Nanosecond
+			fudge := 2*time.Millisecond
 
 			toWait := 16600000*time.Nanosecond - rDiff - fudge
 			if toWait > time.Duration(0) {
