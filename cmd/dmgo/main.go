@@ -3,7 +3,7 @@ package main
 import (
 	"github.com/theinternetftw/dmgo"
 	"github.com/theinternetftw/dmgo/profiling"
-	"github.com/theinternetftw/dmgo/platform"
+	"github.com/theinternetftw/glimmer"
 
 	"fmt"
 	"io/ioutil"
@@ -43,7 +43,7 @@ func main() {
 		windowTitle = cartInfo.Title + " - dmgo"
 	}
 
-	platform.InitDisplayLoop(windowTitle, 160*4, 144*4, 160, 144, func(sharedState *platform.WindowState) {
+	glimmer.InitDisplayLoop(windowTitle, 160*4, 144*4, 160, 144, func(sharedState *glimmer.WindowState) {
 		startEmu(cartFilename, sharedState, emu)
 	})
 }
@@ -60,7 +60,7 @@ func startHeadlessEmu(emu dmgo.Emulator) {
 	}
 }
 
-func startEmu(filename string, window *platform.WindowState, emu dmgo.Emulator) {
+func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 
 	// FIXME: settings are for debug right now
 	lastFlipTime := time.Now()
@@ -82,7 +82,7 @@ func startEmu(filename string, window *platform.WindowState, emu dmgo.Emulator) 
 		}
 	}
 
-	audio, err := platform.OpenAudioBuffer(4, 4096, 44100, 16, 2)
+	audio, err := glimmer.OpenAudioBuffer(4, 4096, 44100, 16, 2)
 	workingAudioBuffer := make([]byte, audio.BufferSize())
 	dieIf(err)
 
