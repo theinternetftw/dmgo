@@ -77,8 +77,9 @@ func startEmu(filename string, window *platform.WindowState, emu dmgo.Emulator) 
 		err = emu.SetCartRAM(saveFile)
 		if err != nil {
 			fmt.Println("error loading savefile,", err)
+		} else {
+			fmt.Println("loaded save!")
 		}
-		fmt.Println("loaded save!")
 	}
 
 	audio, err := platform.OpenAudioBuffer(4, 4096, 44100, 16, 2)

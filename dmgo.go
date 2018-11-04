@@ -426,7 +426,6 @@ func NewEmulator(cart []byte) Emulator {
 }
 
 // Input covers all outside info sent to the Emulator
-// TODO: add dt?
 type Input struct {
 	Joypad Joypad
 }
