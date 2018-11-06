@@ -82,7 +82,7 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 		}
 	}
 
-	audio, err := glimmer.OpenAudioBuffer(4, 4096, 44100, 16, 2)
+	audio, err := glimmer.OpenAudioBuffer(3, 4096, 44100, 16, 2)
 	workingAudioBuffer := make([]byte, audio.BufferSize())
 	dieIf(err)
 
