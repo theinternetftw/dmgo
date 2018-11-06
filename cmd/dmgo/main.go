@@ -50,7 +50,7 @@ func main() {
 
 func startHeadlessEmu(emu dmgo.Emulator) {
 	// FIXME: settings are for debug right now
-	ticker := time.NewTicker(17*time.Millisecond)
+	ticker := time.NewTicker(17 * time.Millisecond)
 
 	for {
 		emu.Step()
@@ -90,64 +90,70 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 	maxFDiff := time.Duration(0)
 	frameCount := 0
 
-	frametimeGoal := 1.0/60.0
+	frametimeGoal := 1.0 / 60.0
 
 	snapshotMode := 'x'
 
 	newInput := dmgo.Input{}
 
+	count := 0
+
 	for {
 
-		now := time.Now()
+		count++
+		if count == 100 {
+			count = 0
+			now := time.Now()
 
-		inputDiff := now.Sub(lastInputPollTime)
+			inputDiff := now.Sub(lastInputPollTime)
 
-		if inputDiff > 8*time.Millisecond {
-			window.Mutex.Lock()
-			newInput = dmgo.Input {
-				Joypad: dmgo.Joypad {
-					Sel:  window.CharIsDown('t'), Start: window.CharIsDown('y'),
-					Up:   window.CharIsDown('w'), Down:  window.CharIsDown('s'),
-					Left: window.CharIsDown('a'), Right: window.CharIsDown('d'),
-					A:    window.CharIsDown('k'), B:     window.CharIsDown('j'),
-				},
-			}
-			numDown := 'x'
-			for r := '0'; r <= '9'; r++ {
-				if window.CharIsDown(r) {
-					numDown = r
-					break
+			if inputDiff > 8*time.Millisecond {
+				window.Mutex.Lock()
+				newInput = dmgo.Input{
+					Joypad: dmgo.Joypad{
+						Sel: window.CharIsDown('t'), Start: window.CharIsDown('y'),
+						Up: window.CharIsDown('w'), Down: window.CharIsDown('s'),
+						Left: window.CharIsDown('a'), Right: window.CharIsDown('d'),
+						A: window.CharIsDown('k'), B: window.CharIsDown('j'),
+					},
 				}
-			}
-			if window.CharIsDown('m') {
-				snapshotMode = 'm'
-			} else if window.CharIsDown('l') {
-				snapshotMode = 'l'
-			}
-			window.Mutex.Unlock()
-
-			if numDown > '0' && numDown <= '9' {
-				snapFilename := snapshotPrefix+string(numDown)
-				if snapshotMode == 'm' {
-					snapshotMode = 'x'
-					snapshot := emu.MakeSnapshot()
-					ioutil.WriteFile(snapFilename, snapshot, os.FileMode(0644))
-				} else if snapshotMode == 'l' {
-					snapshotMode = 'x'
-					snapBytes, err := ioutil.ReadFile(snapFilename)
-					if err != nil {
-						fmt.Println("failed to load snapshot:", err)
-						continue
+				numDown := 'x'
+				for r := '0'; r <= '9'; r++ {
+					if window.CharIsDown(r) {
+						numDown = r
+						break
 					}
-					newEmu, err := emu.LoadSnapshot(snapBytes)
-					if err != nil {
-						fmt.Println("failed to load snapshot:", err)
-						continue
-					}
-					emu = newEmu
 				}
+				if window.CharIsDown('m') {
+					snapshotMode = 'm'
+				} else if window.CharIsDown('l') {
+					snapshotMode = 'l'
+				}
+				window.Mutex.Unlock()
+
+				if numDown > '0' && numDown <= '9' {
+					snapFilename := snapshotPrefix + string(numDown)
+					if snapshotMode == 'm' {
+						snapshotMode = 'x'
+						snapshot := emu.MakeSnapshot()
+						ioutil.WriteFile(snapFilename, snapshot, os.FileMode(0644))
+					} else if snapshotMode == 'l' {
+						snapshotMode = 'x'
+						snapBytes, err := ioutil.ReadFile(snapFilename)
+						if err != nil {
+							fmt.Println("failed to load snapshot:", err)
+							continue
+						}
+						newEmu, err := emu.LoadSnapshot(snapBytes)
+						if err != nil {
+							fmt.Println("failed to load snapshot:", err)
+							continue
+						}
+						emu = newEmu
+					}
+				}
+				lastInputPollTime = time.Now()
 			}
-			lastInputPollTime = time.Now()
 		}
 
 		emu.UpdateInput(newInput)
@@ -157,7 +163,7 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 
 		// TODO: set this up so it's useful, but doesn't spam
 		// if bufferAvailable == audio.BufferSize() {
-			// fmt.Println("Platform AudioBuffer empty!")
+		// fmt.Println("Platform AudioBuffer empty!")
 		// }
 
 		audioBufSlice := workingAudioBuffer[:bufferAvailable]
@@ -174,7 +180,7 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 			// hack to get better accuracy, could do
 			// a two stage wait with spin at the end,
 			// but that really adds to the cycles
-			fudge := 2*time.Millisecond
+			fudge := 2 * time.Millisecond
 
 			toWait := 16600000*time.Nanosecond - rDiff - fudge
 			if toWait > time.Duration(0) {
@@ -193,7 +199,7 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 			}
 
 			frameCount++
-			if frameCount & 0xff == 0 {
+			if frameCount&0xff == 0 {
 				fmt.Printf("maxRTime %.4f, maxFTime %.4f\n", maxRDiff.Seconds(), maxFDiff.Seconds())
 				maxRDiff = 0
 				maxFDiff = 0
@@ -202,12 +208,12 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 				}
 			}
 
-		}
-		if time.Now().Sub(lastSaveTime) > 5*time.Second {
-			ram := emu.GetCartRAM()
-			if len(ram) > 0 {
-				ioutil.WriteFile(saveFilename, ram, os.FileMode(0644))
-				lastSaveTime = time.Now()
+			if time.Now().Sub(lastSaveTime) > 5*time.Second {
+				ram := emu.GetCartRAM()
+				if len(ram) > 0 {
+					ioutil.WriteFile(saveFilename, ram, os.FileMode(0644))
+					lastSaveTime = time.Now()
+				}
 			}
 		}
 	}
