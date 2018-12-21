@@ -280,8 +280,7 @@ func (gp *gbsPlayer) Step() {
 }
 
 func (gp *gbsPlayer) ReadSoundBuffer(toFill []byte) []byte {
-	buf := gp.APU.buffer.read(toFill)
-	return buf
+	return gp.APU.readSoundBuffer(toFill)
 }
 
 func (gp *gbsPlayer) Framebuffer() []byte {

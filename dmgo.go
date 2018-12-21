@@ -434,7 +434,7 @@ type Input struct {
 // A pre-sized buffer must be provided, which is returned resized
 // if the buffer was less full than the length requested.
 func (cs *cpuState) ReadSoundBuffer(toFill []byte) []byte {
-	return cs.APU.buffer.read(toFill)
+	return cs.APU.readSoundBuffer(toFill)
 }
 
 // GetCartRAM returns the current state of external RAM

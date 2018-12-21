@@ -1,8 +1,14 @@
 package dmgo
 
+import "fmt"
+
 type apu struct {
 	// not marshalled in snapshot
 	buffer apuCircleBuf
+
+	LeftSample  float64
+	RightSample float64
+	NumSamples  float64
 
 	// everything else marshalled
 
@@ -32,15 +38,11 @@ func (apu *apu) init() {
 }
 
 const (
-	amountGenerateAhead = 64 * 4
-	samplesPerSecond    = 44100
-	timePerSample       = 1.0 / samplesPerSecond
-
-	clocksPerSecond = 4194304 / 2
-	clocksPerSample = clocksPerSecond / 44100
+	apuCircleBufSize = 16 * 512 * 4 // must be power of two
+	samplesPerSecond = 44100
+	clocksPerSecond  = 4194304
+	clocksPerSample  = clocksPerSecond / samplesPerSecond
 )
-
-const apuCircleBufSize = amountGenerateAhead
 
 // NOTE: size must be power of 2
 type apuCircleBuf struct {
@@ -76,6 +78,53 @@ func (c *apuCircleBuf) mask(i uint) uint { return i & (uint(len(c.buf)) - 1) }
 func (c *apuCircleBuf) size() uint       { return c.writeIndex - c.readIndex }
 func (c *apuCircleBuf) full() bool       { return c.size() == uint(len(c.buf)) }
 
+func (apu *apu) readSoundBuffer(toFill []byte) []byte {
+	if int(apu.buffer.size()) < len(toFill) {
+		fmt.Println("audSize:", apu.buffer.size(), "len(toFill)", len(toFill), "buf[0]", apu.buffer.buf[0])
+	}
+	for int(apu.buffer.size()) < len(toFill) {
+		// stretch sound to fill buffer to avoid click
+		apu.genSample()
+	}
+	return apu.buffer.read(toFill)
+}
+
+func (apu *apu) genSample() {
+	apu.runFreqCycle()
+
+	leftSam, rightSam := 0.0, 0.0
+	if apu.AllSoundsOn {
+		left0, right0 := apu.Sounds[0].getSample()
+		left1, right1 := apu.Sounds[1].getSample()
+		left2, right2 := apu.Sounds[2].getSample()
+		left3, right3 := apu.Sounds[3].getSample()
+		leftSam += left0 + left1 + left2 + left3
+		rightSam += right0 + right1 + right2 + right3
+		leftSam *= 0.25 * 0.125 * float64(apu.LeftSpeakerVolume+1)
+		rightSam *= 0.25 * 0.125 * float64(apu.RightSpeakerVolume+1)
+	}
+	apu.LeftSample += leftSam
+	apu.RightSample += rightSam
+	apu.NumSamples++
+
+	if apu.NumSamples >= clocksPerSample {
+		if !apu.buffer.full() {
+			left := float64(apu.LeftSample) / float64(apu.NumSamples)
+			right := float64(apu.RightSample) / float64(apu.NumSamples)
+			iSampleL, iSampleR := int16(left*32767.0), int16(right*32767.0)
+			apu.buffer.write([]byte{
+				byte(iSampleL & 0xff),
+				byte(iSampleL >> 8),
+				byte(iSampleR & 0xff),
+				byte(iSampleR >> 8),
+			})
+		}
+		apu.LeftSample = 0
+		apu.RightSample = 0
+		apu.NumSamples = 0
+	}
+}
+
 func (apu *apu) runCycle(cs *cpuState) {
 
 	apu.LengthTimeCounter++
@@ -90,31 +139,7 @@ func (apu *apu) runCycle(cs *cpuState) {
 		apu.EnvTimeCounter = 0
 	}
 
-	if !apu.buffer.full() {
-
-		apu.runFreqCycle()
-
-		left, right := 0.0, 0.0
-		if apu.AllSoundsOn {
-
-			left0, right0 := apu.Sounds[0].getSample()
-			left1, right1 := apu.Sounds[1].getSample()
-			left2, right2 := apu.Sounds[2].getSample()
-			left3, right3 := apu.Sounds[3].getSample()
-			left = (left0 + left1 + left2 + left3) * 0.25
-			right = (right0 + right1 + right2 + right3) * 0.25
-			left = left * 0.125 * float64(apu.LeftSpeakerVolume+1)
-			right = right * 0.125 * float64(apu.RightSpeakerVolume+1)
-		}
-
-		sampleL, sampleR := int16(left*32767.0), int16(right*32767.0)
-		apu.buffer.write([]byte{
-			byte(sampleL & 0xff),
-			byte(sampleL >> 8),
-			byte(sampleR & 0xff),
-			byte(sampleR >> 8),
-		})
-	}
+	apu.genSample()
 
 	apu.SweepTimeCounter++
 	if apu.SweepTimeCounter >= 32768 {
@@ -175,9 +200,9 @@ type sound struct {
 	CurrentEnvelope   byte
 	EnvelopeCounter   byte
 
-	T       float64
-	Freq    float64
-	FreqReg uint16
+	T           uint32
+	FreqDivider uint32
+	FreqReg     uint16
 
 	SweepCounter   byte
 	SweepDirection sweepDir
@@ -186,7 +211,9 @@ type sound struct {
 
 	LengthData    uint16
 	CurrentLength uint16
-	WaveDuty      byte
+
+	WaveDuty           byte
+	WaveDutySeqCounter byte
 
 	WaveOutLvl        byte // sound[2] only
 	WavePatternRAM    [16]byte
@@ -205,14 +232,16 @@ type sound struct {
 
 func (sound *sound) runFreqCycle() {
 
-	sound.T += sound.Freq * timePerSample
+	sound.T++
 
-	for sound.T > 1.0 {
-		sound.T -= 1.0
-		if sound.SoundType == waveSoundType {
+	if sound.T >= sound.FreqDivider {
+		sound.T = 0
+		switch sound.SoundType {
+		case squareSoundType:
+			sound.WaveDutySeqCounter = (sound.WaveDutySeqCounter + 1) & 7
+		case waveSoundType:
 			sound.WavePatternCursor = (sound.WavePatternCursor + 1) & 31
-		}
-		if sound.SoundType == noiseSoundType {
+		case noiseSoundType:
 			sound.updatePolyCounter()
 		}
 	}
@@ -232,14 +261,6 @@ func (sound *sound) updatePolyCounter() {
 		newSample = 1
 	} else {
 		newSample = -1
-	}
-	if sound.Poly7BitMode && sound.Freq > 22050 {
-		// HACK: high freq 7bit doesn't sound right without one hell
-		// of a low-pass filter. Even this is a bit wrong (freq sounds
-		// low). Doing this for now/until I do something more drastic, e.g.
-		// switching from per-sample sound generation to per-clock
-		// generation with some final interpolation step for everything.
-		newSample = sound.PolySample + 0.2*(newSample-sound.PolySample)
 	}
 	sound.PolySample = newSample
 }
@@ -311,19 +332,17 @@ func (sound *sound) runEnvCycle() {
 	}
 }
 
+var dutyCycleTable = [4][8]byte{
+	{0, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 0, 0, 1},
+	{1, 0, 0, 0, 0, 1, 1, 1},
+	{0, 1, 1, 1, 1, 1, 1, 0},
+}
+
 func (sound *sound) inDutyCycle() bool {
-	switch sound.WaveDuty {
-	case 0:
-		return sound.T > 0.875
-	case 1:
-		return sound.T < 0.125 || sound.T > 0.875
-	case 2:
-		return sound.T < 0.125 || sound.T > 0.625
-	case 3:
-		return sound.T > 0.125 && sound.T < 0.875
-	default:
-		panic("unknown wave duty")
-	}
+	sel := sound.WaveDuty
+	counter := sound.WaveDutySeqCounter
+	return dutyCycleTable[sel][counter] == 1
 }
 
 func (sound *sound) getSample() (float64, float64) {
@@ -353,8 +372,10 @@ func (sound *sound) getSample() (float64, float64) {
 				}
 			}
 		case noiseSoundType:
-			vol := float64(sound.CurrentEnvelope) / 15.0
-			sample = vol * sound.PolySample
+			if sound.FreqDivider > 0 {
+				vol := float64(sound.CurrentEnvelope) / 15.0
+				sample = vol * sound.PolySample
+			}
 		}
 	}
 
@@ -371,18 +392,19 @@ func (sound *sound) getSample() (float64, float64) {
 func (sound *sound) updateFreq() {
 	switch sound.SoundType {
 	case waveSoundType:
-		sound.Freq = 32 * 65536.0 / float64(2048-sound.FreqReg)
+		sound.FreqDivider = 2 * (2048 - uint32(sound.FreqReg))
 	case noiseSoundType:
-		divisor := 8.0
+		divider := uint32(8)
 		if sound.PolyDivisorBase > 0 {
-			if sound.PolyDivisorShift >= 14 {
-				sound.Freq = 0.0 // clock stops on invalid shift value
+			if sound.PolyDivisorShift < 14 {
+				divider = uint32(sound.PolyDivisorBase) << uint32(sound.PolyDivisorShift+4)
+			} else {
+				divider = 0 // invalid shift value - disable audio
 			}
-			divisor = float64(uint(sound.PolyDivisorBase) << uint(sound.PolyDivisorShift+4))
 		}
-		sound.Freq = 4194304.0 / divisor
+		sound.FreqDivider = divider
 	case squareSoundType:
-		sound.Freq = 131072.0 / float64(2048-sound.FreqReg)
+		sound.FreqDivider = 4 * (2048 - uint32(sound.FreqReg)) // 32 mul for freq, div by 8 for duty seq
 	default:
 		panic("unexpected sound type")
 	}
