@@ -6,9 +6,9 @@ type apu struct {
 	// not marshalled in snapshot
 	buffer apuCircleBuf
 
-	LeftSample  float64
-	RightSample float64
-	NumSamples  float64
+	LeftSample  uint32
+	RightSample uint32
+	NumSamples  uint32
 
 	// everything else marshalled
 
@@ -92,16 +92,17 @@ func (apu *apu) readSoundBuffer(toFill []byte) []byte {
 func (apu *apu) genSample() {
 	apu.runFreqCycle()
 
-	leftSam, rightSam := 0.0, 0.0
+	leftSam, rightSam := uint32(0), uint32(0)
 	if apu.AllSoundsOn {
 		left0, right0 := apu.Sounds[0].getSample()
 		left1, right1 := apu.Sounds[1].getSample()
 		left2, right2 := apu.Sounds[2].getSample()
 		left3, right3 := apu.Sounds[3].getSample()
-		leftSam += left0 + left1 + left2 + left3
-		rightSam += right0 + right1 + right2 + right3
-		leftSam *= 0.25 * 0.125 * float64(apu.LeftSpeakerVolume+1)
-		rightSam *= 0.25 * 0.125 * float64(apu.RightSpeakerVolume+1)
+		leftSam += uint32(left0 + left1 + left2 + left3)
+		rightSam += uint32(right0 + right1 + right2 + right3)
+		leftSam *= uint32(apu.LeftSpeakerVolume + 1)
+		rightSam *= uint32(apu.RightSpeakerVolume + 1)
+		// will need to div by 4*8*15
 	}
 	apu.LeftSample += leftSam
 	apu.RightSample += rightSam
@@ -111,6 +112,8 @@ func (apu *apu) genSample() {
 		if !apu.buffer.full() {
 			left := float64(apu.LeftSample) / float64(apu.NumSamples)
 			right := float64(apu.RightSample) / float64(apu.NumSamples)
+			left /= 4 * 8 * 15
+			right /= 4 * 8 * 15
 			iSampleL, iSampleR := int16(left*32767.0), int16(right*32767.0)
 			apu.buffer.write([]byte{
 				byte(iSampleL & 0xff),
@@ -224,7 +227,7 @@ type sound struct {
 	PolyDivisorShift byte
 	PolyDivisorBase  byte
 	Poly7BitMode     bool
-	PolySample       float64
+	PolySample       byte
 
 	PlaysContinuously bool
 	RestartRequested  bool
@@ -256,13 +259,11 @@ func (sound *sound) updatePolyCounter() {
 		sound.PolyFeedbackReg &^= 1 << 6
 		sound.PolyFeedbackReg |= newHigh << 6
 	}
-	var newSample float64
 	if sound.PolyFeedbackReg&0x01 == 0 {
-		newSample = 1
+		sound.PolySample = 1
 	} else {
-		newSample = -1
+		sound.PolySample = 0
 	}
-	sound.PolySample = newSample
 }
 
 func (sound *sound) runLengthCycle() {
@@ -345,41 +346,35 @@ func (sound *sound) inDutyCycle() bool {
 	return dutyCycleTable[sel][counter] == 1
 }
 
-func (sound *sound) getSample() (float64, float64) {
-	sample := 0.0
+func (sound *sound) getSample() (byte, byte) {
+	sample := byte(0)
 	if sound.On {
 		switch sound.SoundType {
 		case squareSoundType:
-			vol := float64(sound.CurrentEnvelope) / 15.0
+			vol := sound.CurrentEnvelope
 			if sound.inDutyCycle() {
 				sample = vol
 			} else {
-				sample = -vol
+				sample = 0
 			}
 		case waveSoundType:
 			if sound.WaveOutLvl > 0 {
 				sampleByte := sound.WavePatternRAM[sound.WavePatternCursor/2]
-				var sampleBits byte
 				if sound.WavePatternCursor&1 == 0 {
-					sampleBits = sampleByte >> 4
+					sample = sampleByte >> 4
 				} else {
-					sampleBits = sampleByte & 0x0f
-				}
-				unbiasedSample := float64(sampleBits) - sound.WavePatternBias
-				sample = (2.0 * unbiasedSample / 15.0) - 1.0
-				if sound.WaveOutLvl > 1 {
-					sample /= float64(2 * (sound.WaveOutLvl - 1))
+					sample = sampleByte & 0x0f
 				}
 			}
 		case noiseSoundType:
 			if sound.FreqDivider > 0 {
-				vol := float64(sound.CurrentEnvelope) / 15.0
+				vol := sound.CurrentEnvelope
 				sample = vol * sound.PolySample
 			}
 		}
 	}
 
-	left, right := 0.0, 0.0
+	left, right := byte(0), byte(0)
 	if sound.LeftSpeakerOn {
 		left = sample
 	}
@@ -412,26 +407,6 @@ func (sound *sound) updateFreq() {
 
 func (sound *sound) writeWaveOnOffReg(val byte) {
 	sound.On = val&0x80 != 0
-	if sound.On {
-		sound.updateWavePatternBias()
-	}
-}
-
-func (sound *sound) updateWavePatternBias() {
-	max, min := byte(0), byte(0)
-	update := func(nib byte) {
-		if nib < min {
-			min = nib
-		}
-		if nib > max {
-			max = nib
-		}
-	}
-	for _, b := range sound.WavePatternRAM {
-		update(b >> 4)
-		update(b & 0x0f)
-	}
-	sound.WavePatternBias = float64(max-min)/2.0 - 7.5
 }
 
 func (sound *sound) writeWavePatternValue(addr uint16, val byte) {
