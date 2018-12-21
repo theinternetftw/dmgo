@@ -1,7 +1,5 @@
 package dmgo
 
-import "fmt"
-
 type apu struct {
 	// not marshalled in snapshot
 	buffer apuCircleBuf
@@ -9,6 +7,11 @@ type apu struct {
 	LeftSample  uint32
 	RightSample uint32
 	NumSamples  uint32
+
+	LastLeft           float64
+	LastRight          float64
+	LastCorrectedLeft  float64
+	LastCorrectedRight float64
 
 	// everything else marshalled
 
@@ -80,7 +83,7 @@ func (c *apuCircleBuf) full() bool       { return c.size() == uint(len(c.buf)) }
 
 func (apu *apu) readSoundBuffer(toFill []byte) []byte {
 	if int(apu.buffer.size()) < len(toFill) {
-		fmt.Println("audSize:", apu.buffer.size(), "len(toFill)", len(toFill), "buf[0]", apu.buffer.buf[0])
+		// fmt.Println("audSize:", apu.buffer.size(), "len(toFill)", len(toFill), "buf[0]", apu.buffer.buf[0])
 	}
 	for int(apu.buffer.size()) < len(toFill) {
 		// stretch sound to fill buffer to avoid click
@@ -94,6 +97,12 @@ func (apu *apu) genSample() {
 
 	leftSam, rightSam := uint32(0), uint32(0)
 	if apu.AllSoundsOn {
+
+		// IMPORTANT TODO:
+		// probably have to reintroduce wave bias fix
+		// from float-land. should probably center at
+		// 7.5 and let the end dc blocker get it around zero?
+
 		left0, right0 := apu.Sounds[0].getSample()
 		left1, right1 := apu.Sounds[1].getSample()
 		left2, right2 := apu.Sounds[2].getSample()
@@ -109,19 +118,30 @@ func (apu *apu) genSample() {
 	apu.NumSamples++
 
 	if apu.NumSamples >= clocksPerSample {
-		if !apu.buffer.full() {
-			left := float64(apu.LeftSample) / float64(apu.NumSamples)
-			right := float64(apu.RightSample) / float64(apu.NumSamples)
-			left /= 4 * 8 * 15
-			right /= 4 * 8 * 15
-			iSampleL, iSampleR := int16(left*32767.0), int16(right*32767.0)
-			apu.buffer.write([]byte{
-				byte(iSampleL & 0xff),
-				byte(iSampleL >> 8),
-				byte(iSampleR & 0xff),
-				byte(iSampleR >> 8),
-			})
-		}
+		left := float64(apu.LeftSample) / float64(apu.NumSamples)
+		right := float64(apu.RightSample) / float64(apu.NumSamples)
+		left /= 4 * 8 * 15
+		right /= 4 * 8 * 15
+
+		// dc blocker to center waveform
+		correctedLeft := left - apu.LastLeft + 0.995*apu.LastCorrectedLeft
+		apu.LastCorrectedLeft = correctedLeft
+		apu.LastLeft = left
+		left = correctedLeft
+
+		correctedRight := right - apu.LastRight + 0.995*apu.LastCorrectedRight
+		apu.LastCorrectedRight = correctedRight
+		apu.LastRight = right
+		right = correctedRight
+
+		iSampleL, iSampleR := int16(left*32767.0), int16(right*32767.0)
+		apu.buffer.write([]byte{
+			byte(iSampleL & 0xff),
+			byte(iSampleL >> 8),
+			byte(iSampleR & 0xff),
+			byte(iSampleR >> 8),
+		})
+
 		apu.LeftSample = 0
 		apu.RightSample = 0
 		apu.NumSamples = 0
@@ -142,7 +162,9 @@ func (apu *apu) runCycle(cs *cpuState) {
 		apu.EnvTimeCounter = 0
 	}
 
-	apu.genSample()
+	if !apu.buffer.full() {
+		apu.genSample()
+	}
 
 	apu.SweepTimeCounter++
 	if apu.SweepTimeCounter >= 32768 {
