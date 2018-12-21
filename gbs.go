@@ -19,7 +19,12 @@ type gbsPlayer struct {
 	PauseStartTime   time.Time
 	DbgTerminal      dbgTerminal
 	DbgScreen        [160 * 144 * 4]byte
+
+	devMode bool
 }
+
+func (gp *gbsPlayer) SetDevMode(b bool) { gp.devMode = b }
+func (gp *gbsPlayer) InDevMode() bool   { return gp.devMode }
 
 func (gp *gbsPlayer) GetCartRAM() []byte { return nil }
 func (gp *gbsPlayer) SetCartRAM(ram []byte) error {
@@ -63,7 +68,7 @@ func readStructLE(structBytes []byte, iface interface{}) error {
 }
 
 // NewGbsPlayer creates an gbsPlayer session
-func NewGbsPlayer(gbs []byte) Emulator {
+func NewGbsPlayer(gbs []byte, devMode bool) Emulator {
 
 	var hdr gbsHeader
 	var data []byte
@@ -88,18 +93,19 @@ func NewGbsPlayer(gbs []byte) Emulator {
 				InternalRAMBankNumber: 1,
 			},
 		},
-		Hdr: hdr,
+		devMode: devMode,
+		Hdr:     hdr,
 	}
 	gp.DbgTerminal = dbgTerminal{w: 160, h: 144, screen: gp.DbgScreen[:]}
 
-	fmt.Println("uses timer:", gp.usesTimer())
+	gp.devPrintln("uses timer:", gp.usesTimer())
 
 	timerMod := float64(gp.Hdr.TimerModulo)
 
 	if gp.Hdr.TimerControl&0x80 > 0 {
 		// correct all timers for our dmg timer speeds
 		timerMod /= 2
-		fmt.Println("GBC Speed Requested")
+		gp.devPrintln("GBC Speed Requested")
 	}
 
 	if gp.usesTimer() {
@@ -118,6 +124,12 @@ func NewGbsPlayer(gbs []byte) Emulator {
 	gp.updateScreen()
 
 	return &gp
+}
+
+func (gp *gbsPlayer) devPrintln(s ...interface{}) {
+	if gp.InDevMode() {
+		fmt.Println(s...)
+	}
 }
 
 func (gp *gbsPlayer) usesTimer() bool {

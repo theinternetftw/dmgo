@@ -23,29 +23,39 @@ func main() {
 
 	assert(len(cartBytes) > 3, "cannot parse, file is too small")
 
+	// TODO: config file instead
+	devMode := fileExists("devmode")
+
 	var emu dmgo.Emulator
 	windowTitle := "dmgo"
 
 	fileMagic := string(cartBytes[:3])
 	if fileMagic == "GBS" {
 		// nsf(e) file
-		emu = dmgo.NewGbsPlayer(cartBytes)
+		emu = dmgo.NewGbsPlayer(cartBytes, devMode)
 	} else {
 		// rom file
 
 		cartInfo := dmgo.ParseCartInfo(cartBytes)
-		fmt.Printf("%q\n", cartInfo.Title)
-		fmt.Printf("Cart type: %d\n", cartInfo.CartridgeType)
-		fmt.Printf("Cart RAM size: %d\n", cartInfo.GetRAMSize())
-		fmt.Printf("Cart ROM size: %d\n", cartInfo.GetROMSize())
+		if devMode {
+			fmt.Printf("Game title: %q\n", cartInfo.Title)
+			fmt.Printf("Cart type: %d\n", cartInfo.CartridgeType)
+			fmt.Printf("Cart RAM size: %d\n", cartInfo.GetRAMSize())
+			fmt.Printf("Cart ROM size: %d\n", cartInfo.GetROMSize())
+		}
 
-		emu = dmgo.NewEmulator(cartBytes)
-		windowTitle = cartInfo.Title + " - dmgo"
+		emu = dmgo.NewEmulator(cartBytes, devMode)
+		windowTitle = fmt.Sprintf("dmgo - %q", cartInfo.Title)
 	}
 
 	glimmer.InitDisplayLoop(windowTitle, 160*4, 144*4, 160, 144, func(sharedState *glimmer.WindowState) {
 		startEmu(cartFilename, sharedState, emu)
 	})
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return !os.IsNotExist(err)
 }
 
 func startHeadlessEmu(emu dmgo.Emulator) {
@@ -200,7 +210,9 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 
 			frameCount++
 			if frameCount&0xff == 0 {
-				fmt.Printf("maxRTime %.4f, maxFTime %.4f\n", maxRDiff.Seconds(), maxFDiff.Seconds())
+				if emu.InDevMode() {
+					fmt.Printf("maxRTime %.4f, maxFTime %.4f\n", maxRDiff.Seconds(), maxFDiff.Seconds())
+				}
 				maxRDiff = 0
 				maxFDiff = 0
 				if frametimeGoal == 0 {

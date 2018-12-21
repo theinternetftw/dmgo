@@ -9,7 +9,7 @@ import (
 	"io/ioutil"
 )
 
-const currentSnapshotVersion = 2
+const currentSnapshotVersion = 3
 
 const infoString = "dmgo snapshot"
 
@@ -75,10 +75,10 @@ var snapshotConverters = map[int]func(map[string]interface{}) error{
 				copy(newVRAM[:], vram)
 				lcd["VideoRAM"] = newVRAM
 			} else {
-				return fmt.Errorf("could not convert version one snapshot: %v", err)
+				return fmt.Errorf("could not convert old v1 snapshot: %v", err)
 			}
 		} else {
-			return fmt.Errorf("could not convert version one snapshot: %v", err)
+			return fmt.Errorf("could not convert old v1 snapshot: %v", err)
 		}
 
 		if ramStr, mem, err := followJSON(state, "Mem", "InternalRAM"); err == nil {
@@ -88,12 +88,33 @@ var snapshotConverters = map[int]func(map[string]interface{}) error{
 				mem["InternalRAM"] = newRAM
 				mem["InternalRAMBankNumber"] = 1
 			} else {
-				return fmt.Errorf("could not convert version one snapshot: %v", err)
+				return fmt.Errorf("could not convert old v1 snapshot: %v", err)
 			}
 		} else {
-			return fmt.Errorf("could not convert version one snapshot: %v", err)
+			return fmt.Errorf("could not convert old v1 snapshot: %v", err)
 		}
 
+		return nil
+	},
+
+	// added 2018-12-21
+	2: func(state map[string]interface{}) error {
+		if sounds, _, err := followJSON(state, "APU", "Sounds"); err == nil {
+			if soundsArr, ok := sounds.([]interface{}); ok {
+				for _, sound := range soundsArr {
+					if soundMap, ok := sound.(map[string]interface{}); ok {
+						soundMap["T"] = 0
+						soundMap["PolySample"] = 0
+					} else {
+						return fmt.Errorf("could not convert old v2 snapshot: Sound var is of unknown type")
+					}
+				}
+			} else {
+				return fmt.Errorf("could not convert old v2 snapshot: Sounds var is of unknown type")
+			}
+		} else {
+			return fmt.Errorf("could not convert old v2 snapshot: %v", err)
+		}
 		return nil
 	},
 }
@@ -106,8 +127,8 @@ func (cs *cpuState) convertOldSnapshot(snap *snapshot) (*cpuState, error) {
 	}
 
 	for i := snap.Version; i < currentSnapshotVersion; i++ {
-		if converterFn, ok := snapshotConverters[snap.Version]; !ok {
-			return nil, fmt.Errorf("unknown snapshot version: %v", snap.Version)
+		if converterFn, ok := snapshotConverters[i]; !ok {
+			return nil, fmt.Errorf("could not find converter for snapshot version: %v", i)
 		} else if err := converterFn(state); err != nil {
 			return nil, fmt.Errorf("error converting snapshot version %v: %v", i, err)
 		}

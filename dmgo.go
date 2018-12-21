@@ -61,7 +61,12 @@ type cpuState struct {
 
 	Steps  uint
 	Cycles uint
+
+	devMode bool
 }
+
+func (cs *cpuState) SetDevMode(b bool) { cs.devMode = b }
+func (cs *cpuState) InDevMode() bool   { return cs.devMode }
 
 func (cs *cpuState) runSerialCycle() {
 	if !cs.SerialTransferStartFlag {
@@ -255,7 +260,7 @@ func (cs *cpuState) readInterruptFlagReg() byte {
 	)
 }
 
-func newState(cart []byte) *cpuState {
+func newState(cart []byte, devMode bool) *cpuState {
 	cartInfo := ParseCartInfo(cart)
 	state := cpuState{
 		Title:          cartInfo.Title,
@@ -267,6 +272,7 @@ func newState(cart []byte) *cpuState {
 			mbc: makeMBC(cartInfo),
 		},
 		CGBMode: cartInfo.cgbOptional() || cartInfo.cgbOnly(),
+		devMode: devMode,
 	}
 	state.init()
 	return &state
@@ -410,6 +416,9 @@ type Emulator interface {
 
 	MakeSnapshot() []byte
 	LoadSnapshot([]byte) (Emulator, error)
+
+	InDevMode() bool
+	SetDevMode(b bool)
 }
 
 func (cs *cpuState) MakeSnapshot() []byte {
@@ -421,8 +430,8 @@ func (cs *cpuState) LoadSnapshot(snapBytes []byte) (Emulator, error) {
 }
 
 // NewEmulator creates an emulation session
-func NewEmulator(cart []byte) Emulator {
-	return newState(cart)
+func NewEmulator(cart []byte, devMode bool) Emulator {
+	return newState(cart, devMode)
 }
 
 // Input covers all outside info sent to the Emulator

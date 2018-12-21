@@ -1,7 +1,6 @@
 package dmgo
 
 import (
-	"fmt"
 	"sort"
 )
 
@@ -127,7 +126,8 @@ func (lcd *lcd) writeOAM(addr uint16, val byte) {
 		if lcd.CyclesSinceLYInc != lastOAMWarningCycles || lcd.LYReg != lastOAMWarningLine {
 			lastOAMWarningCycles = lcd.CyclesSinceLYInc
 			lastOAMWarningLine = lcd.LYReg
-			fmt.Println("TOUCHED OAM DURING USE: CyclesSinceLYInc", lcd.CyclesSinceLYInc, "LYReg", lcd.LYReg)
+			// TODO: figure out if this is nominal
+			//fmt.Println("TOUCHED OAM DURING USE: CyclesSinceLYInc", lcd.CyclesSinceLYInc, "LYReg", lcd.LYReg)
 		}
 	}
 }
