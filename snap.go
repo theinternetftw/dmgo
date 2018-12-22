@@ -52,6 +52,9 @@ func (cs *cpuState) convertLatestSnapshot(snap *snapshot) (*cpuState, error) {
 		return nil, err
 	}
 	newState.Mem.cart = cs.Mem.cart
+
+	newState.devMode = cs.devMode
+
 	return &newState, nil
 }
 
