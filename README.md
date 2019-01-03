@@ -1,23 +1,36 @@
 # dmgo - a gameboy emulator in go
 
-I put together dmgo in about a week and half over the holidays. Much is left to be done, but things have progessed enough to throw it up on here.
+My other emulators:
+[famigo](https://github.com/theinternetftw/famigo),
+[vcsgo](https://github.com/theinternetftw/vcsgo),
+[segmago](https://github.com/theinternetftw/segmago), and
+[a1go](https://github.com/theinternetftw/a1go).
 
 #### Features:
- * Audio (on windows)!
+ * Audio!
  * Saved game support!
  * Quicksave/Quickload, too!
  * All major [MBCs](http://gbdev.gg8.se/wiki/articles/Memory_Bank_Controllers) suppported!
  * Glitches are relatively rare but still totally happen!
- * Graphical cross-platform support in native golang, with no hooks into C libraries needed!
+ * Graphical and auditory cross-platform support!
 
-That last bit relies on [exp/shiny](https://github.com/golang/exp/tree/master/shiny), which is still a work in progress. Let me know if it fails on your platform.
-Tested on windows 10 and xubuntu.
+That last bit relies on [glimmer](https://github.com/theinternetftw/glimmer). Let me know if it fails on your platform.
 
-#### Build instructions:
+Tested on windows 10 and ubuntu 18.10.
 
-dmgo uses [glide](https://github.com/Masterminds/glide) for dependencies, so run `glide update` first (or just `go get` the packages mentioned in the `glide.yaml` file).
+#### Dependencies:
 
-After that, `go build ./cmd/dmgo` should be enough. The interested can also see my build script `b` for more options (profiling and cross-compiling and such).
+You can compile on windows with no C dependencies.
+
+Linux users should 'apt install libasound2-dev' or equivalent.
+
+FreeBSD (and Mac?) users should 'pkg install openal-soft' or equivalent.
+
+#### Compile instructions
+
+If you have go version >= 1.11, `go build ./cmd/dmgo` should be enough. The interested can also see my build script `b` for profiling and such.
+
+Non-windows users will need the dependencies listed above.
 
 #### Important Notes:
 
