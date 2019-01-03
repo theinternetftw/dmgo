@@ -14,9 +14,7 @@ My other emulators:
  * Glitches are relatively rare but still totally happen!
  * Graphical and auditory cross-platform support!
 
-That last bit relies on [glimmer](https://github.com/theinternetftw/glimmer). Let me know if it fails on your platform.
-
-Tested on windows 10 and ubuntu 18.10.
+That last bit relies on [glimmer](https://github.com/theinternetftw/glimmer). Tested on windows 10 and ubuntu 18.10.
 
 #### Dependencies:
 
