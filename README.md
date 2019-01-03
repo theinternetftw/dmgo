@@ -18,17 +18,15 @@ That last bit relies on [glimmer](https://github.com/theinternetftw/glimmer). Te
 
 #### Dependencies:
 
-You can compile on windows with no C dependencies.
-
-Linux users should 'apt install libasound2-dev' or equivalent.
-
-FreeBSD (and Mac?) users should 'pkg install openal-soft' or equivalent.
+ * You can compile on windows with no C dependencies.
+ * Linux users should 'apt install libasound2-dev' or equivalent.
+ * FreeBSD (and Mac?) users should 'pkg install openal-soft' or equivalent.
 
 #### Compile instructions
 
-If you have go version >= 1.11, `go build ./cmd/dmgo` should be enough. The interested can also see my build script `b` for profiling and such.
-
-Non-windows users will need the dependencies listed above.
+ * If you have go version >= 1.11, `go build ./cmd/dmgo` should be enough.
+ * The interested can also see my build script `b` for profiling and such.
+ * Non-windows users will need the dependencies listed above.
 
 #### Important Notes:
 
