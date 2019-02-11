@@ -72,14 +72,6 @@ func startHeadlessEmu(emu dmgo.Emulator) {
 
 func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 
-	// FIXME: settings are for debug right now
-	lastFlipTime := time.Now()
-	lastSaveTime := time.Now()
-	lastInputPollTime := time.Now()
-
-	timer := time.NewTimer(0)
-	<-timer.C
-
 	snapshotPrefix := filename + ".snapshot"
 
 	saveFilename := filename + ".sav"
@@ -92,22 +84,20 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 		}
 	}
 
-	audio, err := glimmer.OpenAudioBuffer(1, 8192, 44100, 16, 2)
+	audio, err := glimmer.OpenAudioBuffer(2, 8192, 44100, 16, 2)
 	workingAudioBuffer := make([]byte, audio.BufferSize())
 	dieIf(err)
-
-	maxRDiff := time.Duration(0)
-	maxFDiff := time.Duration(0)
-	frameCount := 0
-
-	frametimeGoal := 1.0 / 60.0
 
 	snapshotMode := 'x'
 
 	newInput := dmgo.Input{}
 
-	count := 0
+	frameTimer := glimmer.MakeFrameTimer(1.0 / 60.0)
 
+	lastSaveTime := time.Now()
+	lastInputPollTime := time.Now()
+
+	count := 0
 	for {
 
 		count++
@@ -118,7 +108,7 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 			inputDiff := now.Sub(lastInputPollTime)
 
 			if inputDiff > 8*time.Millisecond {
-				window.Mutex.Lock()
+				window.InputMutex.Lock()
 				newInput = dmgo.Input{
 					Joypad: dmgo.Joypad{
 						Sel: window.CharIsDown('t'), Start: window.CharIsDown('y'),
@@ -139,7 +129,7 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 				} else if window.CharIsDown('l') {
 					snapshotMode = 'l'
 				}
-				window.Mutex.Unlock()
+				window.InputMutex.Unlock()
 
 				if numDown > '0' && numDown <= '9' {
 					snapFilename := snapshotPrefix + string(numDown)
@@ -180,45 +170,12 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 		audio.Write(emu.ReadSoundBuffer(audioBufSlice))
 
 		if emu.FlipRequested() {
-			window.Mutex.Lock()
+			window.RenderMutex.Lock()
 			copy(window.Pix, emu.Framebuffer())
 			window.RequestDraw()
-			window.Mutex.Unlock()
+			window.RenderMutex.Unlock()
 
-			rDiff := time.Now().Sub(lastFlipTime)
-
-			// hack to get better accuracy, could do
-			// a two stage wait with spin at the end,
-			// but that really adds to the cycles
-			fudge := 2 * time.Millisecond
-
-			toWait := 16600000*time.Nanosecond - rDiff - fudge
-			if toWait > time.Duration(0) {
-				<-time.NewTimer(toWait).C
-			}
-
-			frameStart := lastFlipTime
-			lastFlipTime = time.Now()
-
-			fDiff := time.Now().Sub(frameStart)
-			if rDiff > maxRDiff {
-				maxRDiff = rDiff
-			}
-			if fDiff > maxFDiff {
-				maxFDiff = fDiff
-			}
-
-			frameCount++
-			if frameCount&0xff == 0 {
-				if emu.InDevMode() {
-					fmt.Printf("maxRTime %.4f, maxFTime %.4f\n", maxRDiff.Seconds(), maxFDiff.Seconds())
-				}
-				maxRDiff = 0
-				maxFDiff = 0
-				if frametimeGoal == 0 {
-					frametimeGoal = 1
-				}
-			}
+			frameTimer.WaitForFrametime()
 
 			if time.Now().Sub(lastSaveTime) > 5*time.Second {
 				ram := emu.GetCartRAM()
