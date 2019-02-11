@@ -176,6 +176,9 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 			window.RenderMutex.Unlock()
 
 			frameTimer.WaitForFrametime()
+			if emu.InDevMode() {
+				frameTimer.PrintStatsEveryXFrames(60*5)
+			}
 
 			if time.Now().Sub(lastSaveTime) > 5*time.Second {
 				ram := emu.GetCartRAM()
