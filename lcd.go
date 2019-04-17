@@ -64,7 +64,7 @@ type lcd struct {
 	BigSprites                  bool
 	DisplaySprites              bool
 	DisplayBG                   bool
-	BGWindowMasterPriority      bool
+	BGWindowPrioritiesActive    bool
 
 	CyclesSinceLYInc       uint
 	CyclesSinceVBlankStart uint
@@ -140,6 +140,7 @@ func (lcd *lcd) readOAM(addr uint16) byte {
 
 func (lcd *lcd) init(cs *cpuState) {
 	lcd.CGBMode = cs.CGBMode
+	lcd.BGWindowPrioritiesActive = !lcd.CGBMode
 	lcd.AccessingOAM = true // at start of line
 }
 
@@ -560,9 +561,9 @@ func (lcd *lcd) renderSpriteAtScanline(e *oamEntry, y byte) {
 	}
 	endX := byte(e.x + 8)
 	for x := startX; x < endX && x < 160; x++ {
-		hideSprite := (lcd.BGWindowMasterPriority && lcd.BGMask[x]) ||
-			(lcd.BGPriorityMask[x] && lcd.BGMask[x]) ||
-			(e.behindBG() && lcd.BGMask[x])
+		hideSprite := lcd.BGWindowPrioritiesActive &&
+			((lcd.BGPriorityMask[x] && lcd.BGMask[x]) ||
+				(e.behindBG() && lcd.BGMask[x]))
 		if !hideSprite && !lcd.SpriteMask[x] {
 			if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
 				lcd.setFramebufferPixel(x, y, r, g, b)
@@ -629,7 +630,7 @@ func (lcd *lcd) writeWindowX(val byte) {
 func (lcd *lcd) writeControlReg(val byte) {
 	bgBit := &lcd.DisplayBG
 	if lcd.CGBMode {
-		bgBit = &lcd.BGWindowMasterPriority
+		bgBit = &lcd.BGWindowPrioritiesActive
 	}
 	boolsFromByte(val,
 		&lcd.DisplayOn,
