@@ -504,7 +504,7 @@ func (lcd *lcd) renderScanline() {
 		for x := byte(0); x < 160; x++ {
 			bgX := x + lcd.ScrollX
 			pixel, attrs := lcd.getBGPixel(bgX, bgY)
-			if pixel == 0 {
+			if pixel != 0 {
 				lcd.BGMask[x] = true
 			}
 			if attrs.hasPriority {
@@ -524,7 +524,7 @@ func (lcd *lcd) renderScanline() {
 			}
 			pixel, attrs := lcd.getWindowPixel(byte(x-winStartX), winY)
 			lcd.BGPriorityMask[x] = true
-			if pixel == 0 {
+			if pixel != 0 {
 				lcd.BGMask[x] = true
 			}
 			if attrs.hasPriority {
@@ -560,14 +560,13 @@ func (lcd *lcd) renderSpriteAtScanline(e *oamEntry, y byte) {
 	}
 	endX := byte(e.x + 8)
 	for x := startX; x < endX && x < 160; x++ {
-		hideSprite := lcd.BGWindowMasterPriority && lcd.BGPriorityMask[x]
-		showSprite := !lcd.BGWindowMasterPriority || !e.behindBG() || lcd.BGMask[x]
-		if !hideSprite {
-			if showSprite && !lcd.SpriteMask[x] {
-				if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
-					lcd.setFramebufferPixel(x, y, r, g, b)
-					lcd.SpriteMask[x] = true
-				}
+		hideSprite := (lcd.BGWindowMasterPriority && lcd.BGMask[x]) ||
+			(lcd.BGPriorityMask[x] && lcd.BGMask[x]) ||
+			(e.behindBG() && lcd.BGMask[x])
+		if !hideSprite && !lcd.SpriteMask[x] {
+			if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
+				lcd.setFramebufferPixel(x, y, r, g, b)
+				lcd.SpriteMask[x] = true
 			}
 		}
 	}
