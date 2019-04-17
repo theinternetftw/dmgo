@@ -243,7 +243,6 @@ type sound struct {
 	WaveOutLvl        byte // sound[2] only
 	WavePatternRAM    [16]byte
 	WavePatternCursor byte
-	WavePatternBias   float64
 
 	PolyFeedbackReg  uint16 // sound[3] only
 	PolyDivisorShift byte
