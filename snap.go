@@ -102,6 +102,18 @@ var snapshotConverters = map[int]func(map[string]interface{}) error{
 
 	// added 2018-12-21
 	2: func(state map[string]interface{}) error {
+		if apu, _, err := followJSON(state, "APU"); err == nil {
+			if apuMap, ok := apu.(map[string]interface{}); ok {
+				apuMap["EnvTimeCounter"] = 0
+				apuMap["SweepTimeCounter"] = 0
+				apuMap["LengthTimeCounter"] = 0
+			} else {
+				return fmt.Errorf("could not convert old v2 snapshot: apu var is of unknown type")
+			}
+		} else {
+			return fmt.Errorf("could not convert old v2 snapshot: %v", err)
+		}
+
 		if sounds, _, err := followJSON(state, "APU", "Sounds"); err == nil {
 			if soundsArr, ok := sounds.([]interface{}); ok {
 				for _, sound := range soundsArr {
