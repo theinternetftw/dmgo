@@ -316,6 +316,7 @@ func (cs *cpuState) imeToString() string {
 func (cs *cpuState) debugStatusLine() string {
 
 	return fmt.Sprintf("Step:%08d, ", cs.Steps) +
+		fmt.Sprintf("Cycles:%08d, ", cs.Cycles) +
 		fmt.Sprintf("(*PC)[0:2]:%02x%02x%02x, ", cs.read(cs.PC), cs.read(cs.PC+1), cs.read(cs.PC+2)) +
 		fmt.Sprintf("(*SP):%04x, ", cs.read16(cs.SP)) +
 		fmt.Sprintf("[PC:%04x ", cs.PC) +
@@ -569,7 +570,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0x2f: // cpl
 		cs.setOpA(4, 1, ^cs.A, 0x2112)
 
-	case 0x30: // jr z, r8
+	case 0x30: // jr nc, r8
 		cs.jmpRel8(12, 8, 2, !cs.getCarryFlag(), int8(cs.read(cs.PC+1)))
 	case 0x31: // ld sp, n16
 		cs.setOpSP(12, 3, cs.read16(cs.PC+1), 0x2222)

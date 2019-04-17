@@ -514,7 +514,7 @@ func (cs *cpuState) step() {
 	// if hitTarget {
 	// 	fmt.Println(cs.debugStatusLine())
 	// }
-	// fmt.Println(cs.debugStatusLine())
+	// fmt.Fprintln(os.Stderr, cs.debugStatusLine())
 
 	// TODO: correct behavior, i.e. only resume on
 	// button press if not about to switch speeds.
