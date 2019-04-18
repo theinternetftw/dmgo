@@ -109,14 +109,20 @@ func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
 
 			if inputDiff > 8*time.Millisecond {
 				window.InputMutex.Lock()
+				bDown := window.CharIsDown('b')
 				newInput = dmgo.Input{
 					Joypad: dmgo.Joypad{
-						Sel: window.CharIsDown('t'), Start: window.CharIsDown('y'),
-						Up: window.CharIsDown('w'), Down: window.CharIsDown('s'),
-						Left: window.CharIsDown('a'), Right: window.CharIsDown('d'),
-						A: window.CharIsDown('k'), B: window.CharIsDown('j'),
+						Sel: bDown || window.CharIsDown('t'),
+						Start: bDown || window.CharIsDown('y'),
+						Up: window.CharIsDown('w'),
+						Down: window.CharIsDown('s'),
+						Left: window.CharIsDown('a'),
+						Right: window.CharIsDown('d'),
+						A: bDown || window.CharIsDown('k'),
+						B: bDown || window.CharIsDown('j'),
 					},
 				}
+
 				numDown := 'x'
 				for r := '0'; r <= '9'; r++ {
 					if window.CharIsDown(r) {

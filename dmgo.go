@@ -179,18 +179,11 @@ func (jp *Joypad) readJoypadReg() byte {
 
 func (cs *cpuState) updateJoypad(newJP Joypad) {
 	lastVal := cs.Joypad.readJoypadReg() & 0x0f
-	if cs.Joypad.readMask&0x01 == 0 {
-		cs.Joypad.Down = newJP.Down
-		cs.Joypad.Up = newJP.Up
-		cs.Joypad.Left = newJP.Left
-		cs.Joypad.Right = newJP.Right
-	}
-	if cs.Joypad.readMask&0x10 == 0 {
-		cs.Joypad.Start = newJP.Start
-		cs.Joypad.Sel = newJP.Sel
-		cs.Joypad.B = newJP.B
-		cs.Joypad.A = newJP.A
-	}
+
+	mask := cs.Joypad.readMask
+	cs.Joypad = newJP
+	cs.Joypad.readMask = mask
+
 	newVal := cs.Joypad.readJoypadReg() & 0x0f
 	// this is correct behavior. it only triggers irq
 	// if it goes from no-buttons-pressed to any-pressed.
