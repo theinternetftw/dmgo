@@ -34,6 +34,9 @@ type CartInfo struct {
 
 // GetRAMSize decodes the ram size code into an actual size
 func (ci *CartInfo) GetRAMSize() uint {
+	if ci.CartridgeType == 5 || ci.CartridgeType == 6 {
+		return 512
+	}
 	codeSizeMap := map[byte]uint{
 		0x00: 0,
 		0x01: 2 * 1024,
