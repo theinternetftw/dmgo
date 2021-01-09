@@ -5,9 +5,11 @@ import (
 	"github.com/theinternetftw/dmgo/profiling"
 	"github.com/theinternetftw/glimmer"
 
+	"archive/zip"
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -18,8 +20,15 @@ func main() {
 	assert(len(os.Args) == 2, "usage: ./dmgo ROM_FILENAME")
 	cartFilename := os.Args[1]
 
-	cartBytes, err := ioutil.ReadFile(cartFilename)
-	dieIf(err)
+	var cartBytes []byte
+	var err error
+	if strings.HasSuffix(cartFilename, ".zip") {
+		cartBytes = readZipFileOrDie(cartFilename)
+	} else {
+		cartBytes, err = ioutil.ReadFile(cartFilename)
+		dieIf(err)
+	}
+
 
 	assert(len(cartBytes) > 3, "cannot parse, file is too small")
 
@@ -51,6 +60,23 @@ func main() {
 	glimmer.InitDisplayLoop(windowTitle, 160*4, 144*4, 160, 144, func(sharedState *glimmer.WindowState) {
 		startEmu(cartFilename, sharedState, emu)
 	})
+}
+
+func readZipFileOrDie(filename string) []byte {
+	zipReader, err := zip.OpenReader(filename)
+	dieIf(err)
+
+	// TODO: make list of filenames, sort abc, grab first alpha-sorted file with .gb or .gbc in name
+	f := zipReader.File[0]
+	fmt.Printf("unzipping first file found: %q\n", f.FileHeader.Name)
+	cartReader, err := f.Open()
+	dieIf(err)
+	cartBytes, err := ioutil.ReadAll(cartReader)
+	dieIf(err)
+
+	cartReader.Close()
+	zipReader.Close()
+	return cartBytes
 }
 
 func fileExists(path string) bool {
