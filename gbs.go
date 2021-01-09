@@ -174,7 +174,7 @@ func (gp *gbsPlayer) initTune(songNum byte) {
 	gp.pushOp16(0, 0, 0x0130)
 	gp.PC = gp.Hdr.InitAddr
 	for gp.PC != 0x0130 {
-		gp.step()
+		gp.Step()
 	}
 
 	gp.CurrentSong = songNum
@@ -284,7 +284,7 @@ func (gp *gbsPlayer) Step() {
 		}
 
 		if gp.PC != 0x0130 {
-			gp.step()
+			gp.Step()
 		} else {
 			gp.runCycles(4)
 		}
