@@ -284,7 +284,7 @@ func (gp *gbsPlayer) Step() {
 		}
 
 		if gp.PC != 0x0130 {
-			gp.Step()
+			gp.step()
 		} else {
 			gp.runCycles(4)
 		}
