@@ -11,8 +11,6 @@ import (
 type gbsPlayer struct {
 	cpuState
 	Hdr              gbsHeader
-	PlayCallInterval float64
-	LastPlayCall     time.Time
 	CurrentSong      byte
 	CurrentSongStart time.Time
 	Paused           bool
@@ -100,19 +98,15 @@ func NewGbsPlayer(gbs []byte, devMode bool) Emulator {
 
 	gp.devPrintln("uses timer:", gp.usesTimer())
 
-	timerMod := float64(gp.Hdr.TimerModulo)
-
 	if gp.Hdr.TimerControl&0x80 > 0 {
-		// correct all timers for our dmg timer speeds
-		timerMod /= 2
 		gp.devPrintln("GBC Speed Requested")
+		gp.FastMode = true
 	}
 
 	if gp.usesTimer() {
-		counterRate := []float64{4096, 262144, 65536, 16384}[gp.Hdr.TimerControl&0x03]
-		gp.PlayCallInterval = 1.0 / (counterRate / (256 - timerMod))
-	} else {
-		gp.PlayCallInterval = 1.0 / 59.7
+		gp.TimerFreqSelector = gp.Hdr.TimerControl & 0x03
+		gp.TimerModuloReg = gp.Hdr.TimerModulo
+		gp.TimerOn = true
 	}
 
 	gp.init()
@@ -215,8 +209,6 @@ func (gp *gbsPlayer) updateScreen() {
 	} else {
 		gp.DbgTerminal.newline()
 	}
-
-	gp.LCD.FlipRequested = true
 }
 
 func (gp *gbsPlayer) prevSong() {
@@ -274,13 +266,25 @@ func (gp *gbsPlayer) Step() {
 			gp.updateScreen()
 		}
 
+		doPlayCall := false
 		if gp.PC == 0x0130 {
-			if now.Sub(gp.LastPlayCall).Seconds() > gp.PlayCallInterval {
-				gp.LastPlayCall = now
-				gp.SP = gp.Hdr.StackPtr
-				gp.pushOp16(0, 0, 0x0130)
-				gp.PC = gp.Hdr.PlayAddr
+			if gp.usesTimer() {
+				if gp.TimerIRQ {
+					gp.TimerIRQ = false
+					doPlayCall = true
+				}
+			} else {
+				if gp.VBlankIRQ {
+					gp.VBlankIRQ = false
+					doPlayCall = true
+				}
 			}
+		}
+
+		if doPlayCall {
+			gp.SP = gp.Hdr.StackPtr
+			gp.pushOp16(0, 0, 0x0130)
+			gp.PC = gp.Hdr.PlayAddr
 		}
 
 		if gp.PC != 0x0130 {

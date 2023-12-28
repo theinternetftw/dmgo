@@ -262,7 +262,7 @@ func newState(cart []byte, devMode bool) *cpuState {
 			cart:                  cart,
 			CartRAM:               make([]byte, cartInfo.GetRAMSize()),
 			InternalRAMBankNumber: 1,
-			mbc: makeMBC(cartInfo),
+			mbc:                   makeMBC(cartInfo),
 		},
 		CGBMode: cartInfo.cgbOptional() || cartInfo.cgbOnly(),
 		devMode: devMode,
@@ -403,6 +403,7 @@ type Emulator interface {
 
 	UpdateInput(input Input)
 	ReadSoundBuffer([]byte) []byte
+	GetSoundBufferInfo() SoundBufferInfo
 
 	GetCartRAM() []byte
 	SetCartRAM([]byte) error
@@ -437,6 +438,21 @@ type Input struct {
 // if the buffer was less full than the length requested.
 func (cs *cpuState) ReadSoundBuffer(toFill []byte) []byte {
 	return cs.APU.readSoundBuffer(toFill)
+}
+
+// SoundBufferInfo gives info about the sound buffer. IsValid is used to
+// handle Emulator impls that don't have sound, e.g. errEmu
+type SoundBufferInfo struct {
+	UsedSize int
+	IsValid  bool
+}
+
+// GetSoundBufferLen gets the current size of the filled sound buffer.
+func (cs *cpuState) GetSoundBufferInfo() SoundBufferInfo {
+	return SoundBufferInfo{
+		IsValid:  true,
+		UsedSize: int(cs.APU.buffer.size()),
+	}
 }
 
 // GetCartRAM returns the current state of external RAM
