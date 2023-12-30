@@ -1,5 +1,7 @@
 package dmgo
 
+import "fmt"
+
 type apu struct {
 	// not marshalled in snapshot
 	buffer apuCircleBuf
@@ -85,9 +87,12 @@ func (apu *apu) readSoundBuffer(toFill []byte) []byte {
 	if int(apu.buffer.size()) < len(toFill) {
 		// fmt.Println("audSize:", apu.buffer.size(), "len(toFill)", len(toFill), "buf[0]", apu.buffer.buf[0])
 	}
-	for int(apu.buffer.size()) < len(toFill) {
+	if int(apu.buffer.size()) < len(toFill) {
+		fmt.Println("[apu] readSoundBuffer() underflow!")
 		// stretch sound to fill buffer to avoid click
-		apu.genSample()
+		for int(apu.buffer.size()) < len(toFill) {
+			apu.genSample()
+		}
 	}
 	return apu.buffer.read(toFill)
 }

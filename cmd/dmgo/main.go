@@ -6,6 +6,7 @@ import (
 	"github.com/theinternetftw/glimmer"
 
 	"archive/zip"
+    "bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -28,7 +29,6 @@ func main() {
 		cartBytes, err = ioutil.ReadFile(cartFilename)
 		dieIf(err)
 	}
-
 
 	assert(len(cartBytes) > 3, "cannot parse, file is too small")
 
@@ -57,9 +57,206 @@ func main() {
 		windowTitle = fmt.Sprintf("dmgo - %q", cartInfo.Title)
 	}
 
-	glimmer.InitDisplayLoop(windowTitle, 160*4, 144*4, 160, 144, func(sharedState *glimmer.WindowState) {
-		startEmu(cartFilename, sharedState, emu)
-	})
+	audio, audioErr := glimmer.OpenAudioBuffer(glimmer.OpenAudioBufferOptions{
+        OutputBufDuration: 20*time.Millisecond,
+        SamplesPerSecond: 44100,
+        BitsPerSample: 16,
+        ChannelCount: 2,
+    })
+    dieIf(audioErr)
+
+    snapshotPrefix := cartFilename + ".snapshot"
+    saveFilename := cartFilename + ".sav"
+
+	if saveFile, err := ioutil.ReadFile(saveFilename); err == nil {
+		err = emu.SetCartRAM(saveFile)
+		if err != nil {
+			fmt.Println("error loading savefile,", err)
+		} else {
+			fmt.Println("loaded save!")
+		}
+	}
+
+    session := sessionState{
+        snapshotPrefix: snapshotPrefix,
+        saveFilename: saveFilename,
+        frameTimer: glimmer.MakeFrameTimer(),
+        lastSaveTime: time.Now(),
+        lastInputPollTime: time.Now(),
+        audio: audio,
+        emu: emu,
+    }
+
+	glimmer.InitDisplayLoop(glimmer.InitDisplayLoopOptions{
+        WindowTitle: windowTitle,
+        RenderWidth: 160, RenderHeight: 144,
+        WindowWidth: 160*4, WindowHeight: 144*4,
+        InitCallback: func(sharedState *glimmer.WindowState) {
+            runEmu(&session, sharedState)
+        },
+    })
+}
+
+type sessionState struct {
+    snapshotMode rune
+    snapshotPrefix string
+    saveFilename string
+    audio *glimmer.AudioBuffer
+    latestInput dmgo.Input
+    frameTimer glimmer.FrameTimer
+    lastSaveTime time.Time
+    lastInputPollTime time.Time
+    ticksSincePollingInput int
+    lastSaveRAM []byte
+    emu dmgo.Emulator
+    currentNumFrames int
+    audioBytesProduced int
+}
+
+func runEmu(session *sessionState, window *glimmer.WindowState) {
+
+    const audioBytesPerFrame = 2953.41339
+    var audioChunkBuf []byte
+
+	for {
+		session.ticksSincePollingInput++
+		if session.ticksSincePollingInput == 100 {
+			session.ticksSincePollingInput = 0
+			now := time.Now()
+
+			inputDiff := now.Sub(session.lastInputPollTime)
+
+			if true || inputDiff > 8*time.Millisecond {
+				session.lastInputPollTime = now
+
+				window.InputMutex.Lock()
+				bDown := window.CharIsDown('b')
+				session.latestInput = dmgo.Input{
+					Joypad: dmgo.Joypad{
+						Sel: bDown || window.CharIsDown('t'),
+						Start: bDown || window.CharIsDown('y'),
+						Up: window.CharIsDown('w'),
+						Down: window.CharIsDown('s'),
+						Left: window.CharIsDown('a'),
+						Right: window.CharIsDown('d'),
+						A: bDown || window.CharIsDown('k'),
+						B: bDown || window.CharIsDown('j'),
+					},
+				}
+
+				numDown := 'x'
+				for r := '0'; r <= '9'; r++ {
+					if window.CharIsDown(r) {
+						numDown = r
+						break
+					}
+				}
+				if window.CharIsDown('m') {
+					session.snapshotMode = 'm'
+				} else if window.CharIsDown('l') {
+					session.snapshotMode = 'l'
+				}
+				window.InputMutex.Unlock()
+
+				if numDown > '0' && numDown <= '9' {
+					snapFilename := session.snapshotPrefix + string(numDown)
+					if session.snapshotMode == 'm' {
+						session.snapshotMode = 'x'
+						snapshot := session.emu.MakeSnapshot()
+						ioutil.WriteFile(snapFilename, snapshot, os.FileMode(0644))
+					} else if session.snapshotMode == 'l' {
+						session.snapshotMode = 'x'
+						snapBytes, err := ioutil.ReadFile(snapFilename)
+						if err != nil {
+							fmt.Println("failed to load snapshot:", err)
+							continue
+						}
+						newEmu, err := session.emu.LoadSnapshot(snapBytes)
+						if err != nil {
+							fmt.Println("failed to load snapshot:", err)
+							continue
+						}
+						session.emu = newEmu
+					}
+				}
+                session.emu.UpdateInput(session.latestInput)
+			}
+		}
+
+		session.emu.Step()
+
+        bufInfo := session.emu.GetSoundBufferInfo()
+        if bufInfo.IsValid {
+            if bufInfo.UsedSize >= 0 {
+                if cap(audioChunkBuf) >= bufInfo.UsedSize {
+                    audioChunkBuf = audioChunkBuf[:bufInfo.UsedSize]
+                } else {
+                    audioChunkBuf = make([]byte, bufInfo.UsedSize)
+                }
+                session.audio.Write(session.emu.ReadSoundBuffer(audioChunkBuf))
+                session.audioBytesProduced += bufInfo.UsedSize
+            }
+        }
+
+		if session.emu.FlipRequested() {
+			window.RenderMutex.Lock()
+			copy(window.Pix, session.emu.Framebuffer())
+			window.RenderMutex.Unlock()
+
+            session.frameTimer.MarkRenderComplete()
+            session.frameTimer.MarkFrameComplete()
+
+            session.currentNumFrames++
+            audioDiff := session.audioBytesProduced - session.audio.GetBufferBytesConsumed()
+            for float64(audioDiff) > 2*audioBytesPerFrame {
+                time.Sleep(5*time.Millisecond)
+                audioDiff = session.audioBytesProduced - session.audio.GetBufferBytesConsumed()
+            }
+            for float64(audioDiff) < audioBytesPerFrame {
+                session.emu.Step()
+
+                bufInfo := session.emu.GetSoundBufferInfo()
+                if bufInfo.IsValid {
+                    if bufInfo.UsedSize >= 0 {
+                        if cap(audioChunkBuf) >= bufInfo.UsedSize {
+                            audioChunkBuf = audioChunkBuf[:bufInfo.UsedSize]
+                        } else {
+                            audioChunkBuf = make([]byte, bufInfo.UsedSize)
+                        }
+                        session.audio.Write(session.emu.ReadSoundBuffer(audioChunkBuf))
+                        session.audioBytesProduced += bufInfo.UsedSize
+                    }
+                }
+                audioDiff = session.audioBytesProduced - session.audio.GetBufferBytesConsumed()
+            }
+			if session.emu.InDevMode() {
+				session.frameTimer.PrintStatsEveryXFrames(60*5)
+			}
+
+			if time.Now().Sub(session.lastSaveTime) > 5*time.Second {
+				ram := session.emu.GetCartRAM()
+				if len(ram) > 0 && !bytes.Equal(ram, session.lastSaveRAM) {
+					ioutil.WriteFile(session.saveFilename, ram, os.FileMode(0644))
+					session.lastSaveTime = time.Now()
+                    session.lastSaveRAM = ram
+				}
+			}
+		}
+	}
+}
+
+func assert(test bool, msg string) {
+	if !test {
+		fmt.Println(msg)
+		os.Exit(1)
+	}
+}
+
+func dieIf(err error) {
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
 
 func readZipFileOrDie(filename string) []byte {
@@ -82,157 +279,4 @@ func readZipFileOrDie(filename string) []byte {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return !os.IsNotExist(err)
-}
-
-func startHeadlessEmu(emu dmgo.Emulator) {
-	// FIXME: settings are for debug right now
-	ticker := time.NewTicker(17 * time.Millisecond)
-
-	for {
-		emu.Step()
-		if emu.FlipRequested() {
-			<-ticker.C
-		}
-	}
-}
-
-func startEmu(filename string, window *glimmer.WindowState, emu dmgo.Emulator) {
-
-	snapshotPrefix := filename + ".snapshot"
-
-	saveFilename := filename + ".sav"
-	if saveFile, err := ioutil.ReadFile(saveFilename); err == nil {
-		err = emu.SetCartRAM(saveFile)
-		if err != nil {
-			fmt.Println("error loading savefile,", err)
-		} else {
-			fmt.Println("loaded save!")
-		}
-	}
-
-	audio, err := glimmer.OpenAudioBuffer(2, 8192, 44100, 16, 2)
-	workingAudioBuffer := make([]byte, audio.BufferSize())
-	dieIf(err)
-
-	snapshotMode := 'x'
-
-	newInput := dmgo.Input{}
-
-	frameTimer := glimmer.MakeFrameTimer(1.0 / 60.0)
-
-	lastSaveTime := time.Now()
-	lastInputPollTime := time.Now()
-
-	count := 0
-	for {
-
-		count++
-		if count == 100 {
-			count = 0
-			now := time.Now()
-
-			inputDiff := now.Sub(lastInputPollTime)
-
-			if inputDiff > 8*time.Millisecond {
-				window.InputMutex.Lock()
-				bDown := window.CharIsDown('b')
-				newInput = dmgo.Input{
-					Joypad: dmgo.Joypad{
-						Sel: bDown || window.CharIsDown('t'),
-						Start: bDown || window.CharIsDown('y'),
-						Up: window.CharIsDown('w'),
-						Down: window.CharIsDown('s'),
-						Left: window.CharIsDown('a'),
-						Right: window.CharIsDown('d'),
-						A: bDown || window.CharIsDown('k'),
-						B: bDown || window.CharIsDown('j'),
-					},
-				}
-
-				numDown := 'x'
-				for r := '0'; r <= '9'; r++ {
-					if window.CharIsDown(r) {
-						numDown = r
-						break
-					}
-				}
-				if window.CharIsDown('m') {
-					snapshotMode = 'm'
-				} else if window.CharIsDown('l') {
-					snapshotMode = 'l'
-				}
-				window.InputMutex.Unlock()
-
-				if numDown > '0' && numDown <= '9' {
-					snapFilename := snapshotPrefix + string(numDown)
-					if snapshotMode == 'm' {
-						snapshotMode = 'x'
-						snapshot := emu.MakeSnapshot()
-						ioutil.WriteFile(snapFilename, snapshot, os.FileMode(0644))
-					} else if snapshotMode == 'l' {
-						snapshotMode = 'x'
-						snapBytes, err := ioutil.ReadFile(snapFilename)
-						if err != nil {
-							fmt.Println("failed to load snapshot:", err)
-							continue
-						}
-						newEmu, err := emu.LoadSnapshot(snapBytes)
-						if err != nil {
-							fmt.Println("failed to load snapshot:", err)
-							continue
-						}
-						emu = newEmu
-					}
-				}
-				lastInputPollTime = time.Now()
-			}
-		}
-
-		emu.UpdateInput(newInput)
-		emu.Step()
-
-		bufferAvailable := audio.BufferAvailable()
-
-		// TODO: set this up so it's useful, but doesn't spam
-		// if bufferAvailable == audio.BufferSize() {
-		// fmt.Println("Platform AudioBuffer empty!")
-		// }
-
-		audioBufSlice := workingAudioBuffer[:bufferAvailable]
-		audio.Write(emu.ReadSoundBuffer(audioBufSlice))
-
-		if emu.FlipRequested() {
-			window.RenderMutex.Lock()
-			copy(window.Pix, emu.Framebuffer())
-			window.RequestDraw()
-			window.RenderMutex.Unlock()
-
-			frameTimer.WaitForFrametime()
-			if emu.InDevMode() {
-				frameTimer.PrintStatsEveryXFrames(60*5)
-			}
-
-			if time.Now().Sub(lastSaveTime) > 5*time.Second {
-				ram := emu.GetCartRAM()
-				if len(ram) > 0 {
-					ioutil.WriteFile(saveFilename, ram, os.FileMode(0644))
-					lastSaveTime = time.Now()
-				}
-			}
-		}
-	}
-}
-
-func assert(test bool, msg string) {
-	if !test {
-		fmt.Println(msg)
-		os.Exit(1)
-	}
-}
-
-func dieIf(err error) {
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
 }
