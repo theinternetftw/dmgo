@@ -561,13 +561,13 @@ func (lcd *lcd) renderSpriteAtScanline(e *oamEntry, y byte) {
 	}
 	endX := byte(e.x + 8)
 	for x := startX; x < endX && x < 160; x++ {
-		hideSprite := lcd.BGWindowPrioritiesActive &&
-			((lcd.BGPriorityMask[x] && lcd.BGMask[x]) ||
-				(e.behindBG() && lcd.BGMask[x]))
-		if !hideSprite && !lcd.SpriteMask[x] {
+		if !lcd.SpriteMask[x] {
 			if r, g, b, a := lcd.getSpritePixel(e, x, y); a {
-				lcd.setFramebufferPixel(x, y, r, g, b)
 				lcd.SpriteMask[x] = true
+				hideSprite := lcd.BGWindowPrioritiesActive && (lcd.BGPriorityMask[x] || e.behindBG()) && lcd.BGMask[x]
+				if !hideSprite {
+					lcd.setFramebufferPixel(x, y, r, g, b)
+				}
 			}
 		}
 	}
