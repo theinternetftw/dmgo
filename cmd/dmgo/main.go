@@ -57,14 +57,6 @@ func main() {
 		windowTitle = fmt.Sprintf("dmgo - %q", cartInfo.Title)
 	}
 
-	audio, audioErr := glimmer.OpenAudioBuffer(glimmer.OpenAudioBufferOptions{
-        OutputBufDuration: 25*time.Millisecond,
-        SamplesPerSecond: 44100,
-        BitsPerSample: 16,
-        ChannelCount: 2,
-    })
-    dieIf(audioErr)
-
     snapshotPrefix := cartFilename + ".snapshot"
     saveFilename := cartFilename + ".sav"
 
@@ -77,21 +69,30 @@ func main() {
 		}
 	}
 
-    session := sessionState{
-        snapshotPrefix: snapshotPrefix,
-        saveFilename: saveFilename,
-        frameTimer: glimmer.MakeFrameTimer(),
-        lastSaveTime: time.Now(),
-        lastInputPollTime: time.Now(),
-        audio: audio,
-        emu: emu,
-    }
-
 	glimmer.InitDisplayLoop(glimmer.InitDisplayLoopOptions{
         WindowTitle: windowTitle,
         RenderWidth: 160, RenderHeight: 144,
         WindowWidth: 160*4, WindowHeight: 144*4,
         InitCallback: func(sharedState *glimmer.WindowState) {
+
+            audio, audioErr := glimmer.OpenAudioBuffer(glimmer.OpenAudioBufferOptions{
+                OutputBufDuration: 25*time.Millisecond,
+                SamplesPerSecond: 44100,
+                BitsPerSample: 16,
+                ChannelCount: 2,
+            })
+            dieIf(audioErr)
+
+            session := sessionState{
+                snapshotPrefix: snapshotPrefix,
+                saveFilename: saveFilename,
+                frameTimer: glimmer.MakeFrameTimer(),
+                lastSaveTime: time.Now(),
+                lastInputPollTime: time.Now(),
+                audio: audio,
+                emu: emu,
+            }
+
             runEmu(&session, sharedState)
         },
     })
