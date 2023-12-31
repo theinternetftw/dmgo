@@ -206,7 +206,6 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 			window.RenderMutex.Unlock()
 
             session.frameTimer.MarkRenderComplete()
-            session.frameTimer.MarkFrameComplete()
 
             session.currentNumFrames++
 
@@ -232,6 +231,8 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
                 fmt.Println("[dmgo] max waited for audio:", maxWaited, "buf modifier now:", audioBufModifier)
                 maxWaited = time.Duration(0)
             }
+
+            session.frameTimer.MarkFrameComplete()
 
 			if session.emu.InDevMode() {
 				session.frameTimer.PrintStatsEveryXFrames(60*5)
