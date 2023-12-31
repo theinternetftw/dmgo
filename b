@@ -18,12 +18,12 @@ echo "$projectname buildscript"
 echo "possible args: f, all, profiling.{cpu|mem|block|live}, release"
 echo
 
-echo "running fmt, vet, lint..."
+echo "running fmt, vet, etc..."
 echo
 
 goimports -w *.go
+# go fmt
 go vet
-golint
 
 if [ "$1" == "" ]
 then
