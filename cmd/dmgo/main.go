@@ -6,7 +6,7 @@ import (
 	"github.com/theinternetftw/glimmer"
 
 	"archive/zip"
-    "bytes"
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -57,8 +57,8 @@ func main() {
 		windowTitle = fmt.Sprintf("dmgo - %q", cartInfo.Title)
 	}
 
-    snapshotPrefix := cartFilename + ".snapshot"
-    saveFilename := cartFilename + ".sav"
+	snapshotPrefix := cartFilename + ".snapshot"
+	saveFilename := cartFilename + ".sav"
 
 	if saveFile, err := ioutil.ReadFile(saveFilename); err == nil {
 		err = emu.SetCartRAM(saveFile)
@@ -70,58 +70,58 @@ func main() {
 	}
 
 	glimmer.InitDisplayLoop(glimmer.InitDisplayLoopOptions{
-        WindowTitle: windowTitle,
-        RenderWidth: 160, RenderHeight: 144,
-        WindowWidth: 160*4, WindowHeight: 144*4,
-        InitCallback: func(sharedState *glimmer.WindowState) {
+		WindowTitle: windowTitle,
+		RenderWidth: 160, RenderHeight: 144,
+		WindowWidth: 160 * 4, WindowHeight: 144 * 4,
+		InitCallback: func(sharedState *glimmer.WindowState) {
 
-            audio, audioErr := glimmer.OpenAudioBuffer(glimmer.OpenAudioBufferOptions{
-                OutputBufDuration: 25*time.Millisecond,
-                SamplesPerSecond: 44100,
-                BitsPerSample: 16,
-                ChannelCount: 2,
-            })
-            dieIf(audioErr)
+			audio, audioErr := glimmer.OpenAudioBuffer(glimmer.OpenAudioBufferOptions{
+				OutputBufDuration: 25 * time.Millisecond,
+				SamplesPerSecond:  44100,
+				BitsPerSample:     16,
+				ChannelCount:      2,
+			})
+			dieIf(audioErr)
 
-            session := sessionState{
-                snapshotPrefix: snapshotPrefix,
-                saveFilename: saveFilename,
-                frameTimer: glimmer.MakeFrameTimer(),
-                lastSaveTime: time.Now(),
-                lastInputPollTime: time.Now(),
-                audio: audio,
-                emu: emu,
-            }
+			session := sessionState{
+				snapshotPrefix:    snapshotPrefix,
+				saveFilename:      saveFilename,
+				frameTimer:        glimmer.MakeFrameTimer(),
+				lastSaveTime:      time.Now(),
+				lastInputPollTime: time.Now(),
+				audio:             audio,
+				emu:               emu,
+			}
 
-            runEmu(&session, sharedState)
-        },
-    })
+			runEmu(&session, sharedState)
+		},
+	})
 }
 
 type sessionState struct {
-    snapshotMode rune
-    snapshotPrefix string
-    saveFilename string
-    audio *glimmer.AudioBuffer
-    latestInput dmgo.Input
-    frameTimer glimmer.FrameTimer
-    lastSaveTime time.Time
-    lastInputPollTime time.Time
-    ticksSincePollingInput int
-    lastSaveRAM []byte
-    emu dmgo.Emulator
-    currentNumFrames int
-    audioBytesProduced int
+	snapshotMode           rune
+	snapshotPrefix         string
+	saveFilename           string
+	audio                  *glimmer.AudioBuffer
+	latestInput            dmgo.Input
+	frameTimer             glimmer.FrameTimer
+	lastSaveTime           time.Time
+	lastInputPollTime      time.Time
+	ticksSincePollingInput int
+	lastSaveRAM            []byte
+	emu                    dmgo.Emulator
+	currentNumFrames       int
+	audioBytesProduced     int
 }
 
 var maxWaited time.Duration
 
 func runEmu(session *sessionState, window *glimmer.WindowState) {
 
-    var audioChunkBuf []byte
-    audioBufModifier := 0
-    audioPrevReadLen := <-session.audio.ReadLenNotifier
-    audioToGen := audioPrevReadLen + audioBufModifier
+	var audioChunkBuf []byte
+	audioBufModifier := 0
+	audioPrevReadLen := <-session.audio.ReadLenNotifier
+	audioToGen := audioPrevReadLen + audioBufModifier
 
 	for {
 		session.ticksSincePollingInput++
@@ -138,14 +138,14 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 				bDown := window.CharIsDown('b')
 				session.latestInput = dmgo.Input{
 					Joypad: dmgo.Joypad{
-						Sel: bDown || window.CharIsDown('t'),
+						Sel:   bDown || window.CharIsDown('t'),
 						Start: bDown || window.CharIsDown('y'),
-						Up: window.CharIsDown('w'),
-						Down: window.CharIsDown('s'),
-						Left: window.CharIsDown('a'),
+						Up:    window.CharIsDown('w'),
+						Down:  window.CharIsDown('s'),
+						Left:  window.CharIsDown('a'),
 						Right: window.CharIsDown('d'),
-						A: bDown || window.CharIsDown('k'),
-						B: bDown || window.CharIsDown('j'),
+						A:     bDown || window.CharIsDown('k'),
+						B:     bDown || window.CharIsDown('j'),
 					},
 				}
 
@@ -184,55 +184,55 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 						session.emu = newEmu
 					}
 				}
-                session.emu.UpdateInput(session.latestInput)
+				session.emu.UpdateInput(session.latestInput)
 			}
 		}
 
-        session.emu.Step()
-        bufInfo := session.emu.GetSoundBufferInfo()
-        if bufInfo.IsValid && bufInfo.UsedSize >= audioToGen {
-            if cap(audioChunkBuf) < audioToGen {
-                audioChunkBuf = make([]byte, audioToGen)
-            }
-            session.audio.Write(session.emu.ReadSoundBuffer(audioChunkBuf[:audioToGen]))
-        }
+		session.emu.Step()
+		bufInfo := session.emu.GetSoundBufferInfo()
+		if bufInfo.IsValid && bufInfo.UsedSize >= audioToGen {
+			if cap(audioChunkBuf) < audioToGen {
+				audioChunkBuf = make([]byte, audioToGen)
+			}
+			session.audio.Write(session.emu.ReadSoundBuffer(audioChunkBuf[:audioToGen]))
+		}
 
 		if session.emu.FlipRequested() {
 			window.RenderMutex.Lock()
 			copy(window.Pix, session.emu.Framebuffer())
 			window.RenderMutex.Unlock()
 
-            session.frameTimer.MarkRenderComplete()
+			session.frameTimer.MarkRenderComplete()
 
-            session.currentNumFrames++
+			session.currentNumFrames++
 
-            start := time.Now()
-            if session.audio.GetLenUnplayedData() > audioPrevReadLen+4 {
-                for session.audio.GetLenUnplayedData() > audioPrevReadLen+4 {
-                    audioPrevReadLen = <- session.audio.ReadLenNotifier
-                }
-                if audioBufModifier > -4 {
-                    audioBufModifier -= 4
-                }
-            } else {
-                if audioBufModifier < 2*audioPrevReadLen {
-                    audioBufModifier += 4
-                }
-            }
-            audioToGen = audioPrevReadLen + audioBufModifier
-            audioDiff := time.Now().Sub(start)
-            if audioDiff > maxWaited {
-                maxWaited = audioDiff
-            }
-            if session.currentNumFrames & 0x3f == 0 {
-                // fmt.Println("[dmgo] max waited for audio:", maxWaited, "buf modifier now:", audioBufModifier)
-                maxWaited = time.Duration(0)
-            }
+			start := time.Now()
+			if session.audio.GetLenUnplayedData() > audioPrevReadLen+4 {
+				for session.audio.GetLenUnplayedData() > audioPrevReadLen+4 {
+					audioPrevReadLen = <-session.audio.ReadLenNotifier
+				}
+				if audioBufModifier > -4 {
+					audioBufModifier -= 4
+				}
+			} else {
+				if audioBufModifier < 2*audioPrevReadLen {
+					audioBufModifier += 4
+				}
+			}
+			audioToGen = audioPrevReadLen + audioBufModifier
+			audioDiff := time.Now().Sub(start)
+			if audioDiff > maxWaited {
+				maxWaited = audioDiff
+			}
+			if session.currentNumFrames&0x3f == 0 {
+				// fmt.Println("[dmgo] max waited for audio:", maxWaited, "buf modifier now:", audioBufModifier)
+				maxWaited = time.Duration(0)
+			}
 
-            session.frameTimer.MarkFrameComplete()
+			session.frameTimer.MarkFrameComplete()
 
 			if session.emu.InDevMode() {
-				session.frameTimer.PrintStatsEveryXFrames(60*5)
+				session.frameTimer.PrintStatsEveryXFrames(60 * 5)
 			}
 
 			if time.Now().Sub(session.lastSaveTime) > 5*time.Second {
@@ -240,7 +240,7 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 				if len(ram) > 0 && !bytes.Equal(ram, session.lastSaveRAM) {
 					ioutil.WriteFile(session.saveFilename, ram, os.FileMode(0644))
 					session.lastSaveTime = time.Now()
-                    session.lastSaveRAM = ram
+					session.lastSaveRAM = ram
 				}
 			}
 		}
