@@ -606,7 +606,7 @@ func (cs *cpuState) stepOpcode() {
 		cs.setOpA(8, 2, cs.read(cs.PC+1), 0x2222)
 	case 0x3f: // ccf
 		carry := uint16((cs.F>>4)&0x01) ^ 0x01
-		cs.setOpFn(4, 1, func() {}, 0x2000|carry)
+		cs.setOpFn(4, 1, func() {}, 0x2000 | carry)
 
 	case 0x70: // ld (hl), b
 		cs.setOpMem8(8, 1, cs.getHL(), cs.B, 0x2222)
@@ -665,8 +665,8 @@ func (cs *cpuState) stepOpcode() {
 		cs.popOp16(12, 1, cs.setDE)
 	case 0xd2: // jp nc, a16
 		cs.jmpAbs16(16, 12, 3, !cs.getCarryFlag(), cs.read16(cs.PC+1))
-	case 0xd3: // illegal
-		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
+	case 0xd3:
+		cs.illegalOpcode(opcode)
 	case 0xd4: // call nc, a16
 		cs.jmpCall(24, 12, 3, !cs.getCarryFlag(), cs.read16(cs.PC+1))
 	case 0xd5: // push de
@@ -683,12 +683,12 @@ func (cs *cpuState) stepOpcode() {
 		cs.MasterEnableRequested = true
 	case 0xda: // jp c, a16
 		cs.jmpAbs16(16, 12, 3, cs.getCarryFlag(), cs.read16(cs.PC+1))
-	case 0xdb: // illegal
-		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
+	case 0xdb:
+		cs.illegalOpcode(opcode)
 	case 0xdc: // call c, a16
 		cs.jmpCall(24, 12, 3, cs.getCarryFlag(), cs.read16(cs.PC+1))
-	case 0xdd: // illegal
-		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
+	case 0xdd:
+		cs.illegalOpcode(opcode)
 	case 0xde: // sbc n8
 		cs.sbcOpA(8, 2, cs.read(cs.PC+1))
 	case 0xdf: // rst 18h
@@ -696,16 +696,16 @@ func (cs *cpuState) stepOpcode() {
 
 	case 0xe0: // ld (0xFF00 + n8), a
 		val := cs.read(cs.PC + 1)
-		cs.setOpMem8(12, 2, 0xff00+uint16(val), cs.A, 0x2222)
+		cs.setOpMem8(12, 2, 0xff00 + uint16(val), cs.A, 0x2222)
 	case 0xe1: // pop hl
 		cs.popOp16(12, 1, cs.setHL)
 	case 0xe2: // ld (0xFF00 + c), a
 		val := cs.C
-		cs.setOpMem8(8, 1, 0xff00+uint16(val), cs.A, 0x2222)
-	case 0xe3: // illegal
-		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
-	case 0xe4: // illegal
-		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
+		cs.setOpMem8(8, 1, 0xff00 + uint16(val), cs.A, 0x2222)
+	case 0xe3:
+		cs.illegalOpcode(opcode)
+	case 0xe4:
+		cs.illegalOpcode(opcode)
 	case 0xe5: // push hl
 		cs.pushOp16(16, 1, cs.getHL())
 	case 0xe6: // and n8
@@ -720,12 +720,12 @@ func (cs *cpuState) stepOpcode() {
 		cs.setOpPC(4, 1, cs.getHL(), 0x2222)
 	case 0xea: // ld (a16), a
 		cs.setOpMem8(16, 3, cs.read16(cs.PC+1), cs.A, 0x2222)
-	case 0xeb: // illegal
-		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
-	case 0xec: // illegal
-		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
-	case 0xed: // illegal
-		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
+	case 0xeb:
+		cs.illegalOpcode(opcode)
+	case 0xec:
+		cs.illegalOpcode(opcode)
+	case 0xed:
+		cs.illegalOpcode(opcode)
 	case 0xee: // xor n8
 		cs.xorOpA(8, 2, cs.read(cs.PC+1))
 	case 0xef: // rst 28h
@@ -733,16 +733,16 @@ func (cs *cpuState) stepOpcode() {
 
 	case 0xf0: // ld a, (0xFF00 + n8)
 		val := cs.read(cs.PC + 1)
-		cs.setOpA(12, 2, cs.read(0xff00+uint16(val)), 0x2222)
+		cs.setOpA(12, 2, cs.read(0xff00 + uint16(val)), 0x2222)
 	case 0xf1: // pop af
 		cs.popOp16(12, 1, cs.setAF)
 	case 0xf2: // ld a, (0xFF00 + c)
 		val := cs.C
-		cs.setOpA(8, 1, cs.read(0xff00+uint16(val)), 0x2222)
+		cs.setOpA(8, 1, cs.read(0xff00 + uint16(val)), 0x2222)
 	case 0xf3: // di
 		cs.setOpFn(4, 1, func() { cs.InterruptMasterEnable = false }, 0x2222)
-	case 0xf4: // illegal
-		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
+	case 0xf4:
+		cs.illegalOpcode(opcode)
 	case 0xf5: // push af
 		cs.pushOp16(16, 1, cs.getAF())
 	case 0xf6: // or n8
@@ -759,10 +759,10 @@ func (cs *cpuState) stepOpcode() {
 		cs.setOpA(16, 3, cs.read(cs.read16(cs.PC+1)), 0x2222)
 	case 0xfb: // ei
 		cs.setOpFn(4, 1, func() { cs.MasterEnableRequested = true }, 0x2222)
-	case 0xfc: // illegal
-		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
-	case 0xfd: // illegal
-		cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
+	case 0xfc:
+		cs.illegalOpcode(opcode)
+	case 0xfd:
+		cs.illegalOpcode(opcode)
 	case 0xfe: // cp a, n8
 		cs.cpOp(8, 2, cs.read(cs.PC+1))
 	case 0xff: // rst 38h
@@ -771,6 +771,10 @@ func (cs *cpuState) stepOpcode() {
 	default:
 		cs.stepErr(fmt.Sprintf("Unknown Opcode: 0x%02x\r\n", opcode))
 	}
+}
+
+func (cs *cpuState) illegalOpcode(opcode uint8) {
+	cs.stepErr(fmt.Sprintf("illegal opcode %02x", opcode))
 }
 
 func (cs *cpuState) stepExtendedOpcode() {
