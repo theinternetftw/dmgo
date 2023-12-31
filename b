@@ -21,9 +21,10 @@ echo
 echo "running fmt, vet, etc..."
 echo
 
-goimports -w *.go
 # go fmt
+goimports -w *.go cmd/*/*.go
 go vet
+go vet ./cmd/*
 
 if [ "$1" == "" ]
 then
