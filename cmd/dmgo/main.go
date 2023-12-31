@@ -12,9 +12,13 @@ import (
 	"os"
 	"strings"
 	"time"
+
+    "golang.org/x/sys/windows"
 )
 
 func main() {
+
+    windows.TimeBeginPeriod(2) // kinder than 1, but still good enough
 
 	defer profiling.Start().Stop()
 
@@ -58,7 +62,7 @@ func main() {
 	}
 
 	audio, audioErr := glimmer.OpenAudioBuffer(glimmer.OpenAudioBufferOptions{
-        OutputBufDuration: 20*time.Millisecond,
+        OutputBufDuration: 25*time.Millisecond,
         SamplesPerSecond: 44100,
         BitsPerSample: 16,
         ChannelCount: 2,
@@ -113,10 +117,14 @@ type sessionState struct {
     audioBytesProduced int
 }
 
+var maxWaited time.Duration
+
 func runEmu(session *sessionState, window *glimmer.WindowState) {
 
-    const audioBytesPerFrame = 2953.41339
     var audioChunkBuf []byte
+    audioBufModifier := 0
+    audioPrevReq := (<-session.audio.ReqChan)[0]
+    audioToGen := audioPrevReq + audioBufModifier
 
 	for {
 		session.ticksSincePollingInput++
@@ -126,7 +134,7 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 
 			inputDiff := now.Sub(session.lastInputPollTime)
 
-			if true || inputDiff > 8*time.Millisecond {
+			if inputDiff > 8*time.Millisecond {
 				session.lastInputPollTime = now
 
 				window.InputMutex.Lock()
@@ -183,19 +191,13 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 			}
 		}
 
-		session.emu.Step()
-
+        session.emu.Step()
         bufInfo := session.emu.GetSoundBufferInfo()
-        if bufInfo.IsValid {
-            if bufInfo.UsedSize >= 0 {
-                if cap(audioChunkBuf) >= bufInfo.UsedSize {
-                    audioChunkBuf = audioChunkBuf[:bufInfo.UsedSize]
-                } else {
-                    audioChunkBuf = make([]byte, bufInfo.UsedSize)
-                }
-                session.audio.Write(session.emu.ReadSoundBuffer(audioChunkBuf))
-                session.audioBytesProduced += bufInfo.UsedSize
+        if bufInfo.IsValid && bufInfo.UsedSize >= audioToGen {
+            if cap(audioChunkBuf) < audioToGen {
+                audioChunkBuf = make([]byte, audioToGen)
             }
+            session.audio.Write(session.emu.ReadSoundBuffer(audioChunkBuf[:audioToGen]))
         }
 
 		if session.emu.FlipRequested() {
@@ -207,28 +209,30 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
             session.frameTimer.MarkFrameComplete()
 
             session.currentNumFrames++
-            audioDiff := session.audioBytesProduced - session.audio.GetBufferBytesConsumed()
-            for float64(audioDiff) > 2*audioBytesPerFrame {
-                time.Sleep(5*time.Millisecond)
-                audioDiff = session.audioBytesProduced - session.audio.GetBufferBytesConsumed()
-            }
-            for float64(audioDiff) < audioBytesPerFrame {
-                session.emu.Step()
 
-                bufInfo := session.emu.GetSoundBufferInfo()
-                if bufInfo.IsValid {
-                    if bufInfo.UsedSize >= 0 {
-                        if cap(audioChunkBuf) >= bufInfo.UsedSize {
-                            audioChunkBuf = audioChunkBuf[:bufInfo.UsedSize]
-                        } else {
-                            audioChunkBuf = make([]byte, bufInfo.UsedSize)
-                        }
-                        session.audio.Write(session.emu.ReadSoundBuffer(audioChunkBuf))
-                        session.audioBytesProduced += bufInfo.UsedSize
-                    }
+            start := time.Now()
+            if session.audio.GetLenUnplayedData() > audioPrevReq+4 {
+                for session.audio.GetLenUnplayedData() > audioPrevReq+4 {
+                    time.Sleep(time.Millisecond)
                 }
-                audioDiff = session.audioBytesProduced - session.audio.GetBufferBytesConsumed()
+                if audioBufModifier > -4 {
+                    audioBufModifier -= 4
+                }
+            } else {
+                if audioBufModifier < 2*audioPrevReq {
+                    audioBufModifier += 4
+                }
             }
+            audioToGen = audioPrevReq + audioBufModifier
+            audioDiff := time.Now().Sub(start)
+            if audioDiff > maxWaited {
+                maxWaited = audioDiff
+            }
+            if session.currentNumFrames & 0x3f == 0 {
+                fmt.Println("[dmgo] max waited for audio:", maxWaited, "buf modifier now:", audioBufModifier)
+                maxWaited = time.Duration(0)
+            }
+
 			if session.emu.InDevMode() {
 				session.frameTimer.PrintStatsEveryXFrames(60*5)
 			}
