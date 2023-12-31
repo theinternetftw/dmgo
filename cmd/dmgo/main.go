@@ -12,13 +12,9 @@ import (
 	"os"
 	"strings"
 	"time"
-
-    "golang.org/x/sys/windows"
 )
 
 func main() {
-
-    windows.TimeBeginPeriod(2) // kinder than 1, but still good enough
 
 	defer profiling.Start().Stop()
 
@@ -123,8 +119,8 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 
     var audioChunkBuf []byte
     audioBufModifier := 0
-    audioPrevReq := (<-session.audio.ReqChan)[0]
-    audioToGen := audioPrevReq + audioBufModifier
+    audioPrevReadLen := <-session.audio.ReadLenNotifier
+    audioToGen := audioPrevReadLen + audioBufModifier
 
 	for {
 		session.ticksSincePollingInput++
@@ -210,25 +206,25 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
             session.currentNumFrames++
 
             start := time.Now()
-            if session.audio.GetLenUnplayedData() > audioPrevReq+4 {
-                for session.audio.GetLenUnplayedData() > audioPrevReq+4 {
-                    time.Sleep(time.Millisecond)
+            if session.audio.GetLenUnplayedData() > audioPrevReadLen+4 {
+                for session.audio.GetLenUnplayedData() > audioPrevReadLen+4 {
+                    audioPrevReadLen = <- session.audio.ReadLenNotifier
                 }
                 if audioBufModifier > -4 {
                     audioBufModifier -= 4
                 }
             } else {
-                if audioBufModifier < 2*audioPrevReq {
+                if audioBufModifier < 2*audioPrevReadLen {
                     audioBufModifier += 4
                 }
             }
-            audioToGen = audioPrevReq + audioBufModifier
+            audioToGen = audioPrevReadLen + audioBufModifier
             audioDiff := time.Now().Sub(start)
             if audioDiff > maxWaited {
                 maxWaited = audioDiff
             }
             if session.currentNumFrames & 0x3f == 0 {
-                fmt.Println("[dmgo] max waited for audio:", maxWaited, "buf modifier now:", audioBufModifier)
+                // fmt.Println("[dmgo] max waited for audio:", maxWaited, "buf modifier now:", audioBufModifier)
                 maxWaited = time.Duration(0)
             }
 
