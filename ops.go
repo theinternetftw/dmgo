@@ -9,26 +9,26 @@ func (cs *cpuState) setOp8(cycles uint, instLen uint16, reg *uint8, val uint8, f
 	cs.setFlags(flags)
 }
 
-func (cs *cpuState) setOpA(cycles uint, instLen uint16, val uint8, flags uint16) {
-	cs.setOp8(cycles, instLen, &cs.A, val, flags)
+func setOpA(cs *cpuState, cycles uint, instLen uint16, val uint8) {
+	cs.setOp8(cycles, instLen, &cs.A, val, 0x2222)
 }
-func (cs *cpuState) setOpB(cycles uint, instLen uint16, val uint8, flags uint16) {
-	cs.setOp8(cycles, instLen, &cs.B, val, flags)
+func setOpB(cs *cpuState, cycles uint, instLen uint16, val uint8) {
+	cs.setOp8(cycles, instLen, &cs.B, val, 0x2222)
 }
-func (cs *cpuState) setOpC(cycles uint, instLen uint16, val uint8, flags uint16) {
-	cs.setOp8(cycles, instLen, &cs.C, val, flags)
+func setOpC(cs *cpuState, cycles uint, instLen uint16, val uint8) {
+	cs.setOp8(cycles, instLen, &cs.C, val, 0x2222)
 }
-func (cs *cpuState) setOpD(cycles uint, instLen uint16, val uint8, flags uint16) {
-	cs.setOp8(cycles, instLen, &cs.D, val, flags)
+func setOpD(cs *cpuState, cycles uint, instLen uint16, val uint8) {
+	cs.setOp8(cycles, instLen, &cs.D, val, 0x2222)
 }
-func (cs *cpuState) setOpE(cycles uint, instLen uint16, val uint8, flags uint16) {
-	cs.setOp8(cycles, instLen, &cs.E, val, flags)
+func setOpE(cs *cpuState, cycles uint, instLen uint16, val uint8) {
+	cs.setOp8(cycles, instLen, &cs.E, val, 0x2222)
 }
-func (cs *cpuState) setOpL(cycles uint, instLen uint16, val uint8, flags uint16) {
-	cs.setOp8(cycles, instLen, &cs.L, val, flags)
+func setOpL(cs *cpuState, cycles uint, instLen uint16, val uint8) {
+	cs.setOp8(cycles, instLen, &cs.L, val, 0x2222)
 }
-func (cs *cpuState) setOpH(cycles uint, instLen uint16, val uint8, flags uint16) {
-	cs.setOp8(cycles, instLen, &cs.H, val, flags)
+func setOpH(cs *cpuState, cycles uint, instLen uint16, val uint8) {
+	cs.setOp8(cycles, instLen, &cs.H, val, 0x2222)
 }
 
 func (cs *cpuState) setOp16(cycles uint, instLen uint16, setFn func(uint16), val uint16, flags uint16) {
@@ -38,20 +38,20 @@ func (cs *cpuState) setOp16(cycles uint, instLen uint16, setFn func(uint16), val
 	cs.setFlags(flags)
 }
 
-func (cs *cpuState) setOpHL(cycles uint, instLen uint16, val uint16, flags uint16) {
-	cs.setOp16(cycles, instLen, cs.setHL, val, flags)
+func (cs *cpuState) setOpHL(cycles uint, instLen uint16, val uint16) {
+	cs.setOp16(cycles, instLen, cs.setHL, val, 0x2222)
 }
-func (cs *cpuState) setOpBC(cycles uint, instLen uint16, val uint16, flags uint16) {
-	cs.setOp16(cycles, instLen, cs.setBC, val, flags)
+func (cs *cpuState) setOpBC(cycles uint, instLen uint16, val uint16) {
+	cs.setOp16(cycles, instLen, cs.setBC, val, 0x2222)
 }
-func (cs *cpuState) setOpDE(cycles uint, instLen uint16, val uint16, flags uint16) {
-	cs.setOp16(cycles, instLen, cs.setDE, val, flags)
+func (cs *cpuState) setOpDE(cycles uint, instLen uint16, val uint16) {
+	cs.setOp16(cycles, instLen, cs.setDE, val, 0x2222)
 }
-func (cs *cpuState) setOpSP(cycles uint, instLen uint16, val uint16, flags uint16) {
-	cs.setOp16(cycles, instLen, cs.setSP, val, flags)
+func (cs *cpuState) setOpSP(cycles uint, instLen uint16, val uint16) {
+	cs.setOp16(cycles, instLen, cs.setSP, val, 0x2222)
 }
-func (cs *cpuState) setOpPC(cycles uint, instLen uint16, val uint16, flags uint16) {
-	cs.setOp16(cycles, instLen, cs.setPC, val, flags)
+func (cs *cpuState) setOpPC(cycles uint, instLen uint16, val uint16) {
+	cs.setOp16(cycles, instLen, cs.setPC, val, 0x2222)
 }
 
 func (cs *cpuState) setOpMem8(cycles uint, instLen uint16, addr uint16, val uint8, flags uint16) {
@@ -335,30 +335,30 @@ func (cs *cpuState) debugStatusLine() string {
 		fmt.Sprintf("ROM:%d]", cs.Mem.mbc.GetROMBankNumber())
 }
 
-func (cs *cpuState) addOpA(cycles uint, instLen uint16, val byte) {
-	cs.setOpA(cycles, instLen, cs.A+val, (zFlag(cs.A+val) | hFlagAdd(cs.A, val) | cFlagAdd(cs.A, val)))
+func addOpA(cs *cpuState, cycles uint, instLen uint16, val byte) {
+	cs.setOp8(cycles, instLen, &cs.A, cs.A+val, (zFlag(cs.A+val) | hFlagAdd(cs.A, val) | cFlagAdd(cs.A, val)))
 }
-func (cs *cpuState) adcOpA(cycles uint, instLen uint16, val byte) {
+func adcOpA(cs *cpuState, cycles uint, instLen uint16, val byte) {
 	carry := (cs.F >> 4) & 0x01
-	cs.setOpA(cycles, instLen, cs.A+val+carry, (zFlag(cs.A+val+carry) | hFlagAdc(cs.A, val, cs.F) | cFlagAdc(cs.A, val, cs.F)))
+	cs.setOp8(cycles, instLen, &cs.A, cs.A+val+carry, (zFlag(cs.A+val+carry) | hFlagAdc(cs.A, val, cs.F) | cFlagAdc(cs.A, val, cs.F)))
 }
-func (cs *cpuState) subOpA(cycles uint, instLen uint16, val byte) {
-	cs.setOpA(cycles, instLen, cs.A-val, (zFlag(cs.A-val) | 0x100 | hFlagSub(cs.A, val) | cFlagSub(cs.A, val)))
+func subOpA(cs *cpuState, cycles uint, instLen uint16, val byte) {
+	cs.setOp8(cycles, instLen, &cs.A, cs.A-val, (zFlag(cs.A-val) | 0x100 | hFlagSub(cs.A, val) | cFlagSub(cs.A, val)))
 }
-func (cs *cpuState) sbcOpA(cycles uint, instLen uint16, val byte) {
+func sbcOpA(cs *cpuState, cycles uint, instLen uint16, val byte) {
 	carry := (cs.F >> 4) & 0x01
-	cs.setOpA(cycles, instLen, cs.A-val-carry, (zFlag(cs.A-val-carry) | 0x100 | hFlagSbc(cs.A, val, cs.F) | cFlagSbc(cs.A, val, cs.F)))
+	cs.setOp8(cycles, instLen, &cs.A, cs.A-val-carry, (zFlag(cs.A-val-carry) | 0x100 | hFlagSbc(cs.A, val, cs.F) | cFlagSbc(cs.A, val, cs.F)))
 }
-func (cs *cpuState) andOpA(cycles uint, instLen uint16, val byte) {
-	cs.setOpA(cycles, instLen, cs.A&val, (zFlag(cs.A&val) | 0x010))
+func andOpA(cs *cpuState, cycles uint, instLen uint16, val byte) {
+	cs.setOp8(cycles, instLen, &cs.A, cs.A&val, (zFlag(cs.A&val) | 0x010))
 }
-func (cs *cpuState) xorOpA(cycles uint, instLen uint16, val byte) {
-	cs.setOpA(cycles, instLen, cs.A^val, zFlag(cs.A^val))
+func xorOpA(cs *cpuState, cycles uint, instLen uint16, val byte) {
+	cs.setOp8(cycles, instLen, &cs.A, cs.A^val, zFlag(cs.A^val))
 }
-func (cs *cpuState) orOpA(cycles uint, instLen uint16, val byte) {
-	cs.setOpA(cycles, instLen, cs.A|val, zFlag(cs.A|val))
+func orOpA(cs *cpuState, cycles uint, instLen uint16, val byte) {
+	cs.setOp8(cycles, instLen, &cs.A, cs.A|val, zFlag(cs.A|val))
 }
-func (cs *cpuState) cpOp(cycles uint, instLen uint16, val byte) {
+func cpOp(cs *cpuState, cycles uint, instLen uint16, val byte) {
 	cs.setOpFn(cycles, instLen, func() {}, (zFlag(cs.A-val) | hFlagSub(cs.A, val) | cFlagSub(cs.A, val) | 0x0100))
 }
 
@@ -397,66 +397,30 @@ func (cs *cpuState) getCyclesAndValFromOpBits(cyclesReg uint, cyclesHL uint, opc
 	return cyclesHL, cs.followHL()
 }
 
-func (cs *cpuState) loadOp(cyclesReg uint, cyclesHL uint, instLen uint16,
-	opcode byte, fnPtr func(uint, uint16, byte, uint16)) {
-
-	cycles, val := cs.getCyclesAndValFromOpBits(cyclesReg, cyclesHL, opcode)
-	fnPtr(cycles, instLen, val, 0x2222)
+// opcode >> 3
+var isSimpleOp = []bool{
+	false, false, false, false, false, false, false, false,
+	true, true, true, true, true, true, false, true,
+	true, true, true, true, true, true, true, true,
+	false, false, false, false, false, false, false, false,
 }
 
-func (cs *cpuState) aluOp(cyclesReg uint, cyclesHL uint, instLen uint16,
-	opcode byte, fnPtr func(uint, uint16, byte)) {
-
-	cycles, val := cs.getCyclesAndValFromOpBits(cyclesReg, cyclesHL, opcode)
-	fnPtr(cycles, instLen, val)
-}
-
-func (cs *cpuState) stepSimpleOp(opcode byte) bool {
-	switch opcode & 0xf8 {
-	case 0x40: // ld b, R_OR_(HL)
-		cs.loadOp(4, 8, 1, opcode, cs.setOpB)
-	case 0x48: // ld c, R_OR_(HL)
-		cs.loadOp(4, 8, 1, opcode, cs.setOpC)
-	case 0x50: // ld d, R_OR_(HL)
-		cs.loadOp(4, 8, 1, opcode, cs.setOpD)
-	case 0x58: // ld e, R_OR_(HL)
-		cs.loadOp(4, 8, 1, opcode, cs.setOpE)
-	case 0x60: // ld h, R_OR_(HL)
-		cs.loadOp(4, 8, 1, opcode, cs.setOpH)
-	case 0x68: // ld l, R_OR_(HL)
-		cs.loadOp(4, 8, 1, opcode, cs.setOpL)
-
-	case 0x78: // ld a, R_OR_(HL)
-		cs.loadOp(4, 8, 1, opcode, cs.setOpA)
-
-	case 0x80: // add R_OR_(HL)
-		cs.aluOp(4, 8, 1, opcode, cs.addOpA)
-	case 0x88: // adc R_OR_(HL)
-		cs.aluOp(4, 8, 1, opcode, cs.adcOpA)
-	case 0x90: // sub R_OR_(HL)
-		cs.aluOp(4, 8, 1, opcode, cs.subOpA)
-	case 0x98: // sbc R_OR_(HL)
-		cs.aluOp(4, 8, 1, opcode, cs.sbcOpA)
-	case 0xa0: // and R_OR_(HL)
-		cs.aluOp(4, 8, 1, opcode, cs.andOpA)
-	case 0xa8: // xor R_OR_(HL)
-		cs.aluOp(4, 8, 1, opcode, cs.xorOpA)
-	case 0xb0: // or R_OR_(HL)
-		cs.aluOp(4, 8, 1, opcode, cs.orOpA)
-	case 0xb8: // cp R_OR_(HL)
-		cs.aluOp(4, 8, 1, opcode, cs.cpOp)
-	default:
-		return false
-	}
-	return true
+// opcode >> 3
+var simpleOpFnTable = []func(*cpuState, uint, uint16, byte){
+	nil, nil, nil, nil, nil, nil, nil, nil,
+	setOpB, setOpC, setOpD, setOpE, setOpH, setOpL, nil, setOpA,
+	addOpA, adcOpA, subOpA, sbcOpA, andOpA, xorOpA, orOpA, cpOp,
 }
 
 func (cs *cpuState) stepOpcode() {
 
 	opcode := cs.read(cs.PC)
 
-	// simple cases
-	if cs.stepSimpleOp(opcode) {
+	// simple cases [ ld R, R_OR_(HL) or ALU_OP R_OR_(HL) ]
+	sel := opcode >> 3
+	if isSimpleOp[sel] {
+		cycles, val := cs.getCyclesAndValFromOpBits(4, 8, opcode)
+		simpleOpFnTable[sel](cs, cycles, 1, val)
 		return
 	}
 
@@ -466,17 +430,17 @@ func (cs *cpuState) stepOpcode() {
 	case 0x00: // nop
 		cs.setOpFn(4, 1, func() {}, 0x2222)
 	case 0x01: // ld bc, n16
-		cs.setOpBC(12, 3, cs.read16(cs.PC+1), 0x2222)
+		cs.setOpBC(12, 3, cs.read16(cs.PC+1))
 	case 0x02: // ld (bc), a
 		cs.setOpMem8(8, 1, cs.getBC(), cs.A, 0x2222)
 	case 0x03: // inc bc
-		cs.setOpBC(8, 1, cs.getBC()+1, 0x2222)
+		cs.setOpBC(8, 1, cs.getBC()+1)
 	case 0x04: // inc b
 		cs.incOpReg(&cs.B)
 	case 0x05: // dec b
 		cs.decOpReg(&cs.B)
 	case 0x06: // ld b, n8
-		cs.setOpB(8, 2, cs.read(cs.PC+1), 0x2222)
+		setOpB(cs, 8, 2, cs.read(cs.PC+1))
 	case 0x07: // rlca
 		cs.rlcaOp()
 
@@ -484,34 +448,34 @@ func (cs *cpuState) stepOpcode() {
 		cs.setOpMem16(20, 3, cs.read16(cs.PC+1), cs.SP, 0x2222)
 	case 0x09: // add hl, bc
 		v1, v2 := cs.getHL(), cs.getBC()
-		cs.setOpHL(8, 1, v1+v2, (0x2000 | hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
+		cs.setOp16(8, 1, cs.setHL, v1+v2, (0x2000 | hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
 	case 0x0a: // ld a, (bc)
-		cs.setOpA(8, 1, cs.followBC(), 0x2222)
+		setOpA(cs, 8, 1, cs.followBC())
 	case 0x0b: // dec bc
-		cs.setOpBC(8, 1, cs.getBC()-1, 0x2222)
+		cs.setOpBC(8, 1, cs.getBC()-1)
 	case 0x0c: // inc c
 		cs.incOpReg(&cs.C)
 	case 0x0d: // dec c
 		cs.decOpReg(&cs.C)
 	case 0x0e: // ld c, n8
-		cs.setOpC(8, 2, cs.read(cs.PC+1), 0x2222)
+		setOpC(cs, 8, 2, cs.read(cs.PC+1))
 	case 0x0f: // rrca
 		cs.rrcaOp()
 
 	case 0x10: // stop
 		cs.setOpFn(4, 2, func() { cs.InStopMode = true }, 0x2222)
 	case 0x11: // ld de, n16
-		cs.setOpDE(12, 3, cs.read16(cs.PC+1), 0x2222)
+		cs.setOpDE(12, 3, cs.read16(cs.PC+1))
 	case 0x12: // ld (de), a
 		cs.setOpMem8(8, 1, cs.getDE(), cs.A, 0x2222)
 	case 0x13: // inc de
-		cs.setOpDE(8, 1, cs.getDE()+1, 0x2222)
+		cs.setOpDE(8, 1, cs.getDE()+1)
 	case 0x14: // inc d
 		cs.incOpReg(&cs.D)
 	case 0x15: // dec d
 		cs.decOpReg(&cs.D)
 	case 0x16: // ld d, n8
-		cs.setOpD(8, 2, cs.read(cs.PC+1), 0x2222)
+		setOpD(cs, 8, 2, cs.read(cs.PC+1))
 	case 0x17: // rla
 		cs.rlaOp()
 
@@ -519,35 +483,35 @@ func (cs *cpuState) stepOpcode() {
 		cs.jmpRel8(12, 12, 2, true, int8(cs.read(cs.PC+1)))
 	case 0x19: // add hl, de
 		v1, v2 := cs.getHL(), cs.getDE()
-		cs.setOpHL(8, 1, v1+v2, (0x2000 | hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
+		cs.setOp16(8, 1, cs.setHL, v1+v2, (0x2000 | hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
 	case 0x1a: // ld a, (de)
-		cs.setOpA(8, 1, cs.followDE(), 0x2222)
+		setOpA(cs, 8, 1, cs.followDE())
 	case 0x1b: // dec de
-		cs.setOpDE(8, 1, cs.getDE()-1, 0x2222)
+		cs.setOpDE(8, 1, cs.getDE()-1)
 	case 0x1c: // inc e
 		cs.incOpReg(&cs.E)
 	case 0x1d: // dec e
 		cs.decOpReg(&cs.E)
 	case 0x1e: // ld e, n8
-		cs.setOpE(8, 2, cs.read(cs.PC+1), 0x2222)
+		setOpE(cs, 8, 2, cs.read(cs.PC+1))
 	case 0x1f: // rra
 		cs.rraOp()
 
 	case 0x20: // jr nz, r8
 		cs.jmpRel8(12, 8, 2, !cs.getZeroFlag(), int8(cs.read(cs.PC+1)))
 	case 0x21: // ld hl, n16
-		cs.setOpHL(12, 3, cs.read16(cs.PC+1), 0x2222)
+		cs.setOpHL(12, 3, cs.read16(cs.PC+1))
 	case 0x22: // ld (hl++), a
 		cs.setOpMem8(8, 1, cs.getHL(), cs.A, 0x2222)
 		cs.setHL(cs.getHL() + 1)
 	case 0x23: // inc hl
-		cs.setOpHL(8, 1, cs.getHL()+1, 0x2222)
+		cs.setOpHL(8, 1, cs.getHL()+1)
 	case 0x24: // inc h
 		cs.incOpReg(&cs.H)
 	case 0x25: // dec h
 		cs.decOpReg(&cs.H)
 	case 0x26: // ld h, d8
-		cs.setOpH(8, 2, cs.read(cs.PC+1), 0x2222)
+		setOpH(cs, 8, 2, cs.read(cs.PC+1))
 	case 0x27: // daa
 		cs.daaOp()
 
@@ -555,30 +519,30 @@ func (cs *cpuState) stepOpcode() {
 		cs.jmpRel8(12, 8, 2, cs.getZeroFlag(), int8(cs.read(cs.PC+1)))
 	case 0x29: // add hl, hl
 		v1, v2 := cs.getHL(), cs.getHL()
-		cs.setOpHL(8, 1, v1+v2, (0x2000 | hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
+		cs.setOp16(8, 1, cs.setHL, v1+v2, (0x2000 | hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
 	case 0x2a: // ld a, (hl++)
-		cs.setOpA(8, 1, cs.followHL(), 0x2222)
+		setOpA(cs, 8, 1, cs.followHL())
 		cs.setHL(cs.getHL() + 1)
 	case 0x2b: // dec hl
-		cs.setOpHL(8, 1, cs.getHL()-1, 0x2222)
+		cs.setOpHL(8, 1, cs.getHL()-1)
 	case 0x2c: // inc l
 		cs.incOpReg(&cs.L)
 	case 0x2d: // dec l
 		cs.decOpReg(&cs.L)
 	case 0x2e: // ld l, d8
-		cs.setOpL(8, 2, cs.read(cs.PC+1), 0x2222)
+		setOpL(cs, 8, 2, cs.read(cs.PC+1))
 	case 0x2f: // cpl
-		cs.setOpA(4, 1, ^cs.A, 0x2112)
+		cs.setOp8(4, 1, &cs.A, ^cs.A, 0x2112)
 
 	case 0x30: // jr nc, r8
 		cs.jmpRel8(12, 8, 2, !cs.getCarryFlag(), int8(cs.read(cs.PC+1)))
 	case 0x31: // ld sp, n16
-		cs.setOpSP(12, 3, cs.read16(cs.PC+1), 0x2222)
+		cs.setOpSP(12, 3, cs.read16(cs.PC+1))
 	case 0x32: // ld (hl--) a
 		cs.setOpMem8(8, 1, cs.getHL(), cs.A, 0x2222)
 		cs.setHL(cs.getHL() - 1)
 	case 0x33: // inc sp
-		cs.setOpSP(8, 1, cs.SP+1, 0x2222)
+		cs.setOpSP(8, 1, cs.SP+1)
 	case 0x34: // inc (hl)
 		cs.incOpHL()
 	case 0x35: // dec (hl)
@@ -592,21 +556,21 @@ func (cs *cpuState) stepOpcode() {
 		cs.jmpRel8(12, 8, 2, cs.getCarryFlag(), int8(cs.read(cs.PC+1)))
 	case 0x39: // add hl, sp
 		v1, v2 := cs.getHL(), cs.SP
-		cs.setOpHL(8, 1, v1+v2, (0x2000 | hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
+		cs.setOp16(8, 1, cs.setHL, v1+v2, (0x2000 | hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
 	case 0x3a: // ld a, (hl--)
-		cs.setOpA(8, 1, cs.followHL(), 0x2222)
+		setOpA(cs, 8, 1, cs.followHL())
 		cs.setHL(cs.getHL() - 1)
 	case 0x3b: // dec sp
-		cs.setOpSP(8, 1, cs.SP-1, 0x2222)
+		cs.setOpSP(8, 1, cs.SP-1)
 	case 0x3c: // inc a
 		cs.incOpReg(&cs.A)
 	case 0x3d: // dec a
 		cs.decOpReg(&cs.A)
 	case 0x3e: // ld a, n8
-		cs.setOpA(8, 2, cs.read(cs.PC+1), 0x2222)
+		setOpA(cs, 8, 2, cs.read(cs.PC+1))
 	case 0x3f: // ccf
 		carry := uint16((cs.F>>4)&0x01) ^ 0x01
-		cs.setOpFn(4, 1, func() {}, 0x2000 | carry)
+		cs.setOpFn(4, 1, func() {}, 0x2000|carry)
 
 	case 0x70: // ld (hl), b
 		cs.setOpMem8(8, 1, cs.getHL(), cs.B, 0x2222)
@@ -632,13 +596,13 @@ func (cs *cpuState) stepOpcode() {
 	case 0xc2: // jp nz, a16
 		cs.jmpAbs16(16, 12, 3, !cs.getZeroFlag(), cs.read16(cs.PC+1))
 	case 0xc3: // jp a16
-		cs.setOpPC(16, 3, cs.read16(cs.PC+1), 0x2222)
+		cs.setOpPC(16, 3, cs.read16(cs.PC+1))
 	case 0xc4: // call nz, a16
 		cs.jmpCall(24, 12, 3, !cs.getZeroFlag(), cs.read16(cs.PC+1))
 	case 0xc5: // push bc
 		cs.pushOp16(16, 1, cs.getBC())
 	case 0xc6: // add a, n8
-		cs.addOpA(8, 2, cs.read(cs.PC+1))
+		addOpA(cs, 8, 2, cs.read(cs.PC+1))
 	case 0xc7: // rst 00h
 		cs.callOp(16, 1, 0x0000)
 
@@ -655,7 +619,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xcd: // call a16
 		cs.callOp(24, 3, cs.read16(cs.PC+1))
 	case 0xce: // adc a, n8
-		cs.adcOpA(8, 2, cs.read(cs.PC+1))
+		adcOpA(cs, 8, 2, cs.read(cs.PC+1))
 	case 0xcf: // rst 08h
 		cs.callOp(16, 1, 0x0008)
 
@@ -672,7 +636,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xd5: // push de
 		cs.pushOp16(16, 1, cs.getDE())
 	case 0xd6: // sub n8
-		cs.subOpA(8, 2, cs.read(cs.PC+1))
+		subOpA(cs, 8, 2, cs.read(cs.PC+1))
 	case 0xd7: // rst 10h
 		cs.callOp(16, 1, 0x0010)
 
@@ -690,18 +654,18 @@ func (cs *cpuState) stepOpcode() {
 	case 0xdd:
 		cs.illegalOpcode(opcode)
 	case 0xde: // sbc n8
-		cs.sbcOpA(8, 2, cs.read(cs.PC+1))
+		sbcOpA(cs, 8, 2, cs.read(cs.PC+1))
 	case 0xdf: // rst 18h
 		cs.callOp(16, 1, 0x0018)
 
 	case 0xe0: // ld (0xFF00 + n8), a
 		val := cs.read(cs.PC + 1)
-		cs.setOpMem8(12, 2, 0xff00 + uint16(val), cs.A, 0x2222)
+		cs.setOpMem8(12, 2, 0xff00+uint16(val), cs.A, 0x2222)
 	case 0xe1: // pop hl
 		cs.popOp16(12, 1, cs.setHL)
 	case 0xe2: // ld (0xFF00 + c), a
 		val := cs.C
-		cs.setOpMem8(8, 1, 0xff00 + uint16(val), cs.A, 0x2222)
+		cs.setOpMem8(8, 1, 0xff00+uint16(val), cs.A, 0x2222)
 	case 0xe3:
 		cs.illegalOpcode(opcode)
 	case 0xe4:
@@ -709,15 +673,15 @@ func (cs *cpuState) stepOpcode() {
 	case 0xe5: // push hl
 		cs.pushOp16(16, 1, cs.getHL())
 	case 0xe6: // and n8
-		cs.andOpA(8, 2, cs.read(cs.PC+1))
+		andOpA(cs, 8, 2, cs.read(cs.PC+1))
 	case 0xe7: // rst 20h
 		cs.callOp(16, 1, 0x0020)
 
 	case 0xe8: // add sp, r8
 		v1, v2 := cs.SP, uint16(int8(cs.read(cs.PC+1)))
-		cs.setOpSP(16, 2, v1+v2, (hFlagAdd(byte(v1), byte(v2)) | cFlagAdd(byte(v1), byte(v2))))
+		cs.setOp16(16, 2, cs.setSP, v1+v2, (hFlagAdd(byte(v1), byte(v2)) | cFlagAdd(byte(v1), byte(v2))))
 	case 0xe9: // jp hl (also written jp (hl))
-		cs.setOpPC(4, 1, cs.getHL(), 0x2222)
+		cs.setOpPC(4, 1, cs.getHL())
 	case 0xea: // ld (a16), a
 		cs.setOpMem8(16, 3, cs.read16(cs.PC+1), cs.A, 0x2222)
 	case 0xeb:
@@ -727,18 +691,18 @@ func (cs *cpuState) stepOpcode() {
 	case 0xed:
 		cs.illegalOpcode(opcode)
 	case 0xee: // xor n8
-		cs.xorOpA(8, 2, cs.read(cs.PC+1))
+		xorOpA(cs, 8, 2, cs.read(cs.PC+1))
 	case 0xef: // rst 28h
 		cs.callOp(16, 1, 0x0028)
 
 	case 0xf0: // ld a, (0xFF00 + n8)
 		val := cs.read(cs.PC + 1)
-		cs.setOpA(12, 2, cs.read(0xff00 + uint16(val)), 0x2222)
+		setOpA(cs, 12, 2, cs.read(0xff00+uint16(val)))
 	case 0xf1: // pop af
 		cs.popOp16(12, 1, cs.setAF)
 	case 0xf2: // ld a, (0xFF00 + c)
 		val := cs.C
-		cs.setOpA(8, 1, cs.read(0xff00 + uint16(val)), 0x2222)
+		setOpA(cs, 8, 1, cs.read(0xff00+uint16(val)))
 	case 0xf3: // di
 		cs.setOpFn(4, 1, func() { cs.InterruptMasterEnable = false }, 0x2222)
 	case 0xf4:
@@ -746,17 +710,17 @@ func (cs *cpuState) stepOpcode() {
 	case 0xf5: // push af
 		cs.pushOp16(16, 1, cs.getAF())
 	case 0xf6: // or n8
-		cs.orOpA(8, 2, cs.read(cs.PC+1))
+		orOpA(cs, 8, 2, cs.read(cs.PC+1))
 	case 0xf7: // rst 30h
 		cs.callOp(16, 1, 0x0030)
 
 	case 0xf8: // ld hl, sp+r8
 		v1, v2 := cs.SP, uint16(int8(cs.read(cs.PC+1)))
-		cs.setOpHL(12, 2, v1+v2, (hFlagAdd(byte(v1), byte(v2)) | cFlagAdd(byte(v1), byte(v2))))
+		cs.setOp16(12, 2, cs.setHL, v1+v2, (hFlagAdd(byte(v1), byte(v2)) | cFlagAdd(byte(v1), byte(v2))))
 	case 0xf9: // ld sp, hl
-		cs.setOpSP(8, 1, cs.getHL(), 0x2222)
+		cs.setOpSP(8, 1, cs.getHL())
 	case 0xfa: // ld a, (a16)
-		cs.setOpA(16, 3, cs.read(cs.read16(cs.PC+1)), 0x2222)
+		setOpA(cs, 16, 3, cs.read(cs.read16(cs.PC+1)))
 	case 0xfb: // ei
 		cs.setOpFn(4, 1, func() { cs.MasterEnableRequested = true }, 0x2222)
 	case 0xfc:
@@ -764,7 +728,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xfd:
 		cs.illegalOpcode(opcode)
 	case 0xfe: // cp a, n8
-		cs.cpOp(8, 2, cs.read(cs.PC+1))
+		cpOp(cs, 8, 2, cs.read(cs.PC+1))
 	case 0xff: // rst 38h
 		cs.callOp(16, 1, 0x0038)
 
