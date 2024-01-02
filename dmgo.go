@@ -104,10 +104,10 @@ func (cs *cpuState) runTimerCycle() {
 		return
 	}
 
-	cycleCount := [...]uint{
+	cycleCount := [...]uint16{
 		1024, 16, 64, 256,
 	}[cs.TimerFreqSelector]
-	if cs.Cycles&(cycleCount-1) == 0 {
+	if cs.TimerDivCycles&(cycleCount-1) == 0 {
 		cs.TimerCounterReg++
 		if cs.TimerCounterReg == 0 {
 			cs.TimerCounterReg = cs.TimerModuloReg
@@ -528,6 +528,7 @@ func (cs *cpuState) step() {
 	// TODO: correct behavior, i.e. only resume on
 	// button press if not about to switch speeds.
 	if cs.InStopMode {
+		cs.TimerDivCycles = 0
 		cs.handleSpeedSwitching()
 		cs.runCycles(4)
 		cs.InStopMode = false
