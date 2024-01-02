@@ -55,15 +55,17 @@ func (cs *cpuState) setOpPC(cycles uint, instLen uint16, val uint16) {
 }
 
 func (cs *cpuState) setOpMem8(cycles uint, instLen uint16, addr uint16, val uint8, flags uint16) {
-	cs.runCycles(cycles)
+	cs.runCycles(2)
 	cs.PC += instLen
 	cs.write(addr, val)
+	cs.runCycles(cycles - 2)
 	cs.setFlags(flags)
 }
 func (cs *cpuState) setOpMem16(cycles uint, instLen uint16, addr uint16, val uint16, flags uint16) {
-	cs.runCycles(cycles)
+	cs.runCycles(2)
 	cs.PC += instLen
 	cs.write16(addr, val)
+	cs.runCycles(cycles - 2)
 	cs.setFlags(flags)
 }
 
