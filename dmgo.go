@@ -62,7 +62,8 @@ type cpuState struct {
 	Steps  uint
 	Cycles uint
 
-	devMode bool
+	devMode  bool
+	debugger debugger
 }
 
 func (cs *cpuState) SetDevMode(b bool) { cs.devMode = b }
@@ -413,6 +414,12 @@ type Emulator interface {
 
 	InDevMode() bool
 	SetDevMode(b bool)
+	UpdateDbgKeyState([]bool)
+	DbgStep()
+}
+
+func (cs *cpuState) UpdateDbgKeyState(keys []bool) {
+	cs.debugger.updateInput(keys)
 }
 
 func (cs *cpuState) MakeSnapshot() []byte {
@@ -492,13 +499,16 @@ var lastSP = int(-1)
 func (cs *cpuState) debugLineOnStackChange() {
 	if lastSP != int(cs.SP) {
 		lastSP = int(cs.SP)
-		fmt.Println(cs.debugStatusLine())
+		fmt.Println(cs.DebugStatusLine())
 	}
 }
 
 // Step steps the emulator one instruction
 func (cs *cpuState) Step() {
 	cs.step()
+}
+func (cs *cpuState) DbgStep() {
+	cs.debugger.step(cs)
 }
 
 var hitTarget = false
@@ -521,9 +531,9 @@ func (cs *cpuState) step() {
 	// 	hitTarget = true
 	// }
 	// if hitTarget {
-	// 	fmt.Println(cs.debugStatusLine())
+	// 	fmt.Println(cs.DebugStatusLine())
 	// }
-	// fmt.Fprintln(os.Stderr, cs.debugStatusLine())
+	// fmt.Fprintln(os.Stderr, cs.DebugStatusLine())
 
 	// TODO: correct behavior, i.e. only resume on
 	// button press if not about to switch speeds.

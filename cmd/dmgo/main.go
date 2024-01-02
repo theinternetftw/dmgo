@@ -118,6 +118,7 @@ var maxWaited time.Duration
 
 func runEmu(session *sessionState, window *glimmer.WindowState) {
 
+	dbgKeyState := make([]bool, 256)
 	var audioChunkBuf []byte
 	audioBufModifier := 0
 	audioPrevReadLen := <-session.audio.ReadLenNotifier
@@ -135,31 +136,36 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 				session.lastInputPollTime = now
 
 				window.InputMutex.Lock()
-				bDown := window.CharIsDown('b')
-				session.latestInput = dmgo.Input{
-					Joypad: dmgo.Joypad{
-						Sel:   bDown || window.CharIsDown('t'),
-						Start: bDown || window.CharIsDown('y'),
-						Up:    window.CharIsDown('w'),
-						Down:  window.CharIsDown('s'),
-						Left:  window.CharIsDown('a'),
-						Right: window.CharIsDown('d'),
-						A:     bDown || window.CharIsDown('k'),
-						B:     bDown || window.CharIsDown('j'),
-					},
-				}
-
-				numDown := 'x'
-				for r := '0'; r <= '9'; r++ {
-					if window.CharIsDown(r) {
-						numDown = r
-						break
+				var numDown rune
+				{
+					bDown := window.CharIsDown('b')
+					session.latestInput = dmgo.Input{
+						Joypad: dmgo.Joypad{
+							Sel:   bDown || window.CharIsDown('t'),
+							Start: bDown || window.CharIsDown('y'),
+							Up:    window.CharIsDown('w'),
+							Down:  window.CharIsDown('s'),
+							Left:  window.CharIsDown('a'),
+							Right: window.CharIsDown('d'),
+							A:     bDown || window.CharIsDown('k'),
+							B:     bDown || window.CharIsDown('j'),
+						},
 					}
-				}
-				if window.CharIsDown('m') {
-					session.snapshotMode = 'm'
-				} else if window.CharIsDown('l') {
-					session.snapshotMode = 'l'
+
+					numDown = 'x'
+					for r := '0'; r <= '9'; r++ {
+						if window.CharIsDown(r) {
+							numDown = r
+							break
+						}
+					}
+					if window.CharIsDown('m') {
+						session.snapshotMode = 'm'
+					} else if window.CharIsDown('l') {
+						session.snapshotMode = 'l'
+					}
+
+					window.CopyKeyCharArray(dbgKeyState)
 				}
 				window.InputMutex.Unlock()
 
@@ -188,7 +194,12 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 			}
 		}
 
-		session.emu.Step()
+		if session.emu.InDevMode() {
+			session.emu.UpdateDbgKeyState(dbgKeyState)
+			session.emu.DbgStep()
+		} else {
+			session.emu.Step()
+		}
 		bufInfo := session.emu.GetSoundBufferInfo()
 		if bufInfo.IsValid && bufInfo.UsedSize >= audioToGen {
 			if cap(audioChunkBuf) < audioToGen {
@@ -232,7 +243,7 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 			session.frameTimer.MarkFrameComplete()
 
 			if session.emu.InDevMode() {
-				session.frameTimer.PrintStatsEveryXFrames(60 * 5)
+				// session.frameTimer.PrintStatsEveryXFrames(60 * 5)
 			}
 
 			if time.Now().Sub(session.lastSaveTime) > 5*time.Second {

@@ -257,6 +257,9 @@ func (gp *gbsPlayer) UpdateInput(input Input) {
 
 var lastScreenUpdate time.Time
 
+func (gp *gbsPlayer) DbgStep() {
+	gp.cpuState.debugger.step(gp)
+}
 func (gp *gbsPlayer) Step() {
 	if !gp.Paused {
 

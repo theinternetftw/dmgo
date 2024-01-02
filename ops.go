@@ -313,7 +313,7 @@ func (cs *cpuState) imeToString() string {
 	}
 	return "0"
 }
-func (cs *cpuState) debugStatusLine() string {
+func (cs *cpuState) DebugStatusLine() string {
 
 	return fmt.Sprintf("Step:%08d, ", cs.Steps) +
 		fmt.Sprintf("Cycles:%08d, ", cs.Cycles) +
@@ -906,6 +906,6 @@ func (cs *cpuState) getBitSetOp(bitNum uint8) func(byte) (byte, uint16) {
 
 func (cs *cpuState) stepErr(msg string) {
 	fmt.Println(msg)
-	fmt.Println(cs.debugStatusLine())
+	fmt.Println(cs.DebugStatusLine())
 	panic("stepErr()")
 }
