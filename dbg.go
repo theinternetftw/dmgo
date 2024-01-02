@@ -9,7 +9,8 @@ import (
 const (
 	dbgStateNewCmd int = iota
 	dbgStateInCmd
-	dbgStateRun
+	dbgStateRunWithBreakpoints
+	dbgStateRunNoBreakpoints
 )
 
 const (
@@ -110,7 +111,11 @@ func strIndexOf(strs []string, str string) int {
 
 var dbgCmdMap = map[string]func(*debugger, Emulator, []string){
 	"run": func(d *debugger, emu Emulator, arg []string) {
-		d.state = dbgStateRun
+		if len(d.breakpoints) > 0 {
+			d.state = dbgStateRunWithBreakpoints
+		} else {
+			d.state = dbgStateRunNoBreakpoints
+		}
 	},
 	"x": func(d *debugger, emu Emulator, arg []string) {
 		if len(arg) == 0 {
@@ -171,39 +176,9 @@ var dbgCmdMap = map[string]func(*debugger, Emulator, []string){
 }
 
 func (d *debugger) step(emu Emulator) {
-	switch d.state {
-	case dbgStateNewCmd:
-		d.lineBuf = []byte{}
-		d.state = dbgStateInCmd
-		fmt.Printf("\n> ")
-	case dbgStateInCmd:
-		for i := range d.keysJustPressed {
-			if d.keysJustPressed[i] {
-				d.lineBuf = append(d.lineBuf, byte(i))
-				if rune(i) != '\b' {
-					fmt.Printf("%c", rune(i))
-				}
-			}
-		}
-		if d.keysJustPressed['\b'] {
-			d.lineBuf = d.lineBuf[:len(d.lineBuf)-1]
-			if len(d.lineBuf) > 0 {
-				d.lineBuf = d.lineBuf[:len(d.lineBuf)-1]
-				fmt.Print("\b \b")
-			}
-		} else if d.keysJustPressed['\n'] {
-			fields := strings.Fields(string(d.lineBuf))
-			d.state = dbgStateNewCmd
-			if len(fields) == 0 {
-				break
-			}
-			if cmd, ok := dbgCmdMap[fields[0]]; ok {
-				cmd(d, emu, fields[1:])
-			} else {
-				fmt.Println("unknown cmd")
-			}
-		}
-	case dbgStateRun:
+	if d.state == dbgStateRunNoBreakpoints {
+		emu.Step()
+	} else if d.state == dbgStateRunWithBreakpoints {
 		for i := range d.breakpoints {
 			bp := &d.breakpoints[i]
 			f, ok := getField(emu, bp.fieldPath)
@@ -241,6 +216,36 @@ func (d *debugger) step(emu Emulator) {
 			}
 		}
 		emu.Step()
+	} else if d.state == dbgStateNewCmd {
+		d.lineBuf = []byte{}
+		d.state = dbgStateInCmd
+		fmt.Printf("\n> ")
+	} else if d.state == dbgStateInCmd {
+		for i := range d.keysJustPressed {
+			if d.keysJustPressed[i] {
+				d.lineBuf = append(d.lineBuf, byte(i))
+				if rune(i) != '\b' {
+					fmt.Printf("%c", rune(i))
+				}
+			}
+		}
+		if d.keysJustPressed['\b'] {
+			d.lineBuf = d.lineBuf[:len(d.lineBuf)-1]
+			if len(d.lineBuf) > 0 {
+				d.lineBuf = d.lineBuf[:len(d.lineBuf)-1]
+				fmt.Print("\b \b")
+			}
+		} else if d.keysJustPressed['\n'] {
+			fields := strings.Fields(string(d.lineBuf))
+			d.state = dbgStateNewCmd
+			if len(fields) > 0 {
+				if cmd, ok := dbgCmdMap[fields[0]]; ok {
+					cmd(d, emu, fields[1:])
+				} else {
+					fmt.Println("unknown cmd")
+				}
+			}
+		}
 	}
 }
 
