@@ -45,7 +45,7 @@ func (apu *apu) init() {
 const (
 	apuCircleBufSize = 16 * 512 * 4 // must be power of two
 	samplesPerSecond = 44100
-	clocksPerSecond  = 4194304
+	clocksPerSecond  = 4194304 / 2 // Max divider setting is 2MHz
 	clocksPerSample  = clocksPerSecond / samplesPerSecond
 )
 
@@ -159,22 +159,22 @@ func (apu *apu) runCycle(cs *cpuState) {
 	if apu.LengthTimeCounter >= 16384 {
 		apu.runLengthCycle()
 		apu.LengthTimeCounter = 0
+
+		apu.SweepTimeCounter++
+		if apu.SweepTimeCounter >= 2 {
+			apu.Sounds[0].runSweepCycle()
+			apu.SweepTimeCounter = 0
+		}
+
+		apu.EnvTimeCounter++
+		if apu.EnvTimeCounter >= 4 {
+			apu.runEnvCycle()
+			apu.EnvTimeCounter = 0
+		}
 	}
 
-	apu.EnvTimeCounter++
-	if apu.EnvTimeCounter >= 65536 {
-		apu.runEnvCycle()
-		apu.EnvTimeCounter = 0
-	}
-
-	if !apu.buffer.full() {
+	if apu.LengthTimeCounter&1 == 0 && !apu.buffer.full() {
 		apu.genSample()
-	}
-
-	apu.SweepTimeCounter++
-	if apu.SweepTimeCounter >= 32768 {
-		apu.Sounds[0].runSweepCycle()
-		apu.SweepTimeCounter = 0
 	}
 }
 
@@ -261,7 +261,7 @@ type sound struct {
 
 func (sound *sound) runFreqCycle() {
 
-	sound.T++
+	sound.T += 2 // currently called at 2MHz, so tick twice
 
 	if sound.T >= sound.FreqDivider {
 		sound.T = 0
@@ -426,8 +426,6 @@ func (sound *sound) updateFreq() {
 		sound.FreqDivider = divider
 	case squareSoundType:
 		sound.FreqDivider = 4 * (2048 - uint32(sound.FreqReg)) // 32 mul for freq, div by 8 for duty seq
-	default:
-		panic("unexpected sound type")
 	}
 }
 
