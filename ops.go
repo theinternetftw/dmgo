@@ -174,7 +174,9 @@ func cFlagSbc(val, subtrahend, fReg uint8) uint16 {
 
 func (cs *cpuState) pushOp16(val uint16) {
 	cs.runCycles(4) // to do first dec of SP?
-	cs.setOpMem16(cs.SP-2, val, 0x2222)
+	// Can't use cpuWrite16 b/c push goes in opposite order.
+	cs.cpuWrite(cs.SP-1, byte(val>>8))
+	cs.cpuWrite(cs.SP-2, byte(val))
 	cs.SP -= 2
 }
 func (cs *cpuState) popOp16(setFn func(val uint16)) {
