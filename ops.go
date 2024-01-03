@@ -356,20 +356,13 @@ var simpleOpFnTable = []func(*cpuState, byte){
 }
 
 func (cs *cpuState) cpuRead(addr uint16) byte {
-	// NOTE: Mirroring cpuWrite()'s semantics. See NOTE there.
-	cs.runCycles(2)
-	val := cs.read(addr)
-	cs.runCycles(2)
-	return val
+	cs.runCycles(4)
+	return cs.read(addr)
 }
 
 func (cs *cpuState) cpuWrite(addr uint16, val byte) {
-	// NOTE: Via blargg tests, which wouldn't even run til I did this.
-	// Seems to suggest timer gets ctrl bits mid-M-clock of reg write.
-	// TODO: Does timing depend on whether writing to IO or mem?
-	cs.runCycles(2)
+	cs.runCycles(4)
 	cs.write(addr, val)
-	cs.runCycles(2)
 }
 
 func (cs *cpuState) cpuRead16(addr uint16) uint16 {
