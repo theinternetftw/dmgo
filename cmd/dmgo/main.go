@@ -191,11 +191,11 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 					}
 				}
 				session.emu.UpdateInput(session.latestInput)
+				session.emu.UpdateDbgKeyState(dbgKeyState)
 			}
 		}
 
 		if session.emu.InDevMode() {
-			session.emu.UpdateDbgKeyState(dbgKeyState)
 			session.emu.DbgStep()
 		} else {
 			session.emu.Step()

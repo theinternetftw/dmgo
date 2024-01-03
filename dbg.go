@@ -44,7 +44,7 @@ type breakpoint struct {
 }
 
 type debugger struct {
-	keysJustPressed [256]bool
+	keysJustPressed []rune
 	keys            [256]bool
 	lineBuf         []byte
 	state           int
@@ -217,41 +217,42 @@ func (d *debugger) step(emu Emulator) {
 		}
 		emu.Step()
 	} else if d.state == dbgStateNewCmd {
-		d.lineBuf = []byte{}
+		d.lineBuf = d.lineBuf[:0]
 		d.state = dbgStateInCmd
 		fmt.Printf("\n> ")
 	} else if d.state == dbgStateInCmd {
-		for i := range d.keysJustPressed {
-			if d.keysJustPressed[i] {
-				d.lineBuf = append(d.lineBuf, byte(i))
-				if rune(i) != '\b' {
-					fmt.Printf("%c", rune(i))
+		for _, r := range d.keysJustPressed {
+			switch r {
+			case '\b':
+				if len(d.lineBuf) > 0 {
+					d.lineBuf = d.lineBuf[:len(d.lineBuf)-1]
+					fmt.Print("\b \b")
 				}
+			case '\n':
+				fmt.Println()
+				d.state = dbgStateNewCmd
+				fields := strings.Fields(string(d.lineBuf))
+				if len(fields) > 0 {
+					if cmd, ok := dbgCmdMap[fields[0]]; ok {
+						cmd(d, emu, fields[1:])
+					} else {
+						fmt.Println("unknown cmd")
+					}
+				}
+			default:
+				d.lineBuf = append(d.lineBuf, byte(r))
+				fmt.Printf("%c", r)
 			}
 		}
-		if d.keysJustPressed['\b'] {
-			d.lineBuf = d.lineBuf[:len(d.lineBuf)-1]
-			if len(d.lineBuf) > 0 {
-				d.lineBuf = d.lineBuf[:len(d.lineBuf)-1]
-				fmt.Print("\b \b")
-			}
-		} else if d.keysJustPressed['\n'] {
-			fields := strings.Fields(string(d.lineBuf))
-			d.state = dbgStateNewCmd
-			if len(fields) > 0 {
-				if cmd, ok := dbgCmdMap[fields[0]]; ok {
-					cmd(d, emu, fields[1:])
-				} else {
-					fmt.Println("unknown cmd")
-				}
-			}
-		}
+		d.keysJustPressed = d.keysJustPressed[:0]
 	}
 }
 
 func (d *debugger) updateInput(keys []bool) {
 	for i := range d.keys {
-		d.keysJustPressed[i] = keys[i] && !d.keys[i]
+		if keys[i] && !d.keys[i] {
+			d.keysJustPressed = append(d.keysJustPressed, rune(i))
+		}
 		d.keys[i] = keys[i]
 	}
 }
