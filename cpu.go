@@ -21,7 +21,8 @@ func (cs *cpuState) handleInterrupts() bool {
 		if cs.InterruptMasterEnable {
 			cs.InterruptMasterEnable = false
 			*intFlag = false
-			cs.pushOp16(20, cs.PC)
+			cs.runCycles(8)
+			cs.pushOp16(cs.PC)
 			cs.PC = intAddr
 		}
 		return true

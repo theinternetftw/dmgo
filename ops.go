@@ -52,13 +52,11 @@ func (cs *cpuState) setOpPC(cycles uint, val uint16) {
 	cs.setOp16(cycles, cs.setPC, val, 0x2222)
 }
 
-func (cs *cpuState) setOpMem8(cycles uint, addr uint16, val uint8, flags uint16) {
-	cs.runCycles(cycles - 4)
+func (cs *cpuState) setOpMem8(addr uint16, val uint8, flags uint16) {
 	cs.cpuWrite(addr, val)
 	cs.setFlags(flags)
 }
-func (cs *cpuState) setOpMem16(cycles uint, addr uint16, val uint16, flags uint16) {
-	cs.runCycles(cycles - 8)
+func (cs *cpuState) setOpMem16(addr uint16, val uint16, flags uint16) {
 	cs.cpuWrite16(addr, val)
 	cs.setFlags(flags)
 }
@@ -80,12 +78,10 @@ func (cs *cpuState) jmpAbs16(cyclesTaken uint, cyclesNotTaken uint, test bool, a
 	}
 }
 
-func (cs *cpuState) jmpCall(cyclesTaken uint, cyclesNotTaken uint, test bool, addr uint16) {
+func (cs *cpuState) jmpCall(test bool, addr uint16) {
 	if test {
-		cs.pushOp16(cyclesTaken, cs.PC)
+		cs.pushOp16(cs.PC)
 		cs.PC = addr
-	} else {
-		cs.setOpFn(cyclesNotTaken, func() {}, 0x2222)
 	}
 }
 func (cs *cpuState) jmpRet(cyclesTaken uint, cyclesNotTaken uint, test bool) {
@@ -205,8 +201,9 @@ func (cs *cpuState) setOpFn(cycles uint, fn func(), flags uint16) {
 	cs.setFlags(flags)
 }
 
-func (cs *cpuState) pushOp16(cycles uint, val uint16) {
-	cs.setOpMem16(cycles, cs.SP-2, val, 0x2222)
+func (cs *cpuState) pushOp16(val uint16) {
+	cs.runCycles(4) // to do first dec of SP?
+	cs.setOpMem16(cs.SP-2, val, 0x2222)
 	cs.SP -= 2
 }
 func (cs *cpuState) popOp16(cycles uint, setFn func(val uint16)) {
@@ -219,8 +216,9 @@ func (cs *cpuState) incOpReg(reg *byte) {
 	cs.setOp8(0, reg, val+1, (zFlag(val+1) | hFlagAdd(val, 1) | 0x0002))
 }
 func (cs *cpuState) incOpHL() {
+	cs.runCycles(4)
 	val := cs.followHL()
-	cs.setOpMem8(8, cs.getHL(), val+1, (zFlag(val+1) | hFlagAdd(val, 1) | 0x0002))
+	cs.setOpMem8(cs.getHL(), val+1, (zFlag(val+1) | hFlagAdd(val, 1) | 0x0002))
 }
 
 func (cs *cpuState) decOpReg(reg *byte) {
@@ -228,8 +226,9 @@ func (cs *cpuState) decOpReg(reg *byte) {
 	cs.setOp8(0, reg, val-1, (zFlag(val-1) | hFlagSub(val, 1) | 0x0102))
 }
 func (cs *cpuState) decOpHL() {
+	cs.runCycles(4)
 	val := cs.followHL()
-	cs.setOpMem8(8, cs.getHL(), val-1, (zFlag(val-1) | hFlagSub(val, 1) | 0x0102))
+	cs.setOpMem8(cs.getHL(), val-1, (zFlag(val-1) | hFlagSub(val, 1) | 0x0102))
 }
 
 func (cs *cpuState) daaOp() {
@@ -353,8 +352,8 @@ func cpOp(cs *cpuState, cycles uint, val byte) {
 	cs.setOpFn(cycles, func() {}, (zFlag(cs.A-val) | hFlagSub(cs.A, val) | cFlagSub(cs.A, val) | 0x0100))
 }
 
-func (cs *cpuState) callOp(cycles uint, callAddr uint16) {
-	cs.pushOp16(cycles, cs.PC)
+func (cs *cpuState) callOp(callAddr uint16) {
+	cs.pushOp16(cs.PC)
 	cs.PC = callAddr
 }
 
@@ -466,7 +465,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0x01: // ld bc, n16
 		cs.setBC(cs.cpuReadAndIncPC16())
 	case 0x02: // ld (bc), a
-		cs.setOpMem8(4, cs.getBC(), cs.A, 0x2222)
+		cs.setOpMem8(cs.getBC(), cs.A, 0x2222)
 	case 0x03: // inc bc
 		cs.setOpBC(4, cs.getBC()+1)
 	case 0x04: // inc b
@@ -479,7 +478,7 @@ func (cs *cpuState) stepOpcode() {
 		cs.rlcaOp()
 
 	case 0x08: // ld (a16), sp
-		cs.setOpMem16(8, cs.cpuReadAndIncPC16(), cs.SP, 0x2222)
+		cs.setOpMem16(cs.cpuReadAndIncPC16(), cs.SP, 0x2222)
 	case 0x09: // add hl, bc
 		v1, v2 := cs.getHL(), cs.getBC()
 		cs.setOp16(4, cs.setHL, v1+v2, (0x2000 | hFlagAdd16(v1, v2) | cFlagAdd16(v1, v2)))
@@ -501,7 +500,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0x11: // ld de, n16
 		cs.setOpDE(0, cs.cpuReadAndIncPC16())
 	case 0x12: // ld (de), a
-		cs.setOpMem8(4, cs.getDE(), cs.A, 0x2222)
+		cs.setOpMem8(cs.getDE(), cs.A, 0x2222)
 	case 0x13: // inc de
 		cs.setOpDE(4, cs.getDE()+1)
 	case 0x14: // inc d
@@ -536,7 +535,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0x21: // ld hl, n16
 		cs.setOpHL(0, cs.cpuReadAndIncPC16())
 	case 0x22: // ld (hl++), a
-		cs.setOpMem8(4, cs.getHL(), cs.A, 0x2222)
+		cs.setOpMem8(cs.getHL(), cs.A, 0x2222)
 		cs.setHL(cs.getHL() + 1)
 	case 0x23: // inc hl
 		cs.setOpHL(4, cs.getHL()+1)
@@ -573,7 +572,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0x31: // ld sp, n16
 		cs.SP = cs.cpuReadAndIncPC16()
 	case 0x32: // ld (hl--) a
-		cs.setOpMem8(4, cs.getHL(), cs.A, 0x2222)
+		cs.setOpMem8(cs.getHL(), cs.A, 0x2222)
 		cs.setHL(cs.getHL() - 1)
 	case 0x33: // inc sp
 		cs.setOpSP(4, cs.SP+1)
@@ -582,7 +581,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0x35: // dec (hl)
 		cs.decOpHL()
 	case 0x36: // ld (hl) n8
-		cs.setOpMem8(4, cs.getHL(), cs.cpuReadAndIncPC(), 0x2222)
+		cs.setOpMem8(cs.getHL(), cs.cpuReadAndIncPC(), 0x2222)
 	case 0x37: // scf
 		cs.setFlags(0x2001)
 
@@ -607,21 +606,21 @@ func (cs *cpuState) stepOpcode() {
 		cs.setFlags(0x2000 | carry)
 
 	case 0x70: // ld (hl), b
-		cs.setOpMem8(4, cs.getHL(), cs.B, 0x2222)
+		cs.setOpMem8(cs.getHL(), cs.B, 0x2222)
 	case 0x71: // ld (hl), c
-		cs.setOpMem8(4, cs.getHL(), cs.C, 0x2222)
+		cs.setOpMem8(cs.getHL(), cs.C, 0x2222)
 	case 0x72: // ld (hl), d
-		cs.setOpMem8(4, cs.getHL(), cs.D, 0x2222)
+		cs.setOpMem8(cs.getHL(), cs.D, 0x2222)
 	case 0x73: // ld (hl), e
-		cs.setOpMem8(4, cs.getHL(), cs.E, 0x2222)
+		cs.setOpMem8(cs.getHL(), cs.E, 0x2222)
 	case 0x74: // ld (hl), h
-		cs.setOpMem8(4, cs.getHL(), cs.H, 0x2222)
+		cs.setOpMem8(cs.getHL(), cs.H, 0x2222)
 	case 0x75: // ld (hl), l
-		cs.setOpMem8(4, cs.getHL(), cs.L, 0x2222)
+		cs.setOpMem8(cs.getHL(), cs.L, 0x2222)
 	case 0x76: // halt
 		cs.InHaltMode = true
 	case 0x77: // ld (hl), a
-		cs.setOpMem8(4, cs.getHL(), cs.A, 0x2222)
+		cs.setOpMem8(cs.getHL(), cs.A, 0x2222)
 
 	case 0xc0: // ret nz
 		cs.jmpRet(16, 4, !cs.getZeroFlag())
@@ -632,13 +631,13 @@ func (cs *cpuState) stepOpcode() {
 	case 0xc3: // jp a16
 		cs.setOpPC(4, cs.cpuReadAndIncPC16())
 	case 0xc4: // call nz, a16
-		cs.jmpCall(12, 0, !cs.getZeroFlag(), cs.cpuReadAndIncPC16())
+		cs.jmpCall(!cs.getZeroFlag(), cs.cpuReadAndIncPC16())
 	case 0xc5: // push bc
-		cs.pushOp16(12, cs.getBC())
+		cs.pushOp16(cs.getBC())
 	case 0xc6: // add a, n8
 		addOpA(cs, 0, cs.cpuReadAndIncPC())
 	case 0xc7: // rst 00h
-		cs.callOp(12, 0x0000)
+		cs.callOp(0x0000)
 
 	case 0xc8: // ret z
 		cs.jmpRet(16, 4, cs.getZeroFlag())
@@ -649,13 +648,13 @@ func (cs *cpuState) stepOpcode() {
 	case 0xcb: // extended opcode prefix
 		cs.stepExtendedOpcode()
 	case 0xcc: // call z, a16
-		cs.jmpCall(12, 0, cs.getZeroFlag(), cs.cpuReadAndIncPC16())
+		cs.jmpCall(cs.getZeroFlag(), cs.cpuReadAndIncPC16())
 	case 0xcd: // call a16
-		cs.callOp(12, cs.cpuReadAndIncPC16())
+		cs.callOp(cs.cpuReadAndIncPC16())
 	case 0xce: // adc a, n8
 		adcOpA(cs, 0, cs.cpuReadAndIncPC())
 	case 0xcf: // rst 08h
-		cs.callOp(12, 0x0008)
+		cs.callOp(0x0008)
 
 	case 0xd0: // ret nc
 		cs.jmpRet(16, 4, !cs.getCarryFlag())
@@ -666,13 +665,13 @@ func (cs *cpuState) stepOpcode() {
 	case 0xd3:
 		cs.illegalOpcode(opcode)
 	case 0xd4: // call nc, a16
-		cs.jmpCall(12, 0, !cs.getCarryFlag(), cs.cpuReadAndIncPC16())
+		cs.jmpCall(!cs.getCarryFlag(), cs.cpuReadAndIncPC16())
 	case 0xd5: // push de
-		cs.pushOp16(12, cs.getDE())
+		cs.pushOp16(cs.getDE())
 	case 0xd6: // sub n8
 		subOpA(cs, 0, cs.cpuReadAndIncPC())
 	case 0xd7: // rst 10h
-		cs.callOp(12, 0x0010)
+		cs.callOp(0x0010)
 
 	case 0xd8: // ret c
 		cs.jmpRet(16, 4, cs.getCarryFlag())
@@ -684,32 +683,32 @@ func (cs *cpuState) stepOpcode() {
 	case 0xdb:
 		cs.illegalOpcode(opcode)
 	case 0xdc: // call c, a16
-		cs.jmpCall(12, 0, cs.getCarryFlag(), cs.cpuReadAndIncPC16())
+		cs.jmpCall(cs.getCarryFlag(), cs.cpuReadAndIncPC16())
 	case 0xdd:
 		cs.illegalOpcode(opcode)
 	case 0xde: // sbc n8
 		sbcOpA(cs, 0, cs.cpuReadAndIncPC())
 	case 0xdf: // rst 18h
-		cs.callOp(12, 0x0018)
+		cs.callOp(0x0018)
 
 	case 0xe0: // ld (0xFF00 + n8), a
 		val := cs.cpuReadAndIncPC()
-		cs.setOpMem8(4, 0xff00+uint16(val), cs.A, 0x2222)
+		cs.setOpMem8(0xff00+uint16(val), cs.A, 0x2222)
 	case 0xe1: // pop hl
 		cs.popOp16(8, cs.setHL)
 	case 0xe2: // ld (0xFF00 + c), a
 		val := cs.C
-		cs.setOpMem8(4, 0xff00+uint16(val), cs.A, 0x2222)
+		cs.setOpMem8(0xff00+uint16(val), cs.A, 0x2222)
 	case 0xe3:
 		cs.illegalOpcode(opcode)
 	case 0xe4:
 		cs.illegalOpcode(opcode)
 	case 0xe5: // push hl
-		cs.pushOp16(12, cs.getHL())
+		cs.pushOp16(cs.getHL())
 	case 0xe6: // and n8
 		andOpA(cs, 0, cs.cpuReadAndIncPC())
 	case 0xe7: // rst 20h
-		cs.callOp(12, 0x0020)
+		cs.callOp(0x0020)
 
 	case 0xe8: // add sp, r8
 		v1, v2 := cs.SP, uint16(int8(cs.cpuReadAndIncPC()))
@@ -717,7 +716,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xe9: // jp hl (also written jp (hl))
 		cs.setOpPC(0, cs.getHL())
 	case 0xea: // ld (a16), a
-		cs.setOpMem8(4, cs.cpuReadAndIncPC16(), cs.A, 0x2222)
+		cs.setOpMem8(cs.cpuReadAndIncPC16(), cs.A, 0x2222)
 	case 0xeb:
 		cs.illegalOpcode(opcode)
 	case 0xec:
@@ -727,7 +726,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xee: // xor n8
 		xorOpA(cs, 0, cs.cpuReadAndIncPC())
 	case 0xef: // rst 28h
-		cs.callOp(12, 0x0028)
+		cs.callOp(0x0028)
 
 	case 0xf0: // ld a, (0xFF00 + n8)
 		val := cs.cpuReadAndIncPC()
@@ -742,11 +741,11 @@ func (cs *cpuState) stepOpcode() {
 	case 0xf4:
 		cs.illegalOpcode(opcode)
 	case 0xf5: // push af
-		cs.pushOp16(12, cs.getAF())
+		cs.pushOp16(cs.getAF())
 	case 0xf6: // or n8
 		orOpA(cs, 0, cs.cpuReadAndIncPC())
 	case 0xf7: // rst 30h
-		cs.callOp(12, 0x0030)
+		cs.callOp(0x0030)
 
 	case 0xf8: // ld hl, sp+r8
 		v1, v2 := cs.SP, uint16(int8(cs.cpuReadAndIncPC()))
@@ -764,7 +763,7 @@ func (cs *cpuState) stepOpcode() {
 	case 0xfe: // cp a, n8
 		cpOp(cs, 0, cs.cpuReadAndIncPC())
 	case 0xff: // rst 38h
-		cs.callOp(12, 0x0038)
+		cs.callOp(0x0038)
 
 	default:
 		cs.stepErr(fmt.Sprintf("Unknown Opcode: 0x%02x\r\n", opcode))
@@ -860,8 +859,9 @@ func (cs *cpuState) extSetOp(cyclesReg uint, cyclesHL uint, opcode byte,
 		result, flags := opFn(*reg)
 		cs.setOp8(cyclesReg, reg, result, flags)
 	} else {
+		cs.runCycles(4)
 		result, flags := opFn(cs.followHL())
-		cs.setOpMem8(cyclesHL, cs.getHL(), result, flags)
+		cs.setOpMem8(cs.getHL(), result, flags)
 	}
 }
 

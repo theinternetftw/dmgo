@@ -165,7 +165,7 @@ func (gp *gbsPlayer) initTune(songNum byte) {
 
 	// force a call to INIT
 	gp.SP = gp.Hdr.StackPtr
-	gp.pushOp16(0, 0x0130)
+	gp.pushOp16(0x0130)
 	gp.PC = gp.Hdr.InitAddr
 	for gp.PC != 0x0130 {
 		gp.Step()
@@ -286,7 +286,7 @@ func (gp *gbsPlayer) Step() {
 
 		if doPlayCall {
 			gp.SP = gp.Hdr.StackPtr
-			gp.pushOp16(0, 0x0130)
+			gp.pushOp16(0x0130)
 			gp.PC = gp.Hdr.PlayAddr
 		}
 
