@@ -52,6 +52,7 @@ type cpuState struct {
 	SerialBitsTransferred         byte
 
 	TimerOn           bool
+	TimerLag          int
 	TimerModuloReg    byte
 	TimerCounterReg   byte
 	TimerFreqSelector byte
@@ -104,6 +105,13 @@ func (cs *cpuState) runTimerCycle() {
 	if !cs.TimerOn {
 		return
 	}
+	if cs.TimerLag > 0 {
+		cs.TimerLag--
+		if cs.TimerLag == 0 && cs.TimerCounterReg == 0 {
+			cs.TimerCounterReg = cs.TimerModuloReg
+			cs.TimerIRQ = true
+		}
+	}
 
 	cycleCount := [...]uint16{
 		1024, 16, 64, 256,
@@ -111,8 +119,7 @@ func (cs *cpuState) runTimerCycle() {
 	if cs.TimerDivCycles&(cycleCount-1) == 0 {
 		cs.TimerCounterReg++
 		if cs.TimerCounterReg == 0 {
-			cs.TimerCounterReg = cs.TimerModuloReg
-			cs.TimerIRQ = true
+			cs.TimerLag = 4
 		}
 	}
 }
