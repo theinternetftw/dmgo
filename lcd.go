@@ -216,7 +216,7 @@ func (lcd *lcd) handleHBlankEnd(cs *cpuState) {
 }
 
 func (lcd *lcd) handleVBlank(cs *cpuState) {
-	lcd.CyclesSinceVBlankStart++
+	lcd.CyclesSinceVBlankStart += 4
 	if lcd.CyclesSinceVBlankStart == 456*10 {
 		lcd.LYReg = 0
 		lcd.InVBlank = false
@@ -227,36 +227,33 @@ func (lcd *lcd) handleVBlank(cs *cpuState) {
 	cs.updateStatIRQ()
 }
 
-// FIXME: timings will have to change for double-speed mode
-// (maybe instead of counting cycles I'll count actual instruction time?)
-// (or maybe it'll always be dmg cycles and gbc will just produce half as many of them?
 func (lcd *lcd) runCycle(cs *cpuState) {
 	if !lcd.DisplayOn {
 		return
 	}
 
 	lcd.CyclesSinceLYInc++
-
-	switch lcd.CyclesSinceLYInc {
-	case 4:
-		if !lcd.InVBlank {
-			lcd.AccessingOAM = true
+	if (lcd.CyclesSinceLYInc & 3) == 0 {
+		switch lcd.CyclesSinceLYInc {
+		case 4:
+			if !lcd.InVBlank {
+				lcd.AccessingOAM = true
+			}
+			cs.updateStatIRQ()
+		case 80:
+			if lcd.AccessingOAM {
+				lcd.startReadData()
+			}
+		case 252:
+			if lcd.ReadingData {
+				lcd.startHBlankAndDoRender(cs)
+			}
+		case 456:
+			lcd.handleHBlankEnd(cs)
 		}
-		cs.updateStatIRQ()
-	case 80:
-		if lcd.AccessingOAM {
-			lcd.startReadData()
+		if lcd.InVBlank {
+			lcd.handleVBlank(cs)
 		}
-	case 252:
-		if lcd.ReadingData {
-			lcd.startHBlankAndDoRender(cs)
-		}
-	case 456:
-		lcd.handleHBlankEnd(cs)
-	}
-
-	if lcd.InVBlank {
-		lcd.handleVBlank(cs)
 	}
 }
 
