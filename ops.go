@@ -783,38 +783,38 @@ func (cs *cpuState) stepExtendedOpcode() {
 		cs.bitOp(extOpcode, 7)
 
 	case 0x80: // res 0, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getResOp(0))
+		cs.bitResOp(extOpcode, 0)
 	case 0x88: // res 1, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getResOp(1))
+		cs.bitResOp(extOpcode, 1)
 	case 0x90: // res 2, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getResOp(2))
+		cs.bitResOp(extOpcode, 2)
 	case 0x98: // res 3, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getResOp(3))
+		cs.bitResOp(extOpcode, 3)
 	case 0xa0: // res 4, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getResOp(4))
+		cs.bitResOp(extOpcode, 4)
 	case 0xa8: // res 5, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getResOp(5))
+		cs.bitResOp(extOpcode, 5)
 	case 0xb0: // res 6, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getResOp(6))
+		cs.bitResOp(extOpcode, 6)
 	case 0xb8: // res 6, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getResOp(7))
+		cs.bitResOp(extOpcode, 7)
 
 	case 0xc0: // set 0, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getBitSetOp(0))
+		cs.bitSetOp(extOpcode, 0)
 	case 0xc8: // set 1, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getBitSetOp(1))
+		cs.bitSetOp(extOpcode, 1)
 	case 0xd0: // set 2, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getBitSetOp(2))
+		cs.bitSetOp(extOpcode, 2)
 	case 0xd8: // set 3, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getBitSetOp(3))
+		cs.bitSetOp(extOpcode, 3)
 	case 0xe0: // set 4, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getBitSetOp(4))
+		cs.bitSetOp(extOpcode, 4)
 	case 0xe8: // set 5, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getBitSetOp(5))
+		cs.bitSetOp(extOpcode, 5)
 	case 0xf0: // set 6, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getBitSetOp(6))
+		cs.bitSetOp(extOpcode, 6)
 	case 0xf8: // set 7, R_OR_(HL)
-		cs.extSetOp(extOpcode, cs.getBitSetOp(7))
+		cs.bitSetOp(extOpcode, 7)
 	}
 }
 
@@ -838,7 +838,7 @@ func (cs *cpuState) swapOp(val byte) (byte, uint16) {
 
 func (cs *cpuState) rlaOp() {
 	result, flags := cs.rlOp(cs.A)
-	cs.setOp8(&cs.A, result, flags&^0x1000) // rla is 000c, unlike other rl's
+	cs.setALUOp(result, flags&^0x1000) // rla is 000c, unlike other rl's
 }
 func (cs *cpuState) rlOp(val byte) (byte, uint16) {
 	result, carry := (val<<1)|((cs.F>>4)&0x01), (val >> 7)
@@ -847,7 +847,7 @@ func (cs *cpuState) rlOp(val byte) (byte, uint16) {
 
 func (cs *cpuState) rraOp() {
 	result, flags := cs.rrOp(cs.A)
-	cs.setOp8(&cs.A, result, flags&^0x1000) // rra is 000c, unlike other rr's
+	cs.setALUOp(result, flags&^0x1000) // rra is 000c, unlike other rr's
 }
 func (cs *cpuState) rrOp(val byte) (byte, uint16) {
 	result, carry := ((cs.F<<3)&0x80)|(val>>1), (val & 0x01)
@@ -856,7 +856,7 @@ func (cs *cpuState) rrOp(val byte) (byte, uint16) {
 
 func (cs *cpuState) rlcaOp() {
 	result, flags := cs.rlcOp(cs.A)
-	cs.setOp8(&cs.A, result, flags&^0x1000) // rlca is 000c, unlike other rlc's
+	cs.setALUOp(result, flags&^0x1000) // rlca is 000c, unlike other rlc's
 }
 func (cs *cpuState) rlcOp(val byte) (byte, uint16) {
 	result, carry := (val<<1)|(val>>7), val>>7
@@ -865,7 +865,7 @@ func (cs *cpuState) rlcOp(val byte) (byte, uint16) {
 
 func (cs *cpuState) rrcaOp() {
 	result, flags := cs.rrcOp(cs.A)
-	cs.setOp8(&cs.A, result, flags&^0x1000) // rrca is 000c, unlike other rrc's
+	cs.setALUOp(result, flags&^0x1000) // rrca is 000c, unlike other rrc's
 }
 func (cs *cpuState) rrcOp(val byte) (byte, uint16) {
 	result, carry := (val<<7)|(val>>1), (val & 0x01)
@@ -892,17 +892,23 @@ func (cs *cpuState) bitOp(opcode byte, bitNum uint8) {
 	cs.setFlags(zFlag(val&(1<<bitNum)) | 0x012)
 }
 
-func (cs *cpuState) getResOp(bitNum uint) func(byte) (byte, uint16) {
-	return func(val byte) (byte, uint16) {
+func (cs *cpuState) bitResOp(opcode byte, bitNum uint) {
+	if reg := cs.getRegFromOpBits(opcode & 0x07); reg != nil {
+		*reg = *reg &^ (1 << bitNum)
+	} else {
+		val := cs.cpuRead(cs.getHL())
 		result := val &^ (1 << bitNum)
-		return result, 0x2222
+		cs.cpuWrite(cs.getHL(), result)
 	}
 }
 
-func (cs *cpuState) getBitSetOp(bitNum uint8) func(byte) (byte, uint16) {
-	return func(val byte) (byte, uint16) {
+func (cs *cpuState) bitSetOp(opcode byte, bitNum uint8) {
+	if reg := cs.getRegFromOpBits(opcode & 0x07); reg != nil {
+		*reg = *reg | (1 << bitNum)
+	} else {
+		val := cs.cpuRead(cs.getHL())
 		result := val | (1 << bitNum)
-		return result, 0x2222
+		cs.cpuWrite(cs.getHL(), result)
 	}
 }
 
