@@ -36,29 +36,29 @@ func (cs *cpuState) getCarryFlag() bool     { return cs.F&0x10 > 0 }
 
 func (cs *cpuState) setFlags(flags uint16) {
 
-	setZero, clearZero := flags&0x1000 != 0, flags&0xf000 == 0
-	setSub, clearSub := flags&0x100 != 0, flags&0xf00 == 0
-	setHalfCarry, clearHalfCarry := flags&0x10 != 0, flags&0xf0 == 0
-	setCarry, clearCarry := flags&0x1 != 0, flags&0xf == 0
+	zero := flags & 0xf000
+	sub := flags & 0xf00
+	halfCarry := flags & 0xf0
+	carry := flags & 0xf
 
-	if setZero {
+	if zero == 0x1000 {
 		cs.F |= 0x80
-	} else if clearZero {
+	} else if zero == 0x0000 {
 		cs.F &^= 0x80
 	}
-	if setSub {
+	if sub == 0x100 {
 		cs.F |= 0x40
-	} else if clearSub {
+	} else if sub == 0x000 {
 		cs.F &^= 0x40
 	}
-	if setHalfCarry {
+	if halfCarry == 0x10 {
 		cs.F |= 0x20
-	} else if clearHalfCarry {
+	} else if halfCarry == 0x00 {
 		cs.F &^= 0x20
 	}
-	if setCarry {
+	if carry == 1 {
 		cs.F |= 0x10
-	} else if clearCarry {
+	} else if carry == 0 {
 		cs.F &^= 0x10
 	}
 }
