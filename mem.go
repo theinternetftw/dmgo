@@ -74,7 +74,6 @@ func (cs *cpuState) writeDMAControlReg(val byte) {
 	if !cs.Mem.DMAHblankMode {
 		for cs.Mem.DMAInProgress {
 			cs.runDMACycle()
-			cs.runCycles(2)
 		}
 	}
 }
@@ -89,6 +88,11 @@ func (cs *cpuState) readDMAControlReg() byte {
 func (cs *cpuState) runDMACycle() {
 	cs.write(cs.Mem.DMADest, cs.read(cs.Mem.DMASource))
 	cs.write(cs.Mem.DMADest+1, cs.read(cs.Mem.DMASource+1))
+	if cs.CGBMode {
+		cs.runCycles(8)
+	} else {
+		cs.runCycles(4)
+	}
 	cs.Mem.DMASource += 2
 	cs.Mem.DMADest += 2
 	cs.Mem.DMALength -= 2
@@ -100,7 +104,6 @@ func (cs *cpuState) runHblankDMA() {
 	if cs.Mem.DMAInProgress && cs.Mem.DMAHblankMode {
 		for i := 0; cs.Mem.DMAInProgress && i < 8; i++ {
 			cs.runDMACycle()
-			cs.runCycles(2)
 		}
 	}
 }
