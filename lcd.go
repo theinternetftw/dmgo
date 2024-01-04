@@ -38,6 +38,8 @@ type lcd struct {
 	WindowY byte
 	WindowX byte
 
+	PassedWindowY bool
+
 	BackgroundPaletteReg byte
 	ObjectPalette0Reg    byte
 	ObjectPalette1Reg    byte
@@ -229,6 +231,7 @@ func (lcd *lcd) handleVBlank(cs *cpuState) {
 	lcd.CyclesSinceVBlankStart += 4
 	if lcd.CyclesSinceVBlankStart == 456*10 {
 		lcd.LYReg = 0
+		lcd.PassedWindowY = false
 		lcd.InVBlank = false
 		lcd.CyclesSinceLYInc = 0
 		lcd.CyclesSinceVBlankStart = 0
@@ -541,7 +544,11 @@ func (lcd *lcd) renderScanline() {
 		}
 	}
 
-	if lcd.DisplayWindow && y >= lcd.WindowY {
+	if y == lcd.WindowY {
+		lcd.PassedWindowY = true
+	}
+
+	if lcd.DisplayWindow && lcd.PassedWindowY {
 		winY := y - lcd.WindowY
 		winStartX := int(lcd.WindowX) - 7
 		for x := winStartX; x < 160; x++ {
