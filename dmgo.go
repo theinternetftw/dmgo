@@ -21,6 +21,10 @@ type cpuState struct {
 	InHaltMode bool
 	InStopMode bool
 
+	OAMDMAActive bool
+	OAMDMAIndex  uint16
+	OAMDMASource uint16
+
 	CGBMode            bool
 	FastMode           bool
 	SpeedSwitchPrepped bool
@@ -367,12 +371,25 @@ func (cs *cpuState) initVRAM() {
 	}
 }
 
+func (cs *cpuState) runOAMDMACycle() {
+	i := cs.OAMDMAIndex
+	addr := cs.OAMDMASource
+	cs.write(0xfe00+i, cs.read(addr+i))
+	cs.OAMDMAIndex++
+	if cs.OAMDMAIndex == 0xa0 {
+		cs.OAMDMAActive = false
+	}
+}
+
 func (cs *cpuState) runCycles(numCycles uint) {
 	// Things that speed up to match fast mode
 	for i := uint(0); i < numCycles; i++ {
 		cs.Cycles++
 		cs.runTimerCycle()
 		cs.runSerialCycle()
+		if cs.OAMDMAActive {
+			cs.runOAMDMACycle()
+		}
 	}
 	if cs.FastMode {
 		numCycles >>= 1

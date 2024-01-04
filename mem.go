@@ -31,16 +31,6 @@ func (mem *mem) mbcWrite(addr uint16, val byte) {
 	mem.mbc.Write(mem, addr, val)
 }
 
-// TODO / FIXME: DMA timing enforcement!
-// also, dma cancel / restart (if you
-// run a 2nd dma, it cancels the running one
-// and starts the new one immediately)
-func (cs *cpuState) oamDMA(addr uint16) {
-	for i := uint16(0); i < 0xa0; i++ {
-		cs.write(0xfe00+i, cs.read(addr+i))
-	}
-}
-
 func (cs *cpuState) writeDMASourceHigh(val byte) {
 	cs.Mem.DMASourceInit = (cs.Mem.DMASourceInit &^ 0xff00) | (uint16(val) << 8)
 }
@@ -109,6 +99,7 @@ func (cs *cpuState) runHblankDMA() {
 	if cs.Mem.DMAInProgress && cs.Mem.DMAHblankMode {
 		for i := 0; cs.Mem.DMAInProgress && i < 8; i++ {
 			cs.runDMACycle()
+			cs.runCycles(2)
 		}
 	}
 }
@@ -475,7 +466,9 @@ func (cs *cpuState) write(addr uint16, val byte) {
 	case addr == 0xff45:
 		cs.LCD.writeLycReg(val)
 	case addr == 0xff46:
-		cs.oamDMA(uint16(val) << 8)
+		cs.OAMDMAIndex = 0
+		cs.OAMDMAActive = true
+		cs.OAMDMASource = uint16(val) << 8
 	case addr == 0xff47:
 		cs.LCD.writeBackgroundPaletteReg(val)
 	case addr == 0xff48:
