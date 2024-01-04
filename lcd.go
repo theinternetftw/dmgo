@@ -49,6 +49,7 @@ type lcd struct {
 	OAMInterrupt    bool
 	LYCInterrupt    bool
 
+	LWY    byte
 	LYReg  byte
 	LYCReg byte
 
@@ -214,6 +215,9 @@ func (lcd *lcd) handleHBlankEnd(cs *cpuState) {
 	lcd.CyclesSinceLYInc = 0
 	lcd.InHBlank = false
 	lcd.LYReg++
+	if lcd.isWindowVisible() {
+		lcd.LWY++
+	}
 
 	if lcd.LYReg == 144 && !lcd.InVBlank {
 		lcd.InVBlank = true
@@ -240,6 +244,14 @@ func (lcd *lcd) handleVBlank(cs *cpuState) {
 	cs.updateStatIRQ()
 }
 
+func (lcd *lcd) startAccessingOAM() {
+	lcd.AccessingOAM = true
+	if lcd.LYReg == lcd.WindowY {
+		lcd.PassedWindowY = true
+		lcd.LWY = lcd.LYReg - lcd.WindowY
+	}
+}
+
 func (lcd *lcd) runCycle(cs *cpuState) {
 	if !lcd.DisplayOn {
 		return
@@ -250,7 +262,7 @@ func (lcd *lcd) runCycle(cs *cpuState) {
 		switch lcd.CyclesSinceLYInc {
 		case 4:
 			if !lcd.InVBlank {
-				lcd.AccessingOAM = true
+				lcd.startAccessingOAM()
 			}
 			cs.updateStatIRQ()
 		case 80:
@@ -515,6 +527,11 @@ func (s sortableOAM) Less(i, j int) bool { return s[i].x < s[j].x }
 func (s sortableOAM) Len() int           { return len(s) }
 func (s sortableOAM) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
+func (lcd *lcd) isWindowVisible() bool {
+	return (lcd.PassedWindowY && lcd.WindowY <= 143 &&
+		lcd.WindowX >= 0 && lcd.WindowX <= 166)
+}
+
 func (lcd *lcd) renderScanline() {
 	if lcd.LYReg >= 144 {
 		return
@@ -543,29 +560,25 @@ func (lcd *lcd) renderScanline() {
 			r, g, b := lcd.applyBGPalettes(attrs, pixel)
 			lcd.setFramebufferPixel(x, y, r, g, b)
 		}
-	}
 
-	if y == lcd.WindowY {
-		lcd.PassedWindowY = true
-	}
-
-	if lcd.DisplayWindow && lcd.PassedWindowY {
-		winY := y - lcd.WindowY
-		winStartX := int(lcd.WindowX) - 7
-		for x := winStartX; x < 160; x++ {
-			if x < 0 {
-				continue
-			}
-			pixel, attrs := lcd.getWindowPixel(byte(x-winStartX), winY)
-			lcd.BGPriorityMask[x] = true
-			if pixel != 0 {
-				lcd.BGMask[x] = true
-			}
-			if attrs.hasPriority {
+		if lcd.DisplayWindow && lcd.PassedWindowY {
+			winY := lcd.LWY
+			winStartX := int(lcd.WindowX) - 7
+			for x := winStartX; x < 160; x++ {
+				if x < 0 {
+					continue
+				}
+				pixel, attrs := lcd.getWindowPixel(byte(x-winStartX), winY)
 				lcd.BGPriorityMask[x] = true
+				if pixel != 0 {
+					lcd.BGMask[x] = true
+				}
+				if attrs.hasPriority {
+					lcd.BGPriorityMask[x] = true
+				}
+				r, g, b := lcd.applyBGPalettes(attrs, pixel)
+				lcd.setFramebufferPixel(byte(x), y, r, g, b)
 			}
-			r, g, b := lcd.applyBGPalettes(attrs, pixel)
-			lcd.setFramebufferPixel(byte(x), y, r, g, b)
 		}
 	}
 
