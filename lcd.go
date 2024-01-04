@@ -324,21 +324,22 @@ func (lcd *lcd) getTileAttrs(tmapAddr uint16, x, y byte) tileAttrs {
 }
 
 func (lcd *lcd) DumpTiles() {
-	dataAddr := lcd.getBGAndWindowTileDataAddr()
 	tileAttrs := tileAttrs{}
 	pixData := []byte{}
-	for i := 0; i < 16; i++ {
+	for i := 0; i < len(lcd.VideoRAM)/16; i += 16 {
+		dataAddr := uint16(i / 256 * (16 * 256))
 		for y := 0; y < 8; y++ {
 			for j := 0; j < 16; j++ {
 				for x := 0; x < 8; x++ {
-					pix := lcd.getTilePixel(dataAddr, tileAttrs, byte(i*16+j), byte(x), byte(y))
+					tileNum := byte(i + j)
+					pix := lcd.getTilePixel(dataAddr, tileAttrs, tileNum, byte(x), byte(y))
 					r, g, b := lcd.applyBGPalettes(tileAttrs, pix)
 					pixData = append(pixData, []byte{r, g, b}...)
 				}
 			}
 		}
 	}
-	writeTgaRGB("tiledata.tga", 16*8, 16*8, pixData)
+	writeTgaRGB("tiledata.tga", 16*8, len(pixData)/(16*8*3), pixData)
 }
 
 func (lcd *lcd) getBGPixel(x, y byte) (byte, tileAttrs) {
