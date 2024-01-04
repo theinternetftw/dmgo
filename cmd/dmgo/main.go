@@ -124,6 +124,8 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 	audioPrevReadLen := <-session.audio.ReadLenNotifier
 	audioToGen := audioPrevReadLen + audioBufModifier
 
+	session.lastSaveRAM = session.emu.GetCartRAM()
+
 	for {
 		session.ticksSincePollingInput++
 		if session.ticksSincePollingInput == 100 {
