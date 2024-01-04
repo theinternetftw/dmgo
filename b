@@ -1,90 +1,47 @@
 #!/bin/bash -e
 
 projectname=dmgo
+cmd_pkg_dir=./cmd/$projectname
 
-pkg=github.com/theinternetftw/$projectname/cmd/$projectname
-
-if [ "$1" == "f" ]
-then
-    set -x
-    go vet
-    golint
-    go build $pkg
-    exit
-fi
-
-echo 
 echo "$projectname buildscript"
-echo "possible args: f, all, profiling.{cpu|mem|block|live}, release"
+echo
+echo "  optional args:"
+echo "    all - build for all platforms."
+echo "    release - build in the build_release folder (otherwise builds in build_dev) and"
+echo "              adds the \"release\" build tag."
+echo "    any other arg - inserted as a build tag."
+echo
+echo "  useful tags: release, profiling_cpu, profiling_mem, profiling_block, profiling_live"
 echo
 
 echo "running fmt, vet, etc..."
 echo
-
-# go fmt
 goimports -w *.go cmd/*/*.go
-go vet
-go vet ./cmd/*
+go vet . ./cmd/*
 
-if [ "$1" == "" ]
-then
-    set -x
-    go build $pkg
+build_folder="build_dev"
+while [ "$#" -ne 0 ]; do
+    case "$1" in
+        "all") build_all_platforms=1 ;;
+        "release") build_folder="build_release" ;& # fallthrough
+        *) build_tags="$build_tags$1," ;;
+    esac
+    shift
+done
 
-elif [ "$1" == "all" ]
-then
-    set -x
-    env GOOS=windows GOARCH=amd64 go build -o build-dev/$projectname-win-x64.exe $pkg
-    env GOOS=windows GOARCH=386 go build -o build-dev/$projectname-win-x86.exe $pkg
-
-    env GOOS=linux GOARCH=amd64 go build -o build-dev/$projectname-linux-x64 $pkg
-    env GOOS=linux GOARCH=386 go build -o build-dev/$projectname-linux-x86 $pkg
-
-    env GOOS=darwin GOARCH=amd64 go build -o build-dev/$projectname-mac-x64 $pkg
-    env GOOS=darwin GOARCH=386 go build -o build-dev/$projectname-mac-x86 $pkg
-
-    env GOOS=linux GOARCH=arm GOARM=6 go build -o build-dev/$projectname-rpi $pkg
-    env GOOS=linux GOARCH=arm GOARM=7 go build -o build-dev/$projectname-rpi2 $pkg
-
-elif [ "$1" == "release" ]
-then
-    set -x
-    env GOOS=windows GOARCH=amd64 go build -tags release -o build/$projectname-win-x64.exe $pkg
-    env GOOS=windows GOARCH=386 go build -tags release -o build/$projectname-win-x86.exe $pkg
-
-    env GOOS=linux GOARCH=amd64 go build -tags release -o build/$projectname-linux-x64 $pkg
-    env GOOS=linux GOARCH=386 go build -tags release -o build/$projectname-linux-x86 $pkg
-
-    env GOOS=darwin GOARCH=amd64 go build -tags release -o build/$projectname-mac-x64 $pkg
-    env GOOS=darwin GOARCH=386 go build -tags release -o build/$projectname-mac-x86 $pkg
-
-    env GOOS=linux GOARCH=arm GOARM=6 go build -tags release -o build/$projectname-rpi $pkg
-    env GOOS=linux GOARCH=arm GOARM=7 go build -tags release -o build/$projectname-rpi2 $pkg
-
-elif [ "$1" == "profiling" ]; then
-    echo not like that, like this: profiling.cpu, profiling.mem, etc.
-
-elif [ "$1" == "profiling.cpu" ]
-then
-    set -x
-    go build -tags profiling_cpu $pkg
-
-elif [ "$1" == "profiling.mem" ]
-then
-    set -x
-    go build -tags profiling_mem $pkg
-
-elif [ "$1" == "profiling.block" ]
-then
-    set -x
-    go build -tags profiling_block $pkg
-
-elif [ "$1" == "profiling.live" ]
-then
-    set -x
-    go build -tags profiling_live $pkg
-
-else
-    echo unknown arg
-
+if [ $build_tags ]; then
+    build_tags="-tags $build_tags"
 fi
+if [ $build_all_platforms ]; then
+    set -x
+    env GOOS=windows GOARCH=amd64 go build $build_tags -o $build_folder/$projectname-win-x64.exe $cmd_pkg_dir
+    env GOOS=linux GOARCH=amd64 go build $build_tags -o $build_folder/$projectname-linux-x64 $cmd_pkg_dir
+    env GOOS=darwin GOARCH=amd64 go build $build_tags -o $build_folder/$projectname-mac-x64 $cmd_pkg_dir
+    env GOOS=linux GOARCH=arm GOARM=6 go build $build_tags -o $build_folder/$projectname-rpi $cmd_pkg_dir
+    env GOOS=linux GOARCH=arm GOARM=7 go build $build_tags -o $build_folder/$projectname-rpi2 $cmd_pkg_dir
+else
+    set -x
+    cd $build_folder # to avoid -o option, which requires manually setting a different file extension on windows
+    go build $build_tags ../$cmd_pkg_dir
+fi
+
