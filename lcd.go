@@ -85,13 +85,18 @@ func (lcd *lcd) readBGPaletteRAMIndexReg() byte {
 }
 
 func (lcd *lcd) writeBGPaletteRAMDataReg(val byte) {
-	lcd.BGPaletteRAM[lcd.BGPaletteRAMIndex] = val
+	if !lcd.DisplayOn || !lcd.ReadingData {
+		lcd.BGPaletteRAM[lcd.BGPaletteRAMIndex] = val
+	}
 	if lcd.BGPaletteRAMAutoIncrement {
 		lcd.BGPaletteRAMIndex = (lcd.BGPaletteRAMIndex + 1) & 0x3f
 	}
 }
 func (lcd *lcd) readBGPaletteRAMDataReg() byte {
-	return lcd.BGPaletteRAM[lcd.BGPaletteRAMIndex]
+	if !lcd.DisplayOn || !lcd.ReadingData {
+		return lcd.BGPaletteRAM[lcd.BGPaletteRAMIndex]
+	}
+	return 0xff
 }
 
 func (lcd *lcd) writeSpritePaletteRAMIndexReg(val byte) {
@@ -107,20 +112,25 @@ func (lcd *lcd) readSpritePaletteRAMIndexReg() byte {
 }
 
 func (lcd *lcd) writeSpritePaletteRAMDataReg(val byte) {
-	lcd.SpritePaletteRAM[lcd.SpritePaletteRAMIndex] = val
+	if !lcd.DisplayOn || !lcd.ReadingData {
+		lcd.SpritePaletteRAM[lcd.SpritePaletteRAMIndex] = val
+	}
 	if lcd.SpritePaletteRAMAutoIncrement {
 		lcd.SpritePaletteRAMIndex = (lcd.SpritePaletteRAMIndex + 1) & 0x3f
 	}
 }
 func (lcd *lcd) readSpritePaletteRAMDataReg() byte {
-	return lcd.SpritePaletteRAM[lcd.SpritePaletteRAMIndex]
+	if !lcd.ReadingData {
+		return lcd.SpritePaletteRAM[lcd.SpritePaletteRAMIndex]
+	}
+	return 0xff
 }
 
 var lastOAMWarningCycles uint
 var lastOAMWarningLine byte
 
 func (lcd *lcd) writeOAM(addr uint16, val byte) {
-	if !lcd.AccessingOAM && !lcd.ReadingData {
+	if !lcd.DisplayOn || (!lcd.AccessingOAM && !lcd.ReadingData) {
 		lcd.OAM[addr] = val
 	} else {
 		if lcd.CyclesSinceLYInc != lastOAMWarningCycles || lcd.LYReg != lastOAMWarningLine {
@@ -132,7 +142,7 @@ func (lcd *lcd) writeOAM(addr uint16, val byte) {
 	}
 }
 func (lcd *lcd) readOAM(addr uint16) byte {
-	if !lcd.AccessingOAM && !lcd.ReadingData {
+	if !lcd.DisplayOn || (!lcd.AccessingOAM && !lcd.ReadingData) {
 		return lcd.OAM[addr]
 	}
 	return 0xff
@@ -145,7 +155,7 @@ func (lcd *lcd) init(cs *cpuState) {
 }
 
 func (lcd *lcd) writeVideoRAM(addr uint16, val byte) {
-	if !lcd.ReadingData {
+	if !lcd.DisplayOn || !lcd.ReadingData {
 		if lcd.HighBankActive {
 			addr += 0x2000
 		}
@@ -153,7 +163,7 @@ func (lcd *lcd) writeVideoRAM(addr uint16, val byte) {
 	}
 }
 func (lcd *lcd) readVideoRAM(addr uint16) byte {
-	if !lcd.ReadingData {
+	if !lcd.DisplayOn || !lcd.ReadingData {
 		if lcd.HighBankActive {
 			addr += 0x2000
 		}
