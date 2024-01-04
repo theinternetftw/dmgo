@@ -698,6 +698,7 @@ func (lcd *lcd) writeControlReg(val byte) {
 	)
 
 	if !lcd.DisplayOn {
+		lcd.PastFirstFrame = false
 		lcd.LYReg = 0
 	}
 }
