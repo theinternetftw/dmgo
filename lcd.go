@@ -635,12 +635,13 @@ func (lcd *lcd) setFramebufferPixel(xByte, yByte, r, g, b byte) {
 	lcd.framebuffer[yIdx+x*4+2] = b
 	lcd.framebuffer[yIdx+x*4+3] = 0xff
 }
-func (lcd *lcd) fillScanline(val byte) {
+func (lcd *lcd) fillScanline(pixel byte) {
+	r, g, b := lcd.applyBGPalettes(tileAttrs{}, pixel)
 	yIdx := int(lcd.LYReg) * 160 * 4
 	for x := 0; x < 160; x++ {
-		lcd.framebuffer[yIdx+x*4+0] = val
-		lcd.framebuffer[yIdx+x*4+1] = val
-		lcd.framebuffer[yIdx+x*4+2] = val
+		lcd.framebuffer[yIdx+x*4+0] = r
+		lcd.framebuffer[yIdx+x*4+1] = g
+		lcd.framebuffer[yIdx+x*4+2] = b
 		lcd.framebuffer[yIdx+x*4+3] = 0xff
 	}
 }
