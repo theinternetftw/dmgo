@@ -528,8 +528,7 @@ func (s sortableOAM) Len() int           { return len(s) }
 func (s sortableOAM) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 
 func (lcd *lcd) isWindowVisible() bool {
-	return (lcd.PassedWindowY && lcd.WindowY <= 143 &&
-		lcd.WindowX >= 0 && lcd.WindowX <= 166)
+	return lcd.WindowY <= 143 && lcd.WindowX <= 166
 }
 
 func (lcd *lcd) renderScanline() {
@@ -547,9 +546,18 @@ func (lcd *lcd) renderScanline() {
 	}
 
 	if lcd.DisplayBG || lcd.CGBMode {
+
+		mightDrawWindow := lcd.DisplayWindow && lcd.PassedWindowY
+		winStartX := int(lcd.WindowX) - 7
+
+		bgEndX := 160
+		if mightDrawWindow && winStartX < bgEndX {
+			bgEndX = winStartX
+		}
+
 		bgY := y + lcd.ScrollY
-		for x := byte(0); x < 160; x++ {
-			bgX := x + lcd.ScrollX
+		for x := 0; x < bgEndX; x++ {
+			bgX := byte(x) + lcd.ScrollX
 			pixel, attrs := lcd.getBGPixel(bgX, bgY)
 			if pixel != 0 {
 				lcd.BGMask[x] = true
@@ -558,18 +566,16 @@ func (lcd *lcd) renderScanline() {
 				lcd.BGPriorityMask[x] = true
 			}
 			r, g, b := lcd.applyBGPalettes(attrs, pixel)
-			lcd.setFramebufferPixel(x, y, r, g, b)
+			lcd.setFramebufferPixel(byte(x), y, r, g, b)
 		}
 
-		if lcd.DisplayWindow && lcd.PassedWindowY {
-			winY := lcd.LWY
-			winStartX := int(lcd.WindowX) - 7
-			for x := winStartX; x < 160; x++ {
-				if x < 0 {
-					continue
-				}
-				pixel, attrs := lcd.getWindowPixel(byte(x-winStartX), winY)
-				lcd.BGPriorityMask[x] = true
+		if mightDrawWindow {
+			x := winStartX
+			if x < 0 {
+				x = 0
+			}
+			for ; x < 160; x++ {
+				pixel, attrs := lcd.getWindowPixel(byte(x-winStartX), lcd.LWY)
 				if pixel != 0 {
 					lcd.BGMask[x] = true
 				}
