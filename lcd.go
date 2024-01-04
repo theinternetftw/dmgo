@@ -66,7 +66,7 @@ type lcd struct {
 	UseUpperBGTileMap           bool
 	BigSprites                  bool
 	DisplaySprites              bool
-	DisplayBG                   bool
+	BGWindowMasterEnable        bool
 	BGWindowPrioritiesActive    bool
 
 	CyclesSinceLYInc       uint
@@ -154,6 +154,7 @@ func (lcd *lcd) readOAM(addr uint16) byte {
 func (lcd *lcd) init(cs *cpuState) {
 	lcd.CGBMode = cs.CGBMode
 	lcd.BGWindowPrioritiesActive = !lcd.CGBMode
+	lcd.BGWindowMasterEnable = lcd.CGBMode
 	lcd.AccessingOAM = true // at start of line
 }
 
@@ -545,7 +546,7 @@ func (lcd *lcd) renderScanline() {
 		lcd.SpriteMask[i] = false
 	}
 
-	if lcd.DisplayBG || lcd.CGBMode {
+	if lcd.BGWindowMasterEnable {
 
 		mightDrawWindow := lcd.DisplayWindow && lcd.PassedWindowY
 		winStartX := int(lcd.WindowX) - 7
@@ -681,7 +682,7 @@ func (lcd *lcd) writeWindowX(val byte) {
 }
 
 func (lcd *lcd) writeControlReg(val byte) {
-	bgBit := &lcd.DisplayBG
+	bgBit := &lcd.BGWindowMasterEnable
 	if lcd.CGBMode {
 		bgBit = &lcd.BGWindowPrioritiesActive
 	}
@@ -701,6 +702,10 @@ func (lcd *lcd) writeControlReg(val byte) {
 	}
 }
 func (lcd *lcd) readControlReg() byte {
+	bgBit := lcd.BGWindowMasterEnable
+	if lcd.CGBMode {
+		bgBit = lcd.BGWindowPrioritiesActive
+	}
 	return byteFromBools(
 		lcd.DisplayOn,
 		lcd.UseUpperWindowTileMap,
@@ -709,7 +714,7 @@ func (lcd *lcd) readControlReg() byte {
 		lcd.UseUpperBGTileMap,
 		lcd.BigSprites,
 		lcd.DisplaySprites,
-		lcd.DisplayBG,
+		bgBit,
 	)
 }
 
