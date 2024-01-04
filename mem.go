@@ -16,9 +16,9 @@ type mem struct {
 
 	// cgb dma
 	DMASource     uint16
-	DMASourceInit uint16
+	DMASourceReg  uint16
 	DMADest       uint16
-	DMADestInit   uint16
+	DMADestReg    uint16
 	DMALength     uint16
 	DMAHblankMode bool
 	DMAInProgress bool
@@ -32,44 +32,45 @@ func (mem *mem) mbcWrite(addr uint16, val byte) {
 }
 
 func (cs *cpuState) writeDMASourceHigh(val byte) {
-	cs.Mem.DMASourceInit = (cs.Mem.DMASourceInit &^ 0xff00) | (uint16(val) << 8)
+	cs.Mem.DMASourceReg = (cs.Mem.DMASourceReg &^ 0xff00) | (uint16(val) << 8)
 }
 func (cs *cpuState) readDMASourceHigh() byte {
-	return byte(cs.Mem.DMASourceInit >> 8)
+	return byte(cs.Mem.DMASourceReg >> 8)
 }
 
 func (cs *cpuState) writeDMASourceLow(val byte) {
-	cs.Mem.DMASourceInit = (cs.Mem.DMASourceInit &^ 0xff) | uint16(val&0xf0)
+	cs.Mem.DMASourceReg = (cs.Mem.DMASourceReg &^ 0xff) | uint16(val)
 }
 func (cs *cpuState) readDMASourceLow() byte {
-	return byte(cs.Mem.DMASourceInit)
+	return byte(cs.Mem.DMASourceReg)
 }
 
 func (cs *cpuState) writeDMADestHigh(val byte) {
 	val = (val &^ 0xe0) | 0x80
-	cs.Mem.DMADestInit = (cs.Mem.DMADestInit &^ 0xff00) | (uint16(val) << 8)
+	cs.Mem.DMADestReg = (cs.Mem.DMADestReg &^ 0xff00) | (uint16(val) << 8)
 }
 func (cs *cpuState) readDMADestHigh() byte {
-	return byte(cs.Mem.DMADestInit >> 8)
+	return byte(cs.Mem.DMADestReg >> 8)
 }
 
 func (cs *cpuState) writeDMADestLow(val byte) {
-	cs.Mem.DMADestInit = (cs.Mem.DMADestInit &^ 0xff) | uint16(val&0xf0)
+	cs.Mem.DMADestReg = (cs.Mem.DMADestReg &^ 0xff) | uint16(val)
 }
 func (cs *cpuState) readDMADestLow() byte {
-	return byte(cs.Mem.DMADestInit)
+	return byte(cs.Mem.DMADestReg)
 }
 
 func (cs *cpuState) writeDMAControlReg(val byte) {
 	cs.Mem.DMALength = (uint16(val&0x7f) + 1) << 4
 	cs.Mem.DMAHblankMode = val&0x80 != 0
 	if cs.Mem.DMAInProgress && (val&0x80 == 0) {
+		cs.Mem.DMAHblankMode = false
 		cs.Mem.DMAInProgress = false
-	} else {
-		cs.Mem.DMAInProgress = true
+		return
 	}
-	cs.Mem.DMASource = cs.Mem.DMASourceInit
-	cs.Mem.DMADest = cs.Mem.DMADestInit
+	cs.Mem.DMAInProgress = true
+	cs.Mem.DMASource = (cs.Mem.DMASourceReg & 0xfff0)
+	cs.Mem.DMADest = (cs.Mem.DMADestReg & 0x1ff0) | 0x8000
 	if !cs.Mem.DMAHblankMode {
 		for cs.Mem.DMAInProgress {
 			cs.runDMACycle()
