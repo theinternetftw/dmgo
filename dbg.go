@@ -251,7 +251,11 @@ func (d *debugger) step(emu Emulator) {
 func (d *debugger) updateInput(keys []bool) {
 	for i := range d.keys {
 		if keys[i] && !d.keys[i] {
-			d.keysJustPressed = append(d.keysJustPressed, rune(i))
+			if rune(i) == '`' {
+				d.state = dbgStateNewCmd
+			} else {
+				d.keysJustPressed = append(d.keysJustPressed, rune(i))
+			}
 		}
 		d.keys[i] = keys[i]
 	}
