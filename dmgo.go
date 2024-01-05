@@ -488,7 +488,7 @@ func (cs *cpuState) GetSoundBufferInfo() SoundBufferInfo {
 
 // GetCartRAM returns the current state of external RAM
 func (cs *cpuState) GetCartRAM() []byte {
-	return cs.Mem.CartRAM
+	return append([]byte{}, cs.Mem.CartRAM...)
 }
 
 // SetCartRAM attempts to set the RAM, returning error if size not correct
