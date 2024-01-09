@@ -114,15 +114,12 @@ type sessionState struct {
 	audioBytesProduced     int
 }
 
-var maxWaited time.Duration
-
 func runEmu(session *sessionState, window *glimmer.WindowState) {
 
 	dbgKeyState := make([]bool, 256)
+
 	var audioChunkBuf []byte
-	audioBufModifier := 0
-	audioPrevReadLen := <-session.audio.ReadLenNotifier
-	audioToGen := audioPrevReadLen + audioBufModifier
+	audioToGen := session.audio.GetPrevReadLen()
 
 	session.lastSaveRAM = session.emu.GetCartRAM()
 
@@ -219,34 +216,19 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 
 			session.currentNumFrames++
 
-			start := time.Now()
-			if session.audio.GetLenUnplayedData() > audioPrevReadLen+4 {
-				for session.audio.GetLenUnplayedData() > audioPrevReadLen+4 {
-					audioPrevReadLen = <-session.audio.ReadLenNotifier
-				}
-				if audioBufModifier > -4 {
-					audioBufModifier -= 4
-				}
-			} else {
-				if audioBufModifier < 2*audioPrevReadLen {
-					audioBufModifier += 4
-				}
-			}
-			audioToGen = audioPrevReadLen + audioBufModifier
-			audioDiff := time.Now().Sub(start)
-			if audioDiff > maxWaited {
-				maxWaited = audioDiff
-			}
-			if session.currentNumFrames&0x3f == 0 {
-				// fmt.Println("[dmgo] max waited for audio:", maxWaited, "buf modifier now:", audioBufModifier)
-				maxWaited = time.Duration(0)
-			}
+			session.audio.WaitForPlaybackIfAhead()
+
+			audioToGen = session.audio.GetPrevReadLen()
 
 			session.frameTimer.MarkFrameComplete()
 
-			if session.emu.InDevMode() {
-				// session.frameTimer.PrintStatsEveryXFrames(60 * 5)
-			}
+			// if session.currentNumFrames&0x3f == 0 {
+			// 	fmt.Println("[dmgo] max waited for audio:", session.audio.GetMaxWaited(), "buf modifier now:", session.audio.GetNextReqModifier())
+			// }
+
+			// if session.emu.InDevMode() {
+			// 	session.frameTimer.PrintStatsEveryXFrames(60 * 5)
+			// }
 
 			if time.Now().Sub(session.lastSaveTime) > 5*time.Second {
 				ram := session.emu.GetCartRAM()
