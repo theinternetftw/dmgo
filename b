@@ -29,6 +29,7 @@ while [ "$#" -ne 0 ]; do
     shift
 done
 
+mkdir -p "$build_folder"
 if [ $build_tags ]; then
     build_tags="-tags $build_tags"
 fi
