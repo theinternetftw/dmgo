@@ -119,7 +119,7 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 	dbgKeyState := make([]bool, 256)
 
 	var audioChunkBuf []byte
-	audioToGen := session.audio.GetPrevReadLen()
+	audioToGen := session.audio.GetPrevCallbackReadLen()
 
 	session.lastSaveRAM = session.emu.GetCartRAM()
 
@@ -218,7 +218,7 @@ func runEmu(session *sessionState, window *glimmer.WindowState) {
 
 			session.audio.WaitForPlaybackIfAhead()
 
-			audioToGen = session.audio.GetPrevReadLen()
+			audioToGen = session.audio.GetPrevCallbackReadLen()
 
 			session.frameTimer.MarkFrameComplete()
 
