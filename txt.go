@@ -1,12 +1,12 @@
 package dmgo
 
-type dbgTerminal struct {
+type textDisplay struct {
 	x, y   int
 	w, h   int
 	screen []byte // w*h*4
 }
 
-func (t *dbgTerminal) newline() {
+func (t *textDisplay) newline() {
 	t.x = 0
 	t.y += 8
 	if t.y >= t.h {
@@ -14,19 +14,19 @@ func (t *dbgTerminal) newline() {
 	}
 }
 
-func (t *dbgTerminal) advanceChar() {
+func (t *textDisplay) advanceChar() {
 	t.x += 8
 	if t.x >= t.w {
 		t.newline()
 	}
 }
 
-func (t *dbgTerminal) setPos(x, y int) {
+func (t *textDisplay) setPos(x, y int) {
 	t.x = x * 8
 	t.y = y * 8
 }
 
-func (t *dbgTerminal) clearLine() {
+func (t *textDisplay) clearLine() {
 	startX, startY := t.x, t.y
 	for t.y == startY {
 		t.writeChar(' ')
@@ -34,13 +34,13 @@ func (t *dbgTerminal) clearLine() {
 	t.x, t.y = startX, startY
 }
 
-func (t *dbgTerminal) clearScreen() {
+func (t *textDisplay) clearScreen() {
 	for i := 0; i < len(t.screen); i++ {
 		t.screen[i] = 0
 	}
 }
 
-func (t *dbgTerminal) writeString(str string) {
+func (t *textDisplay) writeString(str string) {
 	for _, char := range str {
 		if char == '\x00' {
 			continue
@@ -49,7 +49,7 @@ func (t *dbgTerminal) writeString(str string) {
 	}
 }
 
-func (t *dbgTerminal) writeChar(char rune) {
+func (t *textDisplay) writeChar(char rune) {
 	if char == '\n' {
 		t.newline()
 	} else {

@@ -6,7 +6,7 @@ import (
 )
 
 type errEmu struct {
-	terminal      dbgTerminal
+	textDisplay   textDisplay
 	screen        [160 * 144 * 4]byte
 	flipRequested bool
 
@@ -16,10 +16,10 @@ type errEmu struct {
 // NewErrEmu returns an emulator that only shows an error message
 func NewErrEmu(msg string) Emulator {
 	emu := errEmu{}
-	emu.terminal = dbgTerminal{w: 160, h: 144, screen: emu.screen[:]}
+	emu.textDisplay = textDisplay{w: 160, h: 144, screen: emu.screen[:]}
 	os.Stderr.Write([]byte(msg + "\n"))
-	emu.terminal.newline()
-	emu.terminal.writeString(msg)
+	emu.textDisplay.newline()
+	emu.textDisplay.writeString(msg)
 	emu.flipRequested = true
 	return &emu
 }

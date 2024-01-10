@@ -15,7 +15,7 @@ type gbsPlayer struct {
 	CurrentSongStart time.Time
 	Paused           bool
 	PauseStartTime   time.Time
-	DbgTerminal      dbgTerminal
+	TextDisplay      textDisplay
 	DbgScreen        [160 * 144 * 4]byte
 
 	devMode bool
@@ -94,7 +94,7 @@ func NewGbsPlayer(gbs []byte, devMode bool) Emulator {
 		devMode: devMode,
 		Hdr:     hdr,
 	}
-	gp.DbgTerminal = dbgTerminal{w: 160, h: 144, screen: gp.DbgScreen[:]}
+	gp.TextDisplay = textDisplay{w: 160, h: 144, screen: gp.DbgScreen[:]}
 
 	gp.devPrintln("uses timer:", gp.usesTimer())
 
@@ -177,37 +177,37 @@ func (gp *gbsPlayer) initTune(songNum byte) {
 
 func (gp *gbsPlayer) updateScreen() {
 
-	gp.DbgTerminal.clearScreen()
+	gp.TextDisplay.clearScreen()
 
-	gp.DbgTerminal.setPos(0, 1)
+	gp.TextDisplay.setPos(0, 1)
 
-	gp.DbgTerminal.writeString("GBS Player\n\n")
-	gp.DbgTerminal.writeString(string(gp.Hdr.TitleString[:]) + "\n")
-	gp.DbgTerminal.writeString(string(gp.Hdr.AuthorString[:]) + "\n")
+	gp.TextDisplay.writeString("GBS Player\n\n")
+	gp.TextDisplay.writeString(string(gp.Hdr.TitleString[:]) + "\n")
+	gp.TextDisplay.writeString(string(gp.Hdr.AuthorString[:]) + "\n")
 
 	copyStr := string(gp.Hdr.CopyrightString[:])
 	copyParts := strings.SplitN(copyStr, " ", 2)
 	if len(copyParts) > 1 {
 		// almost always improves presentation
-		gp.DbgTerminal.writeString(copyParts[0] + "\n")
-		gp.DbgTerminal.writeString(copyParts[1] + "\n")
+		gp.TextDisplay.writeString(copyParts[0] + "\n")
+		gp.TextDisplay.writeString(copyParts[1] + "\n")
 	} else {
-		gp.DbgTerminal.writeString(copyStr + "\n")
+		gp.TextDisplay.writeString(copyStr + "\n")
 	}
 
-	gp.DbgTerminal.newline()
+	gp.TextDisplay.newline()
 
-	gp.DbgTerminal.writeString(fmt.Sprintf("Track %02d/%02d\n", gp.CurrentSong+1, gp.Hdr.NumSongs))
+	gp.TextDisplay.writeString(fmt.Sprintf("Track %02d/%02d\n", gp.CurrentSong+1, gp.Hdr.NumSongs))
 
 	nowTime := int(time.Now().Sub(gp.CurrentSongStart).Seconds())
 	nowTimeStr := fmt.Sprintf("%02d:%02d", nowTime/60, nowTime%60)
 
-	gp.DbgTerminal.writeString(fmt.Sprintf("%s", nowTimeStr))
+	gp.TextDisplay.writeString(fmt.Sprintf("%s", nowTimeStr))
 
 	if gp.Paused {
-		gp.DbgTerminal.writeString(" *PAUSED*\n")
+		gp.TextDisplay.writeString(" *PAUSED*\n")
 	} else {
-		gp.DbgTerminal.newline()
+		gp.TextDisplay.newline()
 	}
 }
 
