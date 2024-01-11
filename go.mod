@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/pkg/profile v1.2.1
-	github.com/theinternetftw/glimmer v0.1.0
+	github.com/theinternetftw/glimmer v0.1.1
 	golang.org/x/sys v0.15.0
 )
 
