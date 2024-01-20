@@ -14,19 +14,16 @@ My other emulators:
  * Glitches are relatively rare but still totally happen!
  * Graphical and auditory cross-platform support!
 
-That last bit relies on [glimmer](https://github.com/theinternetftw/glimmer). Tested on windows 10 and ubuntu 18.10.
-
 #### Dependencies:
 
  * You can compile on windows with no C dependencies.
- * Linux users should 'apt install libasound2-dev' or equivalent.
- * FreeBSD (and Mac?) users should 'pkg install openal-soft' or equivalent.
+ * Other platforms should do whatever the [ebiten](https://github.com/hajimehoshi/ebiten) page says, which is what's currently under the hood.
 
 #### Compile instructions
 
  * If you have go version >= 1.11, `go build ./cmd/dmgo` should be enough.
  * The interested can also see my build script `b` for profiling and such.
- * Non-windows users will need the dependencies listed above.
+ * Non-windows users will need ebiten's dependencies.
 
 #### Important Notes:
 
