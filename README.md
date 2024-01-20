@@ -21,7 +21,7 @@ My other emulators:
 
 #### Compile instructions
 
- * If you have go version >= 1.11, `go build ./cmd/dmgo` should be enough.
+ * If you have go version >= 1.18, `go build ./cmd/dmgo` should be enough.
  * The interested can also see my build script `b` for profiling and such.
  * Non-windows users will need ebiten's dependencies.
 
